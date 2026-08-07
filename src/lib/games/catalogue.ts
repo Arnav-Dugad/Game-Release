@@ -2,8 +2,8 @@
  * Bundled sample catalogue.
  *
  * This exists so the app is fully populated and genuinely usable with zero
- * configuration — no API key, no network. When `RAWG_API_KEY` is set, live data
- * replaces this entirely and the UI drops the "sample data" badge.
+ * configuration — no credentials, no network. When a live provider (IGDB or
+ * Steam) answers, this is bypassed entirely and the UI drops the sample badge.
  *
  * Editorial rules for this file, so it never misleads:
  *  - Released titles carry their real ship dates and critic scores.
@@ -12,9 +12,10 @@
  */
 
 import type { GameDetail, GameSummary, Ref } from "./types";
+import { slugify } from "@/lib/utils/html";
 
-/* RAWG's real taxonomy ids, so filter links built from sample data stay valid
-   after a key is added and live data takes over. */
+/* The catalogue's own taxonomy. Live providers publish their own genre and
+   platform vocabularies, so these ids are internal to sample mode. */
 const GENRES: Record<string, Ref> = {
   action: { id: 4, slug: "action", name: "Action" },
   indie: { id: 51, slug: "indie", name: "Indie" },
@@ -346,7 +347,7 @@ const SEEDS: Seed[] = [
   /* --------------------------- Unreleased ---------------------------
      No dates are invented here. Every entry below is announced but had no
      confirmed release date at the time this catalogue was written, so each is
-     marked TBA. Live RAWG data replaces all of it once a key is configured. */
+     marked TBA. A live provider replaces all of it. */
   {
     n: "Grand Theft Auto VI", s: "grand-theft-auto-vi", r: 0, rc: 0, pt: 0, add: 24600,
     g: ["action", "adventure"], p: ["playstation", "xbox"],
@@ -436,6 +437,9 @@ function expand(seed: Seed, index: number): GameDetail {
     slug: seed.s,
     name: seed.n,
     released: seed.d ?? null,
+    // Seeds carry either an exact date or nothing at all; the catalogue
+    // deliberately holds no speculative windows.
+    releaseWindow: null,
     tba: !seed.d,
     image: null,
     rating: seed.r,
@@ -466,13 +470,6 @@ function expand(seed: Seed, index: number): GameDetail {
   };
 }
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/['’.]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 export const SAMPLE_GAMES: GameDetail[] = SEEDS.map(expand);
 
@@ -493,6 +490,7 @@ export function toSummary(game: GameDetail): GameSummary {
     slug: game.slug,
     name: game.name,
     released: game.released,
+    releaseWindow: game.releaseWindow,
     tba: game.tba,
     image: game.image,
     rating: game.rating,

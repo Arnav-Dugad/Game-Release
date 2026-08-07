@@ -59,6 +59,48 @@ export function daysUntil(iso: string | null | undefined, now: Date = new Date()
   return Math.round((target.getTime() - start) / 86_400_000);
 }
 
+/**
+ * Anything with a release date, however precise. Lets the label helpers accept
+ * summaries, details and stored watchlist entries interchangeably.
+ */
+export interface ReleaseLike {
+  released: string | null;
+  releaseWindow: string | null;
+  tba: boolean;
+}
+
+/**
+ * The one place release dates become text.
+ *
+ * Exact dates format normally; a known-but-imprecise window ("Q4 2026") is
+ * printed verbatim; only a genuine absence of information reads as TBA. Every
+ * surface goes through here so no view can accidentally imply a precision the
+ * data doesn't have.
+ */
+export function releaseLabel(game: ReleaseLike, fallback = "Date TBA"): string {
+  if (game.released) return formatDate(game.released);
+  if (game.releaseWindow) return game.releaseWindow;
+  return fallback;
+}
+
+export function releaseLabelLong(game: ReleaseLike, fallback = "Date to be announced"): string {
+  if (game.released) return formatLongDate(game.released);
+  if (game.releaseWindow) return game.releaseWindow;
+  return fallback;
+}
+
+/** True when the title has not shipped: future-dated, windowed, or undated. */
+export function isUnreleased(game: ReleaseLike, now: Date = new Date()): boolean {
+  if (game.tba || game.releaseWindow) return true;
+  if (!game.released) return true;
+  return game.released > isoToday(now);
+}
+
+const isoToday = (now: Date) =>
+  `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    now.getUTCDate(),
+  ).padStart(2, "0")}`;
+
 /** "in 3 months" / "yesterday" / "2 years ago". */
 export function relativeRelease(iso: string | null | undefined, now: Date = new Date()): string {
   const days = daysUntil(iso, now);
@@ -85,6 +127,16 @@ export function relativeRelease(iso: string | null | undefined, now: Date = new 
 
   const label = `${value} ${unit}${value === 1 ? "" : "s"}`;
   return future ? `in ${label}` : `${label} ago`;
+}
+
+/**
+ * Relative phrasing that degrades gracefully: an imprecise window can't be
+ * counted down to, so it is shown as-is rather than forced into "in N months".
+ */
+export function relativeReleaseLabel(game: ReleaseLike, now: Date = new Date()): string {
+  if (game.released) return relativeRelease(game.released, now);
+  if (game.releaseWindow) return game.releaseWindow;
+  return "TBA";
 }
 
 /** 12400 → "12.4K". Used for library/rating counts. */
@@ -150,19 +202,55 @@ export function initials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-/** Maps RAWG parent-platform slugs onto the small icon set the UI ships. */
-export type PlatformKey = "pc" | "playstation" | "xbox" | "nintendo" | "mac" | "linux" | "mobile" | "web";
+/** The icon families the UI can actually render. */
+export type PlatformKey =
+  | "pc"
+  | "playstation"
+  | "xbox"
+  | "nintendo"
+  | "mac"
+  | "linux"
+  | "mobile"
+  | "web";
 
+/**
+ * Maps any provider's platform vocabulary onto the small icon set the UI ships.
+ *
+ * Providers disagree wildly here — IGDB calls Windows "win", Steam reports a
+ * boolean triple, and the sample catalogue mints family slugs directly. This
+ * normalises all of them, and returns null for anything unrecognised so an
+ * unknown platform is omitted rather than mislabelled.
+ */
 export function platformKey(slug: string): PlatformKey | null {
-  const s = slug.toLowerCase();
-  if (s.includes("playstation")) return "playstation";
-  if (s.includes("xbox")) return "xbox";
-  if (s.includes("nintendo") || s.includes("switch")) return "nintendo";
-  if (s === "pc" || s.includes("windows")) return "pc";
-  if (s === "mac" || s.includes("macos") || s.includes("apple-macintosh")) return "mac";
+  const s = slug.toLowerCase().trim();
+  if (!s) return null;
+
+  if (s === "pc" || s === "win" || s.includes("windows")) return "pc";
+  if (s === "mac" || s.includes("macos") || s.includes("macintosh")) return "mac";
   if (s === "linux") return "linux";
-  if (s === "ios" || s === "android") return "mobile";
-  if (s === "web") return "web";
+  if (s === "mobile" || s === "ios" || s === "android" || s.includes("iphone") || s.includes("ipad")) {
+    return "mobile";
+  }
+  if (s === "web" || s === "browser") return "web";
+
+  // Check the Sony console shorthands before the generic "ps" pattern.
+  if (s.startsWith("psp") || s.startsWith("psvita") || s.startsWith("ps-vita")) return "playstation";
+  if (s.includes("playstation") || /^ps[0-9]?(?:-|$)/.test(s)) return "playstation";
+
+  if (s.includes("xbox") || s.includes("series-x")) return "xbox";
+
+  if (
+    s.includes("nintendo") ||
+    s.includes("switch") ||
+    s.includes("wii") ||
+    s.includes("gamecube") ||
+    s.includes("game-boy") ||
+    s.includes("3ds") ||
+    ["nes", "snes", "n64", "gba", "ngc", "nds"].includes(s)
+  ) {
+    return "nintendo";
+  }
+
   return null;
 }
 

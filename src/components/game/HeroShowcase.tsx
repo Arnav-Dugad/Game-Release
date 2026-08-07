@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils/cn";
-import { formatDate, relativeRelease, truncate } from "@/lib/utils/format";
+import { releaseLabelLong, relativeReleaseLabel, truncate } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 const ROTATE_MS = 7500;
@@ -117,7 +117,7 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
             >
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <Badge tone="brand">
-                  {active.tba ? "Announced" : relativeRelease(active.released)}
+                  {active.tba ? "Announced" : relativeReleaseLabel(active)}
                 </Badge>
                 {active.genres.slice(0, 2).map((g) => (
                   <Badge key={g.id}>{g.name}</Badge>
@@ -131,7 +131,7 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
               />
 
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
-                <span>{active.tba ? "Date to be announced" : formatDate(active.released)}</span>
+                <span>{releaseLabelLong(active)}</span>
                 <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
                 <PlatformIcons platforms={active.parentPlatforms} size={14} max={5} />
               </div>
@@ -147,9 +147,9 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
                 </p>
               )}
 
-              {!active.tba && active.released && (
-                <Countdown date={active.released} className="mt-6" />
-              )}
+              {/* Only an exact date can be counted down to; a window renders
+                  as its label in the meta row above instead. */}
+              {active.released && <Countdown date={active.released} className="mt-6" />}
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <Button href={`/game/${active.slug}`} size="lg" iconRight={<ArrowRight size={17} />}>

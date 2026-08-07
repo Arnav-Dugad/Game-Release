@@ -20,8 +20,16 @@ export interface StoreRef extends Ref {
 export interface Trailer {
   id: number;
   name: string;
+  /**
+   * Providers differ in what they can hand us: Steam hosts real MP4s, while
+   * IGDB only stores YouTube ids. The player branches on this rather than
+   * guessing from the URL.
+   */
+  kind: "mp4" | "youtube";
+  /** Set only when `kind` is "youtube". */
+  youtubeId?: string;
   preview: string | null;
-  /** Direct MP4. RAWG serves these; YouTube embeds are not used. */
+  /** Direct media URL for MP4, or the watch URL for YouTube. */
   url: string | null;
 }
 
@@ -35,9 +43,19 @@ export interface GameSummary {
   id: number;
   slug: string;
   name: string;
-  /** ISO `YYYY-MM-DD`, or null when the date is unannounced. */
+  /**
+   * ISO `YYYY-MM-DD`, and only ever set when the source gave us a genuine
+   * day-level date. Never synthesised from a looser window.
+   */
   released: string | null;
-  /** True when the studio has announced the game but not a date. */
+  /**
+   * Human label for a known-but-imprecise date — "Q4 2026", "March 2026",
+   * "2027". Set when a source has committed to a window but not a day.
+   * Rendering this instead of inventing a day is the difference between an
+   * honest release calendar and a misleading one.
+   */
+  releaseWindow: string | null;
+  /** No date information at all: announced, but nothing scheduled. */
   tba: boolean;
   image: string | null;
   /** 0–5 user score. */
@@ -97,8 +115,19 @@ export interface BrowseFilters {
   metacritic?: string;
 }
 
-/** Which backend answered a request — surfaced in the UI as a data-source badge. */
-export type DataSource = "live" | "sample";
+/**
+ * Which provider answered a request. Surfaced in the UI so the data's origin is
+ * always attributable, and so sample mode can label itself.
+ */
+export type DataSource = "igdb" | "steam" | "sample";
+
+export const SOURCE_LABELS: Record<DataSource, string> = {
+  igdb: "IGDB",
+  steam: "Steam",
+  sample: "Sample catalogue",
+};
+
+export const isLiveSource = (source: DataSource): boolean => source !== "sample";
 
 export interface Sourced<T> {
   data: T;

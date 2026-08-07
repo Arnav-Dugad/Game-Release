@@ -39,6 +39,8 @@ export interface WatchlistEntry {
   name: string;
   image: string | null;
   released: string | null;
+  /** Imprecise-but-known window, e.g. "Q4 2026". See `GameSummary`. */
+  releaseWindow: string | null;
   tba: boolean;
   metacritic: number | null;
   status: WatchStatus;
@@ -134,6 +136,7 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     name: game.name,
     image: game.image,
     released: game.released,
+    releaseWindow: game.releaseWindow,
     tba: game.tba,
     metacritic: game.metacritic,
     status,
@@ -174,7 +177,12 @@ export function subscribeWatchlist(
   return onSnapshot(
     collection(db, "users", uid, "watchlist"),
     (snap) => {
-      const entries = snap.docs.map((d) => d.data() as WatchlistEntry);
+      // Documents written before `releaseWindow` existed omit the field
+      // entirely, so normalise it rather than letting `undefined` reach the UI.
+      const entries = snap.docs.map((d) => {
+        const data = d.data() as WatchlistEntry;
+        return { ...data, releaseWindow: data.releaseWindow ?? null };
+      });
       entries.sort((a, b) => b.addedAt - a.addedAt);
       onChange(entries);
     },

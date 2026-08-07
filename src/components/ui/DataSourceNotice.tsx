@@ -9,25 +9,65 @@ import type { DataSource } from "@/lib/games/types";
  * carries no speculative dates for unreleased titles.
  */
 export function DataSourceNotice({ source }: { source: DataSource }) {
-  if (source === "live") return null;
+  if (source !== "sample") return null;
 
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-gold/20 bg-gold/[0.06] px-4 py-3 text-[13px] leading-relaxed">
       <Database size={15} className="mt-0.5 shrink-0 text-gold" />
       <p className="text-muted">
-        <span className="font-semibold text-gold">Sample catalogue.</span> You&rsquo;re seeing the
-        bundled dataset. Add a free{" "}
+        <span className="font-semibold text-gold">Sample catalogue.</span> Live data
+        isn&rsquo;t reachable right now, so this is the bundled dataset. Connect{" "}
         <a
-          href="https://rawg.io/apidocs"
+          href="https://api-docs.igdb.com/#getting-started"
           target="_blank"
           rel="noopener noreferrer"
           className="text-text underline decoration-gold/40 underline-offset-2 transition-colors hover:decoration-gold"
         >
-          RAWG API key
+          IGDB
         </a>{" "}
-        as <code className="rounded bg-white/8 px-1 py-0.5 font-mono text-[11px]">RAWG_API_KEY</code>{" "}
-        to switch to the live release calendar with artwork and full metadata.
+        with a free Twitch client id and secret for the full multi-platform
+        database — or deploy as-is and the Steam storefront fills in
+        automatically, no credentials needed.
       </p>
     </div>
+  );
+}
+
+/**
+ * Small provenance line for live results. Both backends ask to be credited, and
+ * it also tells the reader why a PC-only page looks the way it does.
+ */
+export function SourceAttribution({ source }: { source: DataSource }) {
+  if (source === "sample") return null;
+
+  return (
+    <p className="text-[11px] text-faint">
+      {source === "igdb" ? (
+        <>
+          Game data from{" "}
+          <a
+            href="https://www.igdb.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 transition-colors hover:text-muted"
+          >
+            IGDB
+          </a>
+        </>
+      ) : (
+        <>
+          Game data from the{" "}
+          <a
+            href="https://store.steampowered.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 transition-colors hover:text-muted"
+          >
+            Steam storefront
+          </a>{" "}
+          — PC titles only. Add IGDB credentials for console coverage.
+        </>
+      )}
+    </p>
   );
 }

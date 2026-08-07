@@ -18,7 +18,7 @@ import { WatchButton } from "./WatchButton";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
-import { formatDate, parseISO } from "@/lib/utils/format";
+import { parseISO, releaseLabel } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 interface MonthGroup {
@@ -43,25 +43,46 @@ const WEEKDAY_LABEL = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** Buckets by calendar month, with everything undated collected at the end. */
+/**
+ * Buckets releases for the calendar.
+ *
+ * Three tiers, in order: exact dates grouped by calendar month, then titles
+ * with a known window grouped under that window's own label ("Q4 2026"), then
+ * everything genuinely undated. Windowed titles get their own headings rather
+ * than being lumped into "TBA" — the studio has said something, and the
+ * calendar should reflect exactly how much.
+ */
 export function groupByMonth(games: GameSummary[]): MonthGroup[] {
-  const groups = new Map<string, MonthGroup>();
+  const months = new Map<string, MonthGroup>();
+  const windows = new Map<string, MonthGroup>();
   const undated: GameSummary[] = [];
 
   for (const game of games) {
     const date = parseISO(game.released);
-    if (!date || game.tba) {
-      undated.push(game);
+
+    if (date && game.released) {
+      const key = game.released.slice(0, 7);
+      if (!months.has(key)) {
+        months.set(key, { key, label: MONTH_LABEL.format(date), games: [] });
+      }
+      months.get(key)!.games.push(game);
       continue;
     }
-    const key = game.released!.slice(0, 7);
-    if (!groups.has(key)) {
-      groups.set(key, { key, label: MONTH_LABEL.format(date), games: [] });
+
+    if (game.releaseWindow) {
+      const key = `w:${game.releaseWindow}`;
+      if (!windows.has(key)) {
+        windows.set(key, { key, label: game.releaseWindow, games: [] });
+      }
+      windows.get(key)!.games.push(game);
+      continue;
     }
-    groups.get(key)!.games.push(game);
+
+    undated.push(game);
   }
 
-  const ordered = [...groups.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const ordered = [...months.values()].sort((a, b) => a.key.localeCompare(b.key));
+  ordered.push(...[...windows.values()].sort((a, b) => a.label.localeCompare(b.label)));
   if (undated.length > 0) {
     ordered.push({ key: "tba", label: "Date to be announced", games: undated });
   }
@@ -174,8 +195,8 @@ function ReleaseRow({ game }: { game: GameSummary }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted sm:text-xs">
-          <span className="truncate">{game.tba ? "Date TBA" : formatDate(game.released)}</span>
-          {!game.tba && game.released && (
+          <span className="truncate">{releaseLabel(game)}</span>
+          {game.released && (
             <span className="flex items-center gap-1 text-brand-soft">
               <Clock size={10} />
               <CountdownInline date={game.released} />

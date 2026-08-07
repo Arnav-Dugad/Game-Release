@@ -19,7 +19,7 @@ import { PlatformIcons } from "./PlatformIcons";
 import { WatchButton } from "./WatchButton";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { cn } from "@/lib/utils/cn";
-import { formatDate, relativeRelease } from "@/lib/utils/format";
+import { isUnreleased, releaseLabel, relativeReleaseLabel } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 interface GameCardProps {
@@ -40,7 +40,7 @@ export function GameCard({
   sizes,
   showWatch = true,
 }: GameCardProps) {
-  const upcoming = game.tba || (game.released !== null && game.released > new Date().toISOString().slice(0, 10));
+  const upcoming = isUnreleased(game);
 
   return (
     <TiltCard className={cn("rounded-2xl", className)} intensity={7} scale={1.03}>
@@ -110,9 +110,7 @@ export function GameCard({
           <div className="mt-2 flex items-center justify-between gap-2">
             <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-white/70">
               <CalendarDays size={11} className="shrink-0" />
-              <span className="truncate">
-                {game.tba ? "Date TBA" : formatDate(game.released)}
-              </span>
+              <span className="truncate">{releaseLabel(game)}</span>
             </p>
             {game.rating > 0 && (
               <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-white/80 tabular-nums">
@@ -133,7 +131,7 @@ export function GameCard({
             <div className="flex items-center justify-between gap-2 pt-0.5">
               <PlatformIcons platforms={game.parentPlatforms} />
               <span className="truncate text-[10px] text-white/45">
-                {relativeRelease(game.released)}
+                {relativeReleaseLabel(game)}
               </span>
             </div>
           </div>

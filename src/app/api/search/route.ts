@@ -4,8 +4,8 @@ import { searchGames } from "@/lib/games/source";
 /**
  * Search endpoint for the command palette.
  *
- * Exists so the RAWG key stays server-side — the palette is a client component
- * and must not hold credentials. Responses are cached briefly at the edge:
+ * Exists so provider credentials stay server-side — the palette is a client
+ * component and must not hold them. Responses are cached briefly at the edge:
  * repeated keystrokes across users hit the same popular prefixes constantly.
  */
 export async function GET(request: Request) {

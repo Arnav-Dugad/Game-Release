@@ -18,7 +18,7 @@ import { GameCover } from "@/components/game/GameCover";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { useDebouncedValue, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
-import { formatDate } from "@/lib/utils/format";
+import { releaseLabel } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 /** Stable identity for the "no results" case. */
@@ -237,7 +237,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{game.name}</span>
                           <span className="mt-0.5 block truncate text-xs text-faint">
-                            {game.tba ? "Date TBA" : formatDate(game.released)}
+                            {releaseLabel(game)}
                             {game.genres[0] ? ` · ${game.genres[0].name}` : ""}
                           </span>
                         </span>

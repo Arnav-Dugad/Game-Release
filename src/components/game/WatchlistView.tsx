@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { GameCardSkeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils/cn";
-import { formatDate } from "@/lib/utils/format";
+import { releaseLabel } from "@/lib/utils/format";
 import type { WatchStatus } from "@/lib/firebase/db";
 
 const FILTERS: { value: WatchStatus | "all"; label: string }[] = [
@@ -165,8 +165,8 @@ export function WatchlistView() {
                   </div>
 
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-muted sm:text-xs">
-                    <span>{entry.tba ? "Date TBA" : formatDate(entry.released)}</span>
-                    {!entry.tba && entry.released && (
+                    <span>{releaseLabel(entry)}</span>
+                    {entry.released && (
                       <span className="text-brand-soft">
                         <CountdownInline date={entry.released} />
                       </span>

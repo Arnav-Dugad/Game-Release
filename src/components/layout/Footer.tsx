@@ -53,15 +53,27 @@ export function Footer() {
               A release calendar and reference database for video games — every
               upcoming title, score and platform in one place.
             </p>
-            <a
-              href="https://rawg.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-1.5 text-xs text-faint transition-colors hover:text-muted"
-            >
+            <p className="mt-5 inline-flex items-center gap-1.5 text-xs text-faint">
               <Sparkles size={12} />
-              Game data by RAWG
-            </a>
+              Game data from{" "}
+              <a
+                href="https://www.igdb.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 transition-colors hover:text-muted"
+              >
+                IGDB
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://store.steampowered.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 transition-colors hover:text-muted"
+              >
+                Steam
+              </a>
+            </p>
           </div>
 
           {COLUMNS.map((column) => (

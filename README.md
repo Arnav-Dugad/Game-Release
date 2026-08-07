@@ -9,41 +9,56 @@ Built with Next.js 16 (App Router), React 19, Tailwind CSS v4, Motion and Fireba
 
 ## Runs with zero configuration
 
-Clone, install, run. No API keys, no accounts, no network dependencies:
+Clone, install, run. No API keys, no accounts, no signup:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Every page renders immediately against a **bundled sample catalogue** of ~50 games.
-Titles without artwork get procedurally generated cover art derived from the slug,
-so nothing ever shows a broken image or an empty grid.
+The data layer is a **provider chain** — each request takes the first backend
+that can answer it:
 
-Adding keys upgrades the experience; nothing breaks without them.
+| Priority | Provider | Needs | Covers |
+| --- | --- | --- | --- |
+| 1 | **IGDB** | Free Twitch client id + secret | ~300k games, every platform, covers, screenshots, trailers, critic scores, release windows |
+| 2 | **Steam** | **Nothing** | PC titles from the live storefront, with screenshots, MP4 trailers, system requirements and Metacritic scores |
+| 3 | **Sample catalogue** | Nothing (bundled) | ~50 curated games, no network at all |
 
-| Without keys | With keys |
-| --- | --- |
-| ~50 bundled games, generated cover art | Full RAWG database, real artwork, screenshots, trailers, store links |
-| Auth pages explain that sign-in is unconfigured | Email/password + Google sign-in, watchlists, reviews |
+Because Steam needs no credentials, a fresh deploy shows **live data
+immediately**. Adding IGDB credentials upgrades it to full console coverage.
+And if every network path fails, the bundled catalogue keeps the site
+renderable rather than showing an error page.
+
+A provider returning "I can't answer this" falls through to the next one. A
+provider returning *zero results* does not — that's a real answer, so a genuine
+"no matches" is never disguised as a data-source problem.
 
 ---
 
-## Adding live data (free)
+## Adding IGDB (free, ~2 minutes)
 
-### 1. Game data — RAWG
+IGDB is run by Twitch/Amazon. The free tier is generous and every response here
+is cached, so this app uses a tiny fraction of it.
 
-Get a free key at [rawg.io/apidocs](https://rawg.io/apidocs) (20,000 requests/month,
-far more than this app needs since every response is cached).
+1. Sign in at [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) →
+   **Register Your Application**
+2. Name it anything; OAuth Redirect URL `http://localhost`; Category *Website*
+3. Copy the **Client ID**, then **New Secret** and copy that
+4. Put both in `.env.local`:
 
 ```bash
 cp .env.local.example .env.local
-# then set RAWG_API_KEY=your_key
+# IGDB_CLIENT_ID=...
+# IGDB_CLIENT_SECRET=...
 ```
 
-The key is read server-side only and never reaches the browser.
+Credentials are read server-side only and never reach the browser. The app
+handles the OAuth token exchange, caching and refresh itself.
 
-### 2. Accounts & database — Firebase
+---
+
+## Accounts & database — Firebase (optional)
 
 1. Create a project at [console.firebase.google.com](https://console.firebase.google.com)
 2. Add a **Web App**, copy its config into the `NEXT_PUBLIC_FIREBASE_*` variables
@@ -52,8 +67,11 @@ The key is read server-side only and never reaches the browser.
 5. **Firestore → Rules** → paste [`firestore.rules`](./firestore.rules) and publish
 6. **Authentication → Settings → Authorised domains** → add your deployed domain
 
-The `NEXT_PUBLIC_` prefix is correct here — Firebase web config is public by design.
-Access is enforced by the Firestore rules, not by hiding these values.
+The `NEXT_PUBLIC_` prefix is correct here — Firebase web config is public by
+design. Access is enforced by the Firestore rules, not by hiding these values.
+
+Without Firebase the site still works; auth screens explain that sign-in isn't
+configured instead of failing.
 
 ---
 
@@ -114,14 +132,22 @@ magnetics, spotlight or cursor.
 ## Architecture notes
 
 **Data layer.** Components only ever see a normalised `Game` shape, never a raw
-RAWG payload. `src/lib/games/source.ts` is the single entry point: it tries RAWG,
-and on *any* failure — missing key, rate limit, timeout, outage — falls back to the
-bundled catalogue. A degraded state is always a well-defined one, never a 500. Each
-query returns its provenance so the UI can honestly badge sample data.
+provider payload. `src/lib/games/source.ts` walks the provider chain; each
+provider in `src/lib/games/providers/` implements the same interface and returns
+`null` rather than throwing when it can't help. Adding a fourth backend means
+writing one file and appending it to the chain — no component changes.
 
-**Sample data is honest by construction.** Released titles carry real ship dates and
-critic scores. Unreleased titles are marked TBA and carry no invented dates. A
-visible notice labels sample mode wherever it appears.
+**Release dates are never invented.** Providers distinguish an exact day from a
+window ("Q4 2026") from genuinely unknown. Steam publishes dates as localised
+human strings and IGDB stores a precision category alongside each date; both are
+parsed so a quarter is shown as a quarter, not silently rounded to a day. The
+release calendar groups exact dates by month, windows under their own heading,
+and undated titles last.
+
+**Sample data is honest by construction.** Released titles carry real ship dates
+and critic scores; unreleased ones are marked TBA with no invented date. A
+visible notice labels sample mode wherever it appears, and live pages carry a
+provider attribution line.
 
 **Firebase never blocks a render.** Config is validated up front and every accessor
 short-circuits on the server. With no config the app reports `enabled: false` and
@@ -141,13 +167,20 @@ to a static presentation rather than running the same animation instantly).
 ## Scripts
 
 ```bash
-npm run dev     # development server
-npm run build   # production build
-npm run start   # serve the production build
-npm run lint    # eslint
+npm run dev         # development server
+npm run build       # production build
+npm run start       # serve the production build
+npm run lint        # eslint
+npm run check:data  # self-checks for date parsing, slug round-trips, platform mapping
 ```
+
+`check:data` exercises the pure logic in the data layer — Steam's human-readable
+date parsing, provider slug round-trips, platform vocabulary normalisation and
+IGDB image resizing. These decide what date a user is shown and which provider
+owns a URL, so they are pinned down rather than assumed.
 
 ---
 
-Game data by [RAWG](https://rawg.io). Not affiliated with any publisher or platform
-holder.
+Game data from [IGDB](https://www.igdb.com) and the
+[Steam](https://store.steampowered.com) storefront. Not affiliated with any
+publisher or platform holder.

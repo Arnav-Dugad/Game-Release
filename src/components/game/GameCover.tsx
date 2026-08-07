@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { rawgImage } from "@/lib/games/rawg";
+import { sizedImage } from "@/lib/games/image";
 import { hueFromString, initials } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -16,7 +16,7 @@ interface GameCoverProps {
   name: string;
   slug: string;
   image: string | null;
-  /** Rendered CSS width, used to request a correctly-sized source from RAWG. */
+  /** Rendered CSS width, used to request a correctly-sized source asset. */
   width?: number;
   className?: string;
   priority?: boolean;
@@ -38,7 +38,7 @@ export function GameCover({
   if (image) {
     return (
       <Image
-        src={rawgImage(image, width) ?? image}
+        src={sizedImage(image, width) ?? image}
         alt=""
         fill
         sizes={sizes}

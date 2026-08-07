@@ -17,21 +17,22 @@ import { GameRail } from "@/components/game/GameRail";
 import { PlatformList } from "@/components/game/PlatformIcons";
 import { ScreenshotGallery } from "@/components/game/ScreenshotGallery";
 import { ReviewSection } from "@/components/game/ReviewSection";
+import { TrailerPlayer } from "@/components/game/TrailerPlayer";
 import { WatchButton } from "@/components/game/WatchButton";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
-import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
+import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
 import { getGame, getRelated, sampleSlugs } from "@/lib/games/source";
-import { rawgImage } from "@/lib/games/rawg";
+import { sizedImage } from "@/lib/games/image";
 import {
   compactNumber,
-  formatLongDate,
   playtimeLabel,
+  releaseLabelLong,
   relativeRelease,
 } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -54,11 +55,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (!result) return { title: "Game not found" };
 
   const game = result.data;
-  const released = game.tba ? "Release date to be announced" : formatLongDate(game.released);
+  const released = releaseLabelLong(game, "Release date to be announced");
   const description =
     game.description?.slice(0, 155).trim() ||
     `${game.name} — ${released}. Platforms, critic scores, screenshots and release countdown.`;
-  const image = rawgImage(game.image, 1200);
+  const image = sizedImage(game.image, 1200);
 
   return {
     title: game.name,
@@ -84,14 +85,16 @@ export default async function GamePage({ params }: { params: Params }) {
   if (!result) notFound();
 
   const { data: game, source } = result;
-  const related = await getRelated(game, 12);
+  // Pass the source so the rail comes from the same catalogue as the page.
+  const related = await getRelated(game, source, 12);
 
   return (
     <>
       <GameHero game={game} />
 
-      <Container className="relative z-10 -mt-2 pb-6">
-        {source === "sample" && <DataSourceNotice source={source} />}
+      <Container className="relative z-10 -mt-2 space-y-3 pb-6">
+        <DataSourceNotice source={source} />
+        <SourceAttribution source={source} />
       </Container>
 
       <Container className="grid gap-10 py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:py-12">
@@ -128,18 +131,7 @@ export default async function GamePage({ params }: { params: Params }) {
                 {game.trailers.slice(0, 4).map((trailer) => (
                   <Reveal key={trailer.id} blur={false}>
                     <figure className="overflow-hidden rounded-2xl border border-line bg-panel">
-                      {trailer.url ? (
-                        // RAWG serves plain MP4s, so a native player is enough —
-                        // no third-party embed and no extra script.
-                        <video
-                          controls
-                          preload="none"
-                          poster={trailer.preview ?? undefined}
-                          className="aspect-video w-full bg-black"
-                        >
-                          <source src={trailer.url} type="video/mp4" />
-                        </video>
-                      ) : null}
+                      <TrailerPlayer trailer={trailer} />
                       <figcaption className="px-4 py-3 text-sm text-muted">
                         {trailer.name}
                       </figcaption>
@@ -249,14 +241,13 @@ function GameHero({ game }: { game: GameDetail }) {
             <Reveal delay={0.12} className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
               <span className="flex items-center gap-2 text-sm text-muted">
                 <CalendarDays size={15} className="text-faint" />
-                {game.tba ? "Date to be announced" : formatLongDate(game.released)}
+                {releaseLabelLong(game)}
               </span>
-              {!game.tba && game.released && (
-                <Badge tone="brand">{relativeRelease(game.released)}</Badge>
-              )}
+              {/* Only an exact date yields a meaningful "in N months". */}
+              {game.released && <Badge tone="brand">{relativeRelease(game.released)}</Badge>}
             </Reveal>
 
-            {!game.tba && game.released && (
+            {game.released && (
               <Reveal delay={0.18}>
                 <Countdown date={game.released} className="mt-6" />
               </Reveal>
@@ -290,7 +281,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
   const facts: { label: string; value: React.ReactNode; icon: React.ReactNode }[] = [
     {
       label: "Released",
-      value: game.tba ? "TBA" : formatLongDate(game.released),
+      value: releaseLabelLong(game, "To be announced"),
       icon: <CalendarDays size={14} />,
     },
     ...(game.developers.length

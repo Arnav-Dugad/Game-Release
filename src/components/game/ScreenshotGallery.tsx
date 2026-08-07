@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
-import { rawgImage } from "@/lib/games/rawg";
+import { sizedImage } from "@/lib/games/image";
 import { useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
 import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
@@ -78,7 +78,7 @@ export function ScreenshotGallery({
               className="group relative block aspect-video w-full overflow-hidden rounded-xl border border-line bg-panel transition-colors duration-300 fine:hover:border-line-strong"
             >
               <Image
-                src={rawgImage(src, 640) ?? src}
+                src={sizedImage(src, 640) ?? src}
                 alt={`${gameName} screenshot ${i + 1}`}
                 fill
                 sizes="(max-width: 640px) 72vw, 33vw"
@@ -121,7 +121,7 @@ export function ScreenshotGallery({
             >
               <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-panel">
                 <Image
-                  src={rawgImage(shots[openAt], 1920) ?? shots[openAt]}
+                  src={sizedImage(shots[openAt], 1920) ?? shots[openAt]}
                   alt={`${gameName} screenshot ${openAt + 1}`}
                   fill
                   sizes="100vw"
