@@ -1,0 +1,337 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   LUDEX — design tokens
+   A single dark, high-contrast surface system. Everything (panels, borders,
+   glows) is derived from these tokens so the whole product reads as one piece.
+   ========================================================================= */
+
+@theme {
+  /* Surfaces, darkest → lightest */
+  --color-bg: #04040a;
+  --color-bg-elev: #0a0a14;
+  --color-panel: #101020;
+  --color-panel-2: #16162a;
+
+  /* Hairlines & text */
+  --color-line: #ffffff14;
+  --color-line-strong: #ffffff26;
+  --color-text: #f1f1f7;
+  --color-muted: #9494ac;
+  --color-faint: #61617a;
+
+  /* Accents */
+  --color-brand: #7c5cff;
+  --color-brand-soft: #a892ff;
+  --color-neon: #22d3ee;
+  --color-flare: #ff3d8b;
+  --color-gold: #ffc857;
+  --color-mint: #4ade80;
+
+  /* Type */
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+
+  /* Motion — one shared easing vocabulary keeps transitions feeling related */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-aurora: aurora 22s ease-in-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.6s var(--ease-out-quart) infinite;
+  --animate-scan: scan 3.2s linear infinite;
+  --animate-fade-up: fade-up 0.6s var(--ease-out-expo) both;
+}
+
+/* Pointer-aware variants. The single most important tool for treating mobile
+   and desktop as genuinely different targets rather than one scaled layout:
+   `fine:` only fires for real mouse pointers, `coarse:` only for touch. */
+@custom-variant fine (@media (hover: hover) and (pointer: fine));
+@custom-variant coarse (@media (hover: none) and (pointer: coarse));
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes aurora {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
+  33% { transform: translate3d(6%, -4%, 0) scale(1.12); opacity: 0.8; }
+  66% { transform: translate3d(-5%, 5%, 0) scale(0.95); opacity: 0.6; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* The track renders its children twice, so -50% lands exactly on the seam. */
+@keyframes marquee-x {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+/* ============================================================================
+   Base
+   ========================================================================= */
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Anchor targets clear the sticky desktop header. */
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Touch devices get a bottom tab bar; reserve room so content is never
+       hidden behind it or behind the home indicator. */
+    overscroll-behavior-y: none;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    body {
+      padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-brand) 45%, transparent);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-soft);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Desktop scrollbar. Left native on touch, where overlay scrollbars are
+     already correct and restyling them only causes jank. */
+  @media (hover: hover) and (pointer: fine) {
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: var(--color-bg); }
+    ::-webkit-scrollbar-thumb {
+      background: #ffffff1f;
+      border-radius: 99px;
+      border: 2px solid var(--color-bg);
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #ffffff33; }
+  }
+
+  /* Honour the OS setting globally. Individual components additionally read
+     `useReducedMotion()` so they can swap to a static presentation rather than
+     just running the same animation instantly. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ============================================================================
+   Component utilities
+   ========================================================================= */
+
+@layer utilities {
+  /* Frosted panel. The layered inset shadow is what sells the "thickness" —
+     a top highlight plus a soft ambient drop. */
+  .glass {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-panel) 88%, transparent),
+      color-mix(in oklab, var(--color-bg-elev) 92%, transparent)
+    );
+    border: 1px solid var(--color-line);
+    box-shadow:
+      inset 0 1px 0 0 #ffffff14,
+      0 1px 2px 0 #00000066,
+      0 12px 40px -12px #00000099;
+  }
+
+  .glass-blur {
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  /* Film grain. Pure CSS/SVG so it costs no network request. */
+  .noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .text-gradient {
+    background: linear-gradient(
+      100deg,
+      var(--color-text) 0%,
+      var(--color-brand-soft) 42%,
+      var(--color-neon) 78%,
+      var(--color-text) 100%
+    );
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-animated {
+    animation: shimmer 6s linear infinite;
+  }
+
+  /* Gradient hairline border that survives rounded corners. */
+  .border-gradient {
+    position: relative;
+  }
+  .border-gradient::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(140deg, #ffffff40, #ffffff08 40%, transparent 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .shimmer-bg {
+    background: linear-gradient(
+      90deg,
+      var(--color-panel) 25%,
+      var(--color-panel-2) 37%,
+      var(--color-panel) 63%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /* Horizontal snap rail — the primary mobile browsing pattern. */
+  .snap-rail {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .snap-rail::-webkit-scrollbar { display: none; }
+  .snap-rail > * { scroll-snap-align: start; flex: none; }
+
+  /*
+    Aligns a full-bleed scroll rail's first card with the page's text column.
+    A rail must span the full viewport so cards can scroll off both edges, but
+    its content still has to line up with `Container`, which is capped at
+    1400px and centred. This reproduces that inset: the centring margin plus
+    the container's own gutter, falling back to the plain gutter once the
+    viewport is narrower than the cap.
+
+    `100%` (not `100vw`) is deliberate — it resolves against the parent's
+    content box and so excludes the scrollbar, which `100vw` includes.
+
+    `scroll-padding-inline` must match: without it `scroll-snap-type:
+    x mandatory` snaps the first card flush to the scrollport on load and
+    silently eats the gutter.
+  */
+  .rail-gutter {
+    --rail-gutter: 1rem;
+    padding-inline: max(var(--rail-gutter), calc((100% - 1400px) / 2 + var(--rail-gutter)));
+    scroll-padding-inline: max(var(--rail-gutter), calc((100% - 1400px) / 2 + var(--rail-gutter)));
+  }
+  @media (min-width: 1024px) {
+    .rail-gutter { --rail-gutter: 1.5rem; }
+  }
+  @media (min-width: 1280px) {
+    .rail-gutter { --rail-gutter: 2.5rem; }
+  }
+
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Fade the edges of a scroll rail instead of hard-clipping it. */
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+  }
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent);
+    mask-image: linear-gradient(180deg, #000 55%, transparent);
+  }
+
+  .safe-b { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-t { padding-top: env(safe-area-inset-top); }
+
+  /* Full viewport height that accounts for mobile browser chrome. */
+  .h-dvh-safe { height: 100dvh; }
+  .min-h-dvh-safe { min-height: 100dvh; }
+
+  .clip-none { clip-path: none; }
+
+  /* Promotes an element to its own layer during transform-heavy animation. */
+  .gpu {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  /* Set by <CustomCursor /> once it has actually mounted, so a failure to
+     mount can never leave the user with no cursor at all. */
+  .has-custom-cursor,
+  .has-custom-cursor * {
+    cursor: none !important;
+  }
+
+  .line-clamp-1-safe {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}

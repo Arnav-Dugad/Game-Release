@@ -1,0 +1,121 @@
+"use client";
+
+/**
+ * One overlay component with two genuinely different presentations:
+ *  - coarse pointers get a bottom sheet that can be flung away with a drag
+ *  - fine pointers get a centred dialog that scales in
+ *
+ * They are not the same component restyled — the transform origin, the exit
+ * gesture and the safe-area handling all differ, which is the point.
+ */
+
+import { AnimatePresence, motion } from "motion/react";
+import { X } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
+import { cn } from "@/lib/utils/cn";
+
+interface SheetProps {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+  /** Hides the default header when the content supplies its own. */
+  bare?: boolean;
+}
+
+export function Sheet({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  className,
+  bare = false,
+}: SheetProps) {
+  const isMobile = useIsMobile();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useLockBodyScroll(open);
+  useEscapeKey(onClose, open);
+
+  // Move focus into the dialog so keyboard and screen-reader users land inside
+  // it rather than continuing from wherever the trigger was.
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() => panelRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-6">
+          <motion.div
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            onClick={onClose}
+          />
+
+          <motion.div
+            ref={panelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className={cn(
+              "glass glass-blur relative z-10 w-full outline-none",
+              "max-h-[88dvh] overflow-y-auto overscroll-contain",
+              "rounded-t-[28px] pb-[env(safe-area-inset-bottom)]",
+              "sm:max-w-lg sm:rounded-[24px] sm:pb-0",
+              className,
+            )}
+            initial={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.94, y: 12 }}
+            animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+            exit={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: "spring", stiffness: 380, damping: 34 }}
+            drag={isMobile ? "y" : false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.55 }}
+            onDragEnd={(_, info) => {
+              // Dismiss on a decisive downward fling or a long drag.
+              if (info.offset.y > 130 || info.velocity.y > 600) onClose();
+            }}
+          >
+            {isMobile && (
+              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1">
+                <span aria-hidden className="h-1.5 w-11 rounded-full bg-white/25" />
+              </div>
+            )}
+
+            {!bare && (
+              <header className="flex items-start justify-between gap-4 px-5 pt-4 pb-3 sm:px-6 sm:pt-6">
+                <div className="min-w-0">
+                  {title && <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>}
+                  {description && (
+                    <p className="mt-1 text-sm text-muted">{description}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="-mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-white/8 hover:text-text"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+            )}
+
+            <div className={cn(!bare && "px-5 pb-6 sm:px-6")}>{children}</div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
