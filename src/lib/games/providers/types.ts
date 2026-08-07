@@ -26,7 +26,16 @@ export interface GameProvider {
   isConfigured(): boolean;
 
   browse(filters: BrowseFilters): Promise<Page<GameSummary> | null>;
-  upcoming(pageSize: number, page: number): Promise<Page<GameSummary> | null>;
+  /**
+   * The release calendar. Takes the same filters as `browse` so the upcoming
+   * page can offer genre/platform narrowing and sorting without a second,
+   * subtly different query path.
+   */
+  upcoming(
+    pageSize: number,
+    page: number,
+    filters?: BrowseFilters,
+  ): Promise<Page<GameSummary> | null>;
   trending(pageSize: number): Promise<GameSummary[] | null>;
   topRated(pageSize: number): Promise<GameSummary[] | null>;
   newReleases(pageSize: number): Promise<GameSummary[] | null>;

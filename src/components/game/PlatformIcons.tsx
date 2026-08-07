@@ -1,27 +1,17 @@
-import { Gamepad, Gamepad2, Globe, Joystick, Laptop, Monitor, Smartphone, Terminal } from "lucide-react";
-import type { ComponentType } from "react";
+import { Monitor } from "lucide-react";
+import { BrandIcon } from "@/components/brand/BrandIcon";
+import { brandIcon } from "@/components/brand/brand-icons";
 import { platformKeys, type PlatformKey } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 /**
- * Platform availability.
+ * Platform availability, drawn with the platforms' own marks.
  *
- * Deliberately uses neutral device iconography rather than reproductions of
- * manufacturer logos — accurate brand marks would be redrawn from memory and
- * carry trademark constraints. Every icon is labelled, so the platform is never
- * conveyed by the glyph alone.
+ * "PC" has no single logo that isn't a specific vendor's — Windows, and a game
+ * on PC may equally be Linux or Mac — so it keeps a neutral monitor glyph.
+ * Everything else uses the real brand mark, which is far more scannable in a
+ * dense row than generic controller shapes.
  */
-
-const ICONS: Record<PlatformKey, ComponentType<{ size?: number; className?: string }>> = {
-  pc: Monitor,
-  playstation: Gamepad2,
-  xbox: Gamepad,
-  nintendo: Joystick,
-  mac: Laptop,
-  linux: Terminal,
-  mobile: Smartphone,
-  web: Globe,
-};
 
 const LABELS: Record<PlatformKey, string> = {
   pc: "PC",
@@ -34,16 +24,43 @@ const LABELS: Record<PlatformKey, string> = {
   web: "Browser",
 };
 
+/** Not every family maps onto a brand mark; `pc` and `web` fall back to a glyph. */
+function hasBrand(key: PlatformKey): boolean {
+  return key !== "pc" && key !== "web" && brandIcon(key) !== null;
+}
+
+function PlatformGlyph({
+  platform,
+  size,
+  tinted,
+}: {
+  platform: PlatformKey;
+  size: number;
+  tinted?: boolean;
+}) {
+  if (hasBrand(platform)) {
+    return <BrandIcon name={platform} size={size} tinted={tinted} title={LABELS[platform]} />;
+  }
+  return (
+    <>
+      <Monitor size={size} aria-hidden />
+      <span className="sr-only">{LABELS[platform]}</span>
+    </>
+  );
+}
+
 export function PlatformIcons({
   platforms,
   max = 4,
-  size = 13,
+  size = 14,
   className,
+  tinted = false,
 }: {
   platforms: { slug: string }[];
   max?: number;
   size?: number;
   className?: string;
+  tinted?: boolean;
 }) {
   const keys = platformKeys(platforms);
   if (keys.length === 0) return null;
@@ -52,16 +69,12 @@ export function PlatformIcons({
   const overflow = keys.length - shown.length;
 
   return (
-    <ul className={cn("flex items-center gap-1.5", className)}>
-      {shown.map((key) => {
-        const Icon = ICONS[key];
-        return (
-          <li key={key} className="text-faint" title={LABELS[key]}>
-            <Icon size={size} />
-            <span className="sr-only">{LABELS[key]}</span>
-          </li>
-        );
-      })}
+    <ul className={cn("flex items-center gap-2", className)}>
+      {shown.map((key) => (
+        <li key={key} className={cn(!tinted && "text-faint")} title={LABELS[key]}>
+          <PlatformGlyph platform={key} size={size} tinted={tinted} />
+        </li>
+      ))}
       {overflow > 0 && (
         <li className="text-[10px] font-medium text-faint tabular-nums">+{overflow}</li>
       )}
@@ -74,18 +87,15 @@ export function PlatformList({ platforms }: { platforms: { slug: string; name: s
   const keys = platformKeys(platforms);
   return (
     <ul className="flex flex-wrap gap-2">
-      {keys.map((key) => {
-        const Icon = ICONS[key];
-        return (
-          <li
-            key={key}
-            className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.04] px-3 py-1.5 text-xs text-muted"
-          >
-            <Icon size={14} />
-            {LABELS[key]}
-          </li>
-        );
-      })}
+      {keys.map((key) => (
+        <li
+          key={key}
+          className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.04] px-3 py-1.5 text-xs text-muted transition-colors hover:border-line-strong"
+        >
+          <PlatformGlyph platform={key} size={15} tinted />
+          {LABELS[key]}
+        </li>
+      ))}
     </ul>
   );
 }

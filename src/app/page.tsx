@@ -1,19 +1,20 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Flame, Sparkles, Trophy } from "lucide-react";
+import { ArrowRight, CalendarClock, Database, Flame, Trophy } from "lucide-react";
 import { HeroShowcase } from "@/components/game/HeroShowcase";
 import { GameRail } from "@/components/game/GameRail";
 import { GameGrid } from "@/components/game/GameGrid";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
-import { Button } from "@/components/ui/Button";
-import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
+import { Stagger, StaggerItem } from "@/components/motion/Reveal";
+import { JoinCta } from "@/components/home/JoinCta";
+import { RecommendedRail } from "@/components/home/RecommendedRail";
 import { CountUp } from "@/components/motion/text";
 import { Marquee, Spotlight } from "@/components/motion/effects";
-import { Aurora, GridLines } from "@/components/motion/Aurora";
 import {
   getGenres,
   getNewReleases,
   getTopRated,
+  getTotalGames,
   getTrending,
   getUpcoming,
 } from "@/lib/games/source";
@@ -24,12 +25,13 @@ export const revalidate = 3600;
 
 export default async function HomePage() {
   // One await point: these four queries are independent and must not waterfall.
-  const [upcoming, trending, topRated, newReleases, genres] = await Promise.all([
+  const [upcoming, trending, topRated, newReleases, genres, totalGames] = await Promise.all([
     getUpcoming(18),
     getTrending(14),
     getTopRated(10),
     getNewReleases(14),
     getGenres(),
+    getTotalGames(),
   ]);
 
   const source = upcoming.source;
@@ -46,10 +48,13 @@ export default async function HomePage() {
       )}
 
       <StatsStrip
+        totalGames={totalGames}
         upcomingCount={upcoming.data.count}
-        trendingCount={trending.data.length}
         genreCount={genres.data.length}
       />
+
+      {/* Only renders once a signed-in user has enough library to reason from. */}
+      <RecommendedRail genres={genres.data} />
 
       <Section className="pt-4">
         <Container>
@@ -117,19 +122,19 @@ export default async function HomePage() {
 /* -------------------------------------------------------------------------- */
 
 function StatsStrip({
+  totalGames,
   upcomingCount,
-  trendingCount,
   genreCount,
 }: {
+  totalGames: number;
   upcomingCount: number;
-  trendingCount: number;
   genreCount: number;
 }) {
   const stats = [
-    { value: upcomingCount, label: "Upcoming releases tracked", icon: CalendarClock, compact: true },
-    { value: trendingCount, label: "Trending this year", icon: Flame, compact: false },
-    { value: genreCount, label: "Genres to explore", icon: Sparkles, compact: false },
-    { value: 100, label: "Critic scores, 0–100", icon: Trophy, compact: false },
+    { value: totalGames, label: "Games in the database", icon: Database, compact: true, plus: true },
+    { value: upcomingCount, label: "Upcoming releases tracked", icon: CalendarClock, compact: true, plus: true },
+    { value: genreCount, label: "Genres to explore", icon: Flame, compact: false, plus: false },
+    { value: 100, label: "Critic scores, 0–100", icon: Trophy, compact: false, plus: false },
   ];
 
   return (
@@ -144,7 +149,7 @@ function StatsStrip({
                   <Icon size={17} className="text-brand-soft" />
                   <p className="mt-3 font-display text-2xl font-bold leading-none lg:text-3xl">
                     <CountUp value={stat.value} compact={stat.compact} />
-                    {!stat.compact && stat.value >= 100 ? "" : "+"}
+                    {stat.plus ? "+" : ""}
                   </p>
                   <p className="mt-1.5 text-[12px] leading-snug text-muted lg:text-[13px]">
                     {stat.label}
@@ -224,40 +229,6 @@ function GenreShowcase({ genres }: { genres: { id: number; slug: string; name: s
           </Marquee>
         </div>
       )}
-    </Section>
-  );
-}
-
-function JoinCta() {
-  return (
-    <Section>
-      <Container>
-        <Reveal>
-          <div className="noise relative isolate overflow-hidden rounded-[28px] border border-line px-6 py-14 text-center sm:px-12 lg:py-20">
-            <Aurora intensity="normal" className="-z-10" />
-            <GridLines className="-z-10 opacity-50" />
-
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-soft">
-              Free, forever
-            </p>
-            <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-black leading-[1.05] sm:text-4xl lg:text-5xl">
-              Never miss a release you&rsquo;ve been waiting for
-            </h2>
-            <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted">
-              Create an account to build a watchlist, track what you&rsquo;re playing and
-              rate the games you finish.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Button href="/signup" size="lg" iconRight={<ArrowRight size={17} />}>
-                Create your account
-              </Button>
-              <Button href="/browse" size="lg" variant="secondary">
-                Explore the database
-              </Button>
-            </div>
-          </div>
-        </Reveal>
-      </Container>
     </Section>
   );
 }

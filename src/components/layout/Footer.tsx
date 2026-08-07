@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUp, Sparkles } from "lucide-react";
 import { Logo } from "./Logo";
+import { AccountLinks } from "./AccountLinks";
 import { Container } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/motion/Reveal";
 
@@ -21,15 +22,6 @@ const COLUMNS = [
       { label: "All platforms", href: "/platforms" },
       { label: "Action", href: "/browse?genres=action" },
       { label: "RPG", href: "/browse?genres=role-playing-games-rpg" },
-    ],
-  },
-  {
-    title: "Account",
-    links: [
-      { label: "Sign in", href: "/login" },
-      { label: "Create account", href: "/signup" },
-      { label: "Your watchlist", href: "/watchlist" },
-      { label: "Your profile", href: "/profile" },
     ],
   },
 ];
@@ -101,6 +93,14 @@ export function Footer() {
               </ul>
             </nav>
           ))}
+
+          {/* Auth-aware, so signed-in visitors aren't invited to sign up. */}
+          <nav aria-label="Account">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-faint">
+              Account
+            </h3>
+            <AccountLinks />
+          </nav>
         </Reveal>
 
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-line pt-6 text-xs text-faint sm:flex-row sm:items-center">

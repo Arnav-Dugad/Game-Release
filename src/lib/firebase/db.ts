@@ -46,6 +46,23 @@ export interface WatchlistEntry {
   tba: boolean;
   metacritic: number | null;
   status: WatchStatus;
+  /**
+   * Which platform the user played (or intends to play) this on — a family
+   * slug such as "playstation". Null until they say.
+   */
+  platform: string | null;
+  /** Epoch ms, set when the status first moves to "playing". */
+  startedAt: number | null;
+  /** Epoch ms, set when the status first moves to "played". */
+  finishedAt: number | null;
+  /**
+   * Genre ids copied from the game at save time. Denormalised deliberately:
+   * the recommendation engine needs a taste profile without fetching detail
+   * pages for every tracked game.
+   */
+  genreIds: number[];
+  /** Platform family slugs the game is available on. */
+  platformSlugs: string[];
   /** Epoch ms. Written client-side so the list can sort before the server timestamp lands. */
   addedAt: number;
 }
@@ -143,6 +160,11 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     tba: game.tba,
     metacritic: game.metacritic,
     status,
+    platform: null,
+    startedAt: status === "playing" ? Date.now() : null,
+    finishedAt: status === "played" ? Date.now() : null,
+    genreIds: game.genres.map((genre) => genre.id),
+    platformSlugs: game.parentPlatforms.map((platform) => platform.slug),
     addedAt: Date.now(),
   };
 }
@@ -157,13 +179,33 @@ export async function removeFromWatchlist(uid: string, gameId: number): Promise<
   await deleteDoc(doc(db, "users", uid, "watchlist", String(gameId)));
 }
 
+/**
+ * Updates play status, stamping the first transition into each state.
+ *
+ * Timestamps are only ever written once — re-marking something as "playing"
+ * after finishing it shouldn't rewrite when you originally started.
+ */
 export async function setWatchStatus(
   uid: string,
   gameId: number,
   status: WatchStatus,
+  current?: WatchlistEntry,
 ): Promise<void> {
   const db = requireDb();
-  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), { status });
+  const patch: Record<string, unknown> = { status };
+  if (status === "playing" && !current?.startedAt) patch.startedAt = Date.now();
+  if (status === "played" && !current?.finishedAt) patch.finishedAt = Date.now();
+  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), patch);
+}
+
+/** Records which platform the user is playing a tracked game on. */
+export async function setWatchPlatform(
+  uid: string,
+  gameId: number,
+  platform: string | null,
+): Promise<void> {
+  const db = requireDb();
+  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), { platform });
 }
 
 /** Live watchlist. Returns a no-op unsubscribe when Firebase is unconfigured. */
@@ -184,10 +226,17 @@ export function subscribeWatchlist(
       // entirely, so normalise it rather than letting `undefined` reach the UI.
       const entries = snap.docs.map((d) => {
         const data = d.data() as WatchlistEntry;
+        // Documents predate several fields; normalise rather than letting
+        // `undefined` reach the UI or the recommendation profile.
         return {
           ...data,
           releaseWindow: data.releaseWindow ?? null,
           imageFallback: data.imageFallback ?? null,
+          platform: data.platform ?? null,
+          startedAt: data.startedAt ?? null,
+          finishedAt: data.finishedAt ?? null,
+          genreIds: data.genreIds ?? [],
+          platformSlugs: data.platformSlugs ?? [],
         };
       });
       entries.sort((a, b) => b.addedAt - a.addedAt);

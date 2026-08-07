@@ -39,6 +39,30 @@ export interface Requirement {
   recommended: string | null;
 }
 
+export interface AgeRating {
+  /** e.g. "ESRB", "PEGI", "USK". */
+  organization: string;
+  /** e.g. "M", "18". */
+  rating: string;
+}
+
+export interface WebsiteRef {
+  /** Store/social slug from `classifyUrl`, or "official". */
+  kind: string;
+  url: string;
+}
+
+export interface MultiplayerModes {
+  campaignCoop: boolean;
+  dropIn: boolean;
+  lanCoop: boolean;
+  offlineCoop: boolean;
+  onlineCoop: boolean;
+  splitScreen: boolean;
+  onlineMax: number | null;
+  offlineMax: number | null;
+}
+
 export interface Price {
   /** Already formatted for display in the store's currency, e.g. "$59.99". */
   current: string;
@@ -96,6 +120,8 @@ export interface GameSummary {
 
 export interface GameDetail extends GameSummary {
   description: string;
+  /** Narrative premise, kept separate from the marketing summary. */
+  storyline: string | null;
   /**
    * Steam application id, when this title is known to have a Steam listing.
    * IGDB publishes it via `external_games`, which is what lets an IGDB record
@@ -107,7 +133,28 @@ export interface GameDetail extends GameSummary {
   website: string | null;
   developers: Ref[];
   publishers: Ref[];
+  supportingStudios: Ref[];
   tags: Ref[];
+  themes: Ref[];
+  gameModes: Ref[];
+  playerPerspectives: Ref[];
+  engines: Ref[];
+  /** Franchises and collections merged — both answer "what series is this?". */
+  franchises: Ref[];
+  ageRatings: AgeRating[];
+  languages: string[];
+  multiplayerModes: MultiplayerModes | null;
+  /** Key art, distinct from in-game screenshots. */
+  artworks: string[];
+  /** DLC and expansions. */
+  expansions: Ref[];
+  /** Provider-curated similar titles, already expanded. */
+  similar: GameSummary[];
+  /** Combined critic + user score, 0–100. */
+  totalRating: number | null;
+  /** Pre-release anticipation count. */
+  hypes: number;
+  websites: WebsiteRef[];
   stores: StoreRef[];
   requirements: Requirement[];
   trailers: Trailer[];
@@ -130,7 +177,9 @@ export type SortKey =
   | "-added"
   | "-rating"
   | "-metacritic"
-  | "name";
+  | "-hypes"
+  | "name"
+  | "-name";
 
 export interface BrowseFilters {
   search?: string;

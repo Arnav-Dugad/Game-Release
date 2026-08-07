@@ -3,11 +3,18 @@ import { notFound } from "next/navigation";
 import {
   Building2,
   CalendarDays,
+  Cpu,
+  Eye,
   ExternalLink,
+  Flame,
+  Gamepad2,
   Gauge,
   Globe,
+  Languages,
+  Layers,
   ShieldCheck,
   Star,
+  Tag,
   Timer,
   Users,
 } from "lucide-react";
@@ -16,6 +23,7 @@ import { Countdown } from "@/components/game/Countdown";
 import { GameRail } from "@/components/game/GameRail";
 import { PlatformList } from "@/components/game/PlatformIcons";
 import { ScreenshotGallery } from "@/components/game/ScreenshotGallery";
+import { CommunityLinks, StoreLinks } from "@/components/game/StoreLinks";
 import { ReviewSection } from "@/components/game/ReviewSection";
 import { TrailerPlayer } from "@/components/game/TrailerPlayer";
 import { WatchButton } from "@/components/game/WatchButton";
@@ -90,6 +98,10 @@ export default async function GamePage({ params }: { params: Params }) {
   // Pass the source so the rail comes from the same catalogue as the page.
   const related = await getRelated(game, source, 12);
 
+  // Screenshots first (they show the game running), then key art. Deduped
+  // because some providers list the same asset in both collections.
+  const media = [...new Set([...game.screenshots, ...game.artworks])];
+
   return (
     <>
       <GameHero game={game} />
@@ -112,12 +124,14 @@ export default async function GamePage({ params }: { params: Params }) {
             </Reveal>
           )}
 
-          {game.screenshots.length > 0 && (
+          {media.length > 0 && (
             <section>
               <Reveal>
-                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Screenshots</h2>
+                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">
+                  {game.artworks.length > 0 ? "Screenshots & art" : "Screenshots"}
+                </h2>
               </Reveal>
-              <ScreenshotGallery screenshots={game.screenshots} gameName={game.name} />
+              <ScreenshotGallery screenshots={media} gameName={game.name} />
             </section>
           )}
 
@@ -143,13 +157,34 @@ export default async function GamePage({ params }: { params: Params }) {
 
           {game.requirements.length > 0 && <Requirements game={game} />}
 
+          {game.expansions.length > 0 && (
+            <Reveal>
+              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Expansions & DLC</h2>
+              <ul className="flex flex-wrap gap-2">
+                {game.expansions.map((item) => (
+                  <li key={item.id}>
+                    <Chip href={`/game/${item.slug}`}>{item.name}</Chip>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          )}
+
           {game.tags.length > 0 && (
             <Reveal>
-              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Tags</h2>
+              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h2>
               <div className="flex flex-wrap gap-2">
-                {game.tags.map((tag) => (
-                  <Badge key={tag.id}>{tag.name}</Badge>
+                {game.themes.map((theme) => (
+                  <Badge key={`theme-${theme.id}`} tone="brand">
+                    {theme.name}
+                  </Badge>
                 ))}
+                {game.gameModes.map((mode) => (
+                  <Badge key={`mode-${mode.id}`}>{mode.name}</Badge>
+                ))}
+                {game.themes.length === 0 &&
+                  game.gameModes.length === 0 &&
+                  game.tags.map((tag) => <Badge key={tag.id}>{tag.name}</Badge>)}
               </div>
             </Reveal>
           )}
@@ -287,6 +322,19 @@ function GameHero({ game }: { game: GameDetail }) {
   );
 }
 
+/** Turns IGDB's multiplayer booleans into a phrase worth reading. */
+function multiplayerSummary(modes: NonNullable<GameDetail["multiplayerModes"]>): string {
+  const parts: string[] = [];
+  if (modes.onlineCoop) parts.push("Online co-op");
+  if (modes.offlineCoop) parts.push("Local co-op");
+  if (modes.lanCoop) parts.push("LAN");
+  if (modes.splitScreen) parts.push("Split screen");
+  if (modes.campaignCoop) parts.push("Co-op campaign");
+  if (modes.dropIn) parts.push("Drop-in");
+  if (modes.onlineMax && modes.onlineMax > 1) parts.push(`Up to ${modes.onlineMax} online`);
+  return parts.length > 0 ? parts.join(" · ") : "Single player";
+}
+
 function GameSidebar({ game }: { game: GameDetail }) {
   const facts: { label: string; value: React.ReactNode; icon: React.ReactNode }[] = [
     {
@@ -321,8 +369,99 @@ function GameSidebar({ game }: { game: GameDetail }) {
           },
         ]
       : []),
-    ...(game.esrb
-      ? [{ label: "Age rating", value: game.esrb, icon: <ShieldCheck size={14} /> }]
+    ...(game.supportingStudios.length
+      ? [
+          {
+            label: "Additional work",
+            value: game.supportingStudios.map((s) => s.name).join(", "),
+            icon: <Building2 size={14} />,
+          },
+        ]
+      : []),
+    ...(game.franchises.length
+      ? [
+          {
+            label: game.franchises.length > 1 ? "Series" : "Part of",
+            value: game.franchises.map((f) => f.name).join(", "),
+            icon: <Layers size={14} />,
+          },
+        ]
+      : []),
+    ...(game.engines.length
+      ? [
+          {
+            label: game.engines.length > 1 ? "Engines" : "Engine",
+            value: game.engines.map((e) => e.name).join(", "),
+            icon: <Cpu size={14} />,
+          },
+        ]
+      : []),
+    ...(game.playerPerspectives.length
+      ? [
+          {
+            label: "Perspective",
+            value: game.playerPerspectives.map((p) => p.name).join(", "),
+            icon: <Eye size={14} />,
+          },
+        ]
+      : []),
+    ...(game.gameModes.length
+      ? [
+          {
+            label: "Modes",
+            value: game.gameModes.map((m) => m.name).join(", "),
+            icon: <Gamepad2 size={14} />,
+          },
+        ]
+      : []),
+    ...(game.multiplayerModes
+      ? [
+          {
+            label: "Multiplayer",
+            value: multiplayerSummary(game.multiplayerModes),
+            icon: <Users size={14} />,
+          },
+        ]
+      : []),
+    ...(game.playtime
+      ? [
+          {
+            label: "Typical playtime",
+            value: playtimeLabel(game.playtime),
+            icon: <Timer size={14} />,
+          },
+        ]
+      : []),
+    ...(game.ageRatings.length
+      ? [
+          {
+            label: game.ageRatings.length > 1 ? "Age ratings" : "Age rating",
+            value: game.ageRatings.map((r) => `${r.organization} ${r.rating}`).join(" · "),
+            icon: <ShieldCheck size={14} />,
+          },
+        ]
+      : game.esrb
+        ? [{ label: "Age rating", value: game.esrb, icon: <ShieldCheck size={14} /> }]
+        : []),
+    ...(game.languages.length
+      ? [
+          {
+            label: "Languages",
+            value: `${game.languages.slice(0, 6).join(", ")}${
+              game.languages.length > 6 ? ` +${game.languages.length - 6} more` : ""
+            }`,
+            icon: <Languages size={14} />,
+          },
+        ]
+      : []),
+    ...(game.alternativeNames.length
+      ? [
+          {
+            label: "Also known as",
+            value: game.alternativeNames.slice(0, 4).join(", "),
+            icon: <Tag size={14} />,
+          },
+        ]
       : []),
     ...(game.added
       ? [
@@ -330,6 +469,15 @@ function GameSidebar({ game }: { game: GameDetail }) {
             label: "In player libraries",
             value: compactNumber(game.added),
             icon: <Gauge size={14} />,
+          },
+        ]
+      : []),
+    ...(game.hypes > 0
+      ? [
+          {
+            label: "Anticipating this",
+            value: compactNumber(game.hypes),
+            icon: <Flame size={14} />,
           },
         ]
       : []),
@@ -420,21 +568,16 @@ function GameSidebar({ game }: { game: GameDetail }) {
           <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
             Where to buy
           </h2>
-          <ul className="space-y-2">
-            {game.stores.map((store) => (
-              <li key={store.id}>
-                <a
-                  href={store.url ?? `https://${store.domain ?? ""}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-3 rounded-xl border border-line px-3.5 py-3 text-sm transition-colors hover:border-line-strong hover:bg-white/[0.04]"
-                >
-                  <span className="truncate">{store.name}</span>
-                  <ExternalLink size={13} className="shrink-0 text-faint" />
-                </a>
-              </li>
-            ))}
-          </ul>
+          <StoreLinks stores={game.stores} />
+        </Reveal>
+      )}
+
+      {game.websites.some((site) => site.kind !== "official") && (
+        <Reveal delay={0.21} className="glass rounded-2xl p-5">
+          <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+            Links
+          </h2>
+          <CommunityLinks websites={game.websites} />
         </Reveal>
       )}
 

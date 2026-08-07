@@ -31,6 +31,7 @@ import type {
 } from "../types";
 import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { slugify, stripHtml } from "@/lib/utils/html";
+import { DETAIL_DEFAULTS } from "../detail";
 
 const STORE = "https://store.steampowered.com/api";
 
@@ -361,6 +362,7 @@ function mapDetail(details: AppDetails): GameDetail | null {
 
   return {
     ...summary,
+    ...DETAIL_DEFAULTS,
     description,
     steamAppId: summary.id,
     price: priceOf(details),
@@ -556,7 +558,11 @@ export const steamProvider: GameProvider = {
     };
   },
 
-  async upcoming(pageSize: number, page: number): Promise<Page<GameSummary> | null> {
+  async upcoming(
+    pageSize: number,
+    page: number,
+    filters: BrowseFilters = {},
+  ): Promise<Page<GameSummary> | null> {
     const appids = await featuredAppIds(["coming_soon"], POOL_LIMIT);
     if (appids.length === 0) return null;
 
@@ -569,7 +575,17 @@ export const steamProvider: GameProvider = {
     );
     if (upcoming.length === 0) return null;
 
-    const sorted = sortSummaries(upcoming, "released");
+    let pool = upcoming;
+    if (filters.genres) {
+      const wanted = new Set(filters.genres.split(",").filter(Boolean));
+      pool = pool.filter((game) => game.genres.some((genre) => wanted.has(genre.slug)));
+    }
+    if (filters.platforms) {
+      const wanted = new Set(filters.platforms.split(",").filter(Boolean));
+      pool = pool.filter((game) => game.parentPlatforms.some((p) => wanted.has(p.slug)));
+    }
+
+    const sorted = sortSummaries(pool, filters.ordering ?? "released");
     const start = (page - 1) * pageSize;
     return {
       results: sorted.slice(start, start + pageSize),

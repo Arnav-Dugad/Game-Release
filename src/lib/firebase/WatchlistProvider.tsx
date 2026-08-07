@@ -24,6 +24,7 @@ import { useAuth } from "./AuthProvider";
 import {
   addToWatchlist,
   removeFromWatchlist,
+  setWatchPlatform,
   setWatchStatus,
   subscribeWatchlist,
   watchlistEntryFromGame,
@@ -40,6 +41,8 @@ interface WatchlistContextValue {
   /** Returns true if the game ended up tracked, false if it was removed. */
   toggle: (game: GameSummary) => Promise<boolean>;
   setStatus: (gameId: number, status: WatchStatus) => Promise<void>;
+  /** Records which platform the user is playing on. */
+  setPlatform: (gameId: number, platform: string | null) => Promise<void>;
   remove: (gameId: number) => Promise<void>;
 }
 
@@ -118,7 +121,17 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const setStatus = useCallback(
     async (gameId: number, status: WatchStatus) => {
       if (!user) throw new Error("Sign in to use your watchlist.");
-      await setWatchStatus(user.uid, gameId, status);
+      // Pass the current entry so first-transition timestamps aren't rewritten.
+      const current = entries.find((entry) => entry.gameId === gameId);
+      await setWatchStatus(user.uid, gameId, status, current);
+    },
+    [user, entries],
+  );
+
+  const setPlatform = useCallback(
+    async (gameId: number, platform: string | null) => {
+      if (!user) throw new Error("Sign in to use your watchlist.");
+      await setWatchPlatform(user.uid, gameId, platform);
     },
     [user],
   );
@@ -133,8 +146,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<WatchlistContextValue>(
-    () => ({ entries, loading, isWatched, statusOf, toggle, setStatus, remove }),
-    [entries, loading, isWatched, statusOf, toggle, setStatus, remove],
+    () => ({ entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, remove }),
+    [entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, remove],
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

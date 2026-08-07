@@ -12,6 +12,8 @@ import { appidFromSlug, parseSteamDate, steamSlug } from "../src/lib/games/provi
 import { sizedImage } from "../src/lib/games/image";
 import { platformKey, releaseLabel, isUnreleased } from "../src/lib/utils/format";
 import { stripHtml, slugify } from "../src/lib/utils/html";
+import { classifyUrl, storeFromUrl } from "../src/lib/games/stores";
+import { buildTasteProfile, MIN_TASTE_STRENGTH } from "../src/lib/games/taste";
 
 let failures = 0;
 
@@ -142,6 +144,74 @@ check(
   isUnreleased({ released: "2020-01-01", releaseWindow: null, tba: false }),
   false,
 );
+
+console.log("\nStore/link classification");
+check(
+  "steam store link yields the appid",
+  classifyUrl("https://store.steampowered.com/app/1245620/ELDEN_RING/"),
+  { slug: "steam", name: "Steam", domain: "store.steampowered.com", kind: "store", steamAppId: 1245620 },
+);
+check(
+  "epic is a store",
+  classifyUrl("https://store.epicgames.com/en-US/p/alan-wake-2")?.slug,
+  "epic",
+);
+check("gog is a store", classifyUrl("https://www.gog.com/game/cyberpunk_2077")?.slug, "gog");
+check(
+  "playstation store",
+  classifyUrl("https://store.playstation.com/en-us/product/UP9000-PPSA01284_00")?.slug,
+  "playstation",
+);
+check("nintendo eshop", classifyUrl("https://www.nintendo.com/store/products/x/")?.slug, "nintendo");
+check("youtube is social, not a store", classifyUrl("https://youtube.com/watch?v=x")?.kind, "social");
+check("storeFromUrl rejects social links", storeFromUrl("https://twitter.com/fromsoftware"), null);
+check("an official site matches nothing", classifyUrl("https://eldenring.bandainamco.com"), null);
+check("garbage input is safe", classifyUrl("not a url"), null);
+
+console.log("\nTaste profile");
+{
+  const now = Date.parse("2026-08-01T00:00:00Z");
+  const recent = now - 1000 * 60 * 60 * 24 * 10;
+  const old = now - 1000 * 60 * 60 * 24 * 900;
+
+  const profile = buildTasteProfile(
+    [
+      // Finished recently — the strongest possible signal.
+      { gameId: 1, genreIds: [12], platformSlugs: ["playstation"], status: "played",
+        platform: "playstation", addedAt: recent, finishedAt: recent },
+      { gameId: 2, genreIds: [12], platformSlugs: ["playstation"], status: "played",
+        platform: "playstation", addedAt: recent, finishedAt: recent },
+      // Wishlisted long ago — should barely register.
+      { gameId: 3, genreIds: [15], platformSlugs: ["pc"], status: "want",
+        platform: null, addedAt: old, finishedAt: null },
+    ],
+    { now },
+  );
+  check("strongest genre wins", profile.genreIds[0], 12);
+  check("recorded play platform leads", profile.platformSlugs[0], "playstation");
+  check("everything seen is excluded", profile.excludeIds.sort(), [1, 2, 3]);
+  check("strength reflects real evidence", profile.strength > MIN_TASTE_STRENGTH, true);
+}
+{
+  // A single stale wishlist entry is not a taste profile.
+  const now = Date.parse("2026-08-01T00:00:00Z");
+  const thin = buildTasteProfile(
+    [
+      {
+        gameId: 9,
+        genreIds: [4],
+        platformSlugs: ["pc"],
+        status: "want",
+        platform: null,
+        addedAt: now - 1000 * 60 * 60 * 24 * 1200,
+        finishedAt: null,
+      },
+    ],
+    { now },
+  );
+  check("thin evidence stays below the threshold", thin.strength < MIN_TASTE_STRENGTH, true);
+}
+check("no library yields no profile", buildTasteProfile([]).genreIds, []);
 
 console.log("\nHTML handling");
 check(

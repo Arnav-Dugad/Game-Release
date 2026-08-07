@@ -13,6 +13,7 @@
 
 import type { GameDetail, GameSummary, Ref } from "./types";
 import { slugify } from "@/lib/utils/html";
+import { DETAIL_DEFAULTS } from "./detail";
 
 /* The catalogue's own taxonomy. Live providers publish their own genre and
    platform vocabularies, so these ids are internal to sample mode. */
@@ -453,10 +454,8 @@ function expand(seed: Seed, index: number): GameDetail {
     esrb: seed.esrb ?? null,
     playtime: seed.pt,
     added: seed.add,
+    ...DETAIL_DEFAULTS,
     description: seed.desc,
-    steamAppId: null,
-    price: null,
-    website: null,
     developers: [{ id: 1_000 + index, slug: slugify(seed.dev), name: seed.dev }],
     publishers: [{ id: 2_000 + index, slug: slugify(seed.pub), name: seed.pub }],
     tags: (seed.tags ?? []).map((t, i) => ({
@@ -464,12 +463,6 @@ function expand(seed: Seed, index: number): GameDetail {
       slug: slugify(t),
       name: t,
     })),
-    stores: [],
-    requirements: [],
-    trailers: [],
-    redditUrl: null,
-    metacriticUrl: null,
-    alternativeNames: [],
   };
 }
 

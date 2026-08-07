@@ -132,11 +132,13 @@ export const sampleProvider: GameProvider = {
     );
   },
 
-  async upcoming(pageSize: number, page: number) {
-    const upcoming = SAMPLE_GAMES.map(toSummary).filter(
+  async upcoming(pageSize: number, page: number, filters: BrowseFilters = {}) {
+    // Reuse the shared filter path so the upcoming page behaves identically to
+    // browse, then narrow to titles that haven't shipped.
+    const upcoming = filterGames({ ...filters, ordering: undefined }).filter(
       (game) => game.tba || Boolean(game.releaseWindow) || (game.released ?? "") >= today(),
     );
-    return paginate(sortGames(upcoming, "released"), page, pageSize);
+    return paginate(sortGames(upcoming, filters.ordering ?? "released"), page, pageSize);
   },
 
   async trending(pageSize: number) {

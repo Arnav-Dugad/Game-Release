@@ -19,7 +19,7 @@
  * the data and label sample mode honestly.
  */
 
-import { igdbProvider } from "./providers/igdb";
+import { igdbProvider, igdbTotalGames } from "./providers/igdb";
 import { enrichWithSteam, steamProvider } from "./providers/steam";
 import { sampleProvider } from "./providers/sample";
 import type { GameProvider } from "./providers/types";
@@ -34,11 +34,22 @@ import type {
 } from "./types";
 import { SAMPLE_GAMES } from "./catalogue";
 
-/** Priority order. Steam sits above sample so zero-config deploys get live data. */
-const CHAIN: GameProvider[] = [igdbProvider, steamProvider, sampleProvider];
-
+/**
+ * Which providers answer list and detail queries, in order.
+ *
+ * Steam is deliberately *not* a general data source when IGDB is available.
+ * IGDB covers every platform with better metadata, while Steam is PC-only and
+ * its browsable surface is limited to the storefront's own shelves — mixing the
+ * two produced a catalogue that looked arbitrarily incomplete. Steam is still
+ * used for the one thing IGDB genuinely lacks: live pricing and system
+ * requirements, applied as an enrichment in `getGame`.
+ *
+ * With no IGDB credentials Steam steps back in as the live fallback, so a
+ * zero-config deploy still shows real data rather than only the sample set.
+ */
 function activeChain(): GameProvider[] {
-  return CHAIN.filter((provider) => provider.isConfigured());
+  if (igdbProvider.isConfigured()) return [igdbProvider, sampleProvider];
+  return [steamProvider, sampleProvider].filter((provider) => provider.isConfigured());
 }
 
 /**
@@ -87,8 +98,14 @@ export async function browseGames(filters: BrowseFilters): Promise<Sourced<Page<
   return result ?? { data: emptyPage(filters.page ?? 1), source: "sample" };
 }
 
-export async function getUpcoming(pageSize = 24, page = 1): Promise<Sourced<Page<GameSummary>>> {
-  const result = await resolve("upcoming", (provider) => provider.upcoming(pageSize, page));
+export async function getUpcoming(
+  pageSize = 24,
+  page = 1,
+  filters: BrowseFilters = {},
+): Promise<Sourced<Page<GameSummary>>> {
+  const result = await resolve("upcoming", (provider) =>
+    provider.upcoming(pageSize, page, filters),
+  );
   return result ?? { data: emptyPage(page), source: "sample" };
 }
 
@@ -189,6 +206,17 @@ export async function getPlatforms(): Promise<Sourced<Ref[]>> {
     return platforms && platforms.length > 0 ? platforms : null;
   });
   return result ?? { data: [], source: "sample" };
+}
+
+/**
+ * How many games the active database holds.
+ *
+ * Only a live provider can answer this honestly; in sample mode the bundled
+ * catalogue's own size is the truthful number.
+ */
+export async function getTotalGames(): Promise<number> {
+  const live = await igdbTotalGames();
+  return live && live > 0 ? live : SAMPLE_GAMES.length;
 }
 
 /**

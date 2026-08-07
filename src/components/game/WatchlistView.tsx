@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { BookmarkX, Trash2 } from "lucide-react";
 import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
+import { PlatformPicker } from "./PlatformPicker";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -174,7 +175,7 @@ export function WatchlistView() {
                     )}
                   </p>
 
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <label className="sr-only" htmlFor={`status-${entry.gameId}`}>
                       Play status for {entry.name}
                     </label>
@@ -196,6 +197,16 @@ export function WatchlistView() {
                         </option>
                       ))}
                     </select>
+
+                    {/* Only meaningful once they're actually playing it. */}
+                    {entry.status !== "want" && (
+                      <PlatformPicker
+                        gameId={entry.gameId}
+                        gameName={entry.name}
+                        available={entry.platformSlugs ?? []}
+                        value={entry.platform ?? null}
+                      />
+                    )}
                   </div>
                 </div>
 

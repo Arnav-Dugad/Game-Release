@@ -20,22 +20,50 @@ import { Chip } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils/cn";
 import type { Ref, SortKey } from "@/lib/games/types";
 
-const SORTS: { value: SortKey; label: string }[] = [
+export interface SortOption {
+  value: SortKey;
+  label: string;
+}
+
+export const BROWSE_SORTS: SortOption[] = [
   { value: "-added", label: "Most popular" },
   { value: "-released", label: "Newest first" },
   { value: "released", label: "Oldest first" },
   { value: "-metacritic", label: "Highest rated" },
   { value: "-rating", label: "Best user score" },
   { value: "name", label: "A–Z" },
+  { value: "-name", label: "Z–A" },
+];
+
+/** A calendar wants "soonest" as its default, not "most popular". */
+export const UPCOMING_SORTS: SortOption[] = [
+  { value: "released", label: "Soonest first" },
+  { value: "-released", label: "Furthest out" },
+  { value: "-hypes", label: "Most anticipated" },
+  { value: "-metacritic", label: "Highest rated" },
+  { value: "name", label: "A–Z" },
+  { value: "-name", label: "Z–A" },
 ];
 
 interface BrowseControlsProps {
   genres: Ref[];
   platforms: Ref[];
   totalCount: number;
+  sorts?: SortOption[];
+  /** The sort that applies when `ordering` is absent from the URL. */
+  defaultSort?: SortKey;
+  /** Noun used in the result count, e.g. "release". */
+  noun?: string;
 }
 
-export function BrowseControls({ genres, platforms, totalCount }: BrowseControlsProps) {
+export function BrowseControls({
+  genres,
+  platforms,
+  totalCount,
+  sorts = BROWSE_SORTS,
+  defaultSort = "-added",
+  noun = "game",
+}: BrowseControlsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -50,7 +78,7 @@ export function BrowseControls({ genres, platforms, totalCount }: BrowseControls
     () => new Set((params.get("platforms") ?? "").split(",").filter(Boolean)),
     [params],
   );
-  const activeSort = (params.get("ordering") as SortKey | null) ?? "-added";
+  const activeSort = (params.get("ordering") as SortKey | null) ?? defaultSort;
   const search = params.get("search") ?? "";
 
   const filterCount = activeGenres.size + activePlatforms.size + (search ? 1 : 0);
@@ -84,11 +112,13 @@ export function BrowseControls({ genres, platforms, totalCount }: BrowseControls
   const setSort = useCallback(
     (value: SortKey) => {
       const next = new URLSearchParams(params.toString());
-      if (value === "-added") next.delete("ordering");
+      // The default lives implicitly in the absence of the param, so URLs stay
+      // clean and "reset" has exactly one meaning.
+      if (value === defaultSort) next.delete("ordering");
       else next.set("ordering", value);
       push(next);
     },
-    [params, push],
+    [params, push, defaultSort],
   );
 
   const clearAll = useCallback(() => {
@@ -123,7 +153,7 @@ export function BrowseControls({ genres, platforms, totalCount }: BrowseControls
           <span className="font-semibold text-text tabular-nums">
             {totalCount.toLocaleString("en-US")}
           </span>
-          {totalCount === 1 ? "game" : "games"}
+          {totalCount === 1 ? noun : `${noun}s`}
           {pending && <Loader2 size={13} className="animate-spin text-faint" />}
         </p>
 
@@ -148,7 +178,7 @@ export function BrowseControls({ genres, platforms, totalCount }: BrowseControls
             )}
           </button>
 
-          <SortSelect value={activeSort} onChange={setSort} />
+          <SortSelect value={activeSort} onChange={setSort} options={sorts} />
         </div>
       </div>
 
@@ -271,9 +301,11 @@ function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }
 function SortSelect({
   value,
   onChange,
+  options,
 }: {
   value: SortKey;
   onChange: (value: SortKey) => void;
+  options: SortOption[];
 }) {
   return (
     <div className="relative">
@@ -289,7 +321,7 @@ function SortSelect({
         aria-label="Sort games"
         className="min-h-11 appearance-none rounded-full border border-line bg-white/[0.04] py-2 pl-9 pr-9 text-sm text-text outline-none transition-colors hover:border-line-strong focus-visible:border-brand"
       >
-        {SORTS.map((sort) => (
+        {options.map((sort) => (
           <option key={sort.value} value={sort.value} className="bg-panel text-text">
             {sort.label}
           </option>

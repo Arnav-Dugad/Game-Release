@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, LogOut, MessageSquare, Pencil, Star, Bookmark } from "lucide-react";
+import { PlayHistory } from "./PlayHistory";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { getUserProfile, getUserReviews, updateUserProfile, type Review } from "@/lib/firebase/db";
@@ -177,6 +178,14 @@ export function ProfileView() {
           </div>
         </Reveal>
       )}
+
+      <section id="history" className="mt-12 scroll-mt-28">
+        <h2 className="text-2xl font-bold sm:text-3xl">Play history</h2>
+        <p className="mt-1.5 text-sm text-muted">
+          What you&rsquo;ve played, and where you played it.
+        </p>
+        <PlayHistory />
+      </section>
 
       <section className="mt-12">
         <h2 className="text-2xl font-bold sm:text-3xl">Your reviews</h2>
