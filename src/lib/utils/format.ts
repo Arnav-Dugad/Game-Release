@@ -217,9 +217,8 @@ export type PlatformKey =
  * Maps any provider's platform vocabulary onto the small icon set the UI ships.
  *
  * Providers disagree wildly here — IGDB calls Windows "win", Steam reports a
- * boolean triple, and the sample catalogue mints family slugs directly. This
- * normalises all of them, and returns null for anything unrecognised so an
- * unknown platform is omitted rather than mislabelled.
+ * boolean triple. This normalises both, and returns null for anything
+ * unrecognised so an unknown platform is omitted rather than mislabelled.
  */
 export function platformKey(slug: string): PlatformKey | null {
   const s = slug.toLowerCase().trim();

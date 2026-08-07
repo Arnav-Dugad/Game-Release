@@ -2,8 +2,8 @@
  * Normalised game model.
  *
  * Everything in the UI speaks this shape — never a raw RAWG payload. That
- * boundary is what lets the bundled sample catalogue and the live API be
- * swapped without a single component changing.
+ * boundary is what lets providers be swapped or added without a single
+ * component changing.
  */
 
 export interface Ref {
@@ -194,17 +194,18 @@ export interface BrowseFilters {
 
 /**
  * Which provider answered a request. Surfaced in the UI so the data's origin is
- * always attributable, and so sample mode can label itself.
+ * always attributable, and so a total outage can be told apart from a
+ * legitimately empty result.
  */
-export type DataSource = "igdb" | "steam" | "sample";
+export type DataSource = "igdb" | "steam" | "unavailable";
 
 export const SOURCE_LABELS: Record<DataSource, string> = {
   igdb: "IGDB",
   steam: "Steam",
-  sample: "Sample catalogue",
+  unavailable: "Live data unavailable",
 };
 
-export const isLiveSource = (source: DataSource): boolean => source !== "sample";
+export const isLiveSource = (source: DataSource): boolean => source !== "unavailable";
 
 export interface Sourced<T> {
   data: T;

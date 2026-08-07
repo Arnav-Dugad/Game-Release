@@ -21,11 +21,12 @@
  *    fields across API revisions (`release_dates.category` → `date_format`,
  *    `age_ratings.category`/`rating` → `organization`/`rating_category`).
  *    Requesting a field that no longer exists fails the entire query with a
- *    400 — which would silently degrade every page to the sample catalogue.
- *    So on first use the client probes which spelling this account's API
- *    speaks, caches the answer, and builds queries accordingly. Anything
- *    genuinely uncertain is derived instead: store links and the Steam appid
- *    come from `websites.url` hostnames rather than a category enum.
+ *    400 — which would silently degrade every page to whatever Steam has (or
+ *    to an honest "unavailable" state if Steam has no answer either). So on
+ *    first use the client probes which spelling this account's API speaks,
+ *    caches the answer, and builds queries accordingly. Anything genuinely
+ *    uncertain is derived instead: store links and the Steam appid come from
+ *    `websites.url` hostnames rather than a category enum.
  */
 
 import { unstable_cache } from "next/cache";

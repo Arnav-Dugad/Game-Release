@@ -56,7 +56,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
       />
 
       <Container className="py-8 lg:py-12">
-        {source === "sample" && (
+        {source === "unavailable" && (
           <div className="mb-7">
             <DataSourceNotice source={source} />
           </div>

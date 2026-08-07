@@ -10,6 +10,7 @@ import { JoinCta } from "@/components/home/JoinCta";
 import { RecommendedRail } from "@/components/home/RecommendedRail";
 import { CountUp } from "@/components/motion/text";
 import { Marquee, Spotlight } from "@/components/motion/effects";
+import { cn } from "@/lib/utils/cn";
 import {
   getGenres,
   getNewReleases,
@@ -41,7 +42,7 @@ export default async function HomePage() {
     <>
       <HeroShowcase games={featured} />
 
-      {source === "sample" && (
+      {source === "unavailable" && (
         <Container className="pt-8">
           <DataSourceNotice source={source} />
         </Container>
@@ -126,12 +127,16 @@ function StatsStrip({
   upcomingCount,
   genreCount,
 }: {
-  totalGames: number;
+  totalGames: number | null;
   upcomingCount: number;
   genreCount: number;
 }) {
   const stats = [
-    { value: totalGames, label: "Games in the database", icon: Database, compact: true, plus: true },
+    // Omitted entirely when unknown, rather than showing a fabricated number —
+    // Steam alone has no honest answer to "how many games total".
+    ...(totalGames !== null
+      ? [{ value: totalGames, label: "Games in the database", icon: Database, compact: true, plus: true }]
+      : []),
     { value: upcomingCount, label: "Upcoming releases tracked", icon: CalendarClock, compact: true, plus: true },
     { value: genreCount, label: "Genres to explore", icon: Flame, compact: false, plus: false },
     { value: 100, label: "Critic scores, 0–100", icon: Trophy, compact: false, plus: false },
@@ -140,7 +145,14 @@ function StatsStrip({
   return (
     <Section className="py-8 sm:py-10">
       <Container>
-        <Stagger className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        <Stagger
+          className={cn(
+            "grid grid-cols-2 gap-3 lg:gap-4",
+            // Falls back to a 3-up layout when the database count is
+            // unavailable, so a missing stat never leaves a visible gap.
+            stats.length === 4 ? "lg:grid-cols-4" : "sm:grid-cols-3",
+          )}
+        >
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (

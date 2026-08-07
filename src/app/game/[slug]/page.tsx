@@ -36,7 +36,7 @@ import { ExpandableText } from "@/components/ui/ExpandableText";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
-import { getGame, getRelated, sampleSlugs } from "@/lib/games/source";
+import { getGame, getRelated, popularSlugs } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import {
   compactNumber,
@@ -54,9 +54,12 @@ export const dynamicParams = true;
 
 type Params = Promise<{ slug: string }>;
 
-/** Pre-renders the bundled catalogue at build time; live titles stream in. */
-export function generateStaticParams() {
-  return sampleSlugs().map((slug) => ({ slug }));
+/**
+ * Pre-renders whatever's currently trending, top rated and upcoming at build
+ * time; everything else is rendered on first request and cached by ISR.
+ */
+export async function generateStaticParams() {
+  return (await popularSlugs()).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {

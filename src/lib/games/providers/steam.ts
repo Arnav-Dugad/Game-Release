@@ -434,14 +434,26 @@ async function fetchFeatured(): Promise<FeaturedCategories | null> {
 
 type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases" | "specials";
 
+/**
+ * Several callers (trending, top rated, upcoming, related, browse) request the
+ * same featured-categories URL concurrently via `Promise.all`. Next's fetch
+ * deduping can hand back a shared response object to all of them, so this
+ * reads defensively — an unexpected shape here degrades to "no ids found"
+ * rather than throwing, since a best-effort helper should never crash its
+ * caller over a malformed or partially-shared payload.
+ */
 async function featuredAppIds(keys: FeaturedKey[], limit: number): Promise<number[]> {
   const featured = await fetchFeatured();
-  if (!featured) return [];
+  if (!featured || typeof featured !== "object") return [];
 
   const seen = new Set<number>();
   const out: number[] = [];
   for (const key of keys) {
-    for (const item of featured[key]?.items ?? []) {
+    const bucket = featured[key];
+    const items = bucket && typeof bucket === "object" ? bucket.items : undefined;
+    if (!Array.isArray(items)) continue;
+
+    for (const item of items) {
       if (item?.id && !seen.has(item.id)) {
         seen.add(item.id);
         out.push(item.id);

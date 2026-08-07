@@ -7,9 +7,11 @@ Built with Next.js 16 (App Router), React 19, Tailwind CSS v4, Motion and Fireba
 
 ---
 
-## Runs with zero configuration
+## No placeholder data — ever
 
-Clone, install, run. No API keys, no accounts, no signup:
+Every game on this site is real, live data from IGDB or Steam. There is no
+bundled sample catalogue — if neither provider can be reached, the site says
+so honestly instead of showing invented games.
 
 ```bash
 npm install
@@ -23,16 +25,18 @@ that can answer it:
 | --- | --- | --- | --- |
 | 1 | **IGDB** | Free Twitch client id + secret | ~300k games, every platform, covers, screenshots, trailers, critic scores, release windows |
 | 2 | **Steam** | **Nothing** | PC titles from the live storefront, with screenshots, MP4 trailers, system requirements and Metacritic scores |
-| 3 | **Sample catalogue** | Nothing (bundled) | ~50 curated games, no network at all |
 
 Because Steam needs no credentials, a fresh deploy shows **live data
-immediately**. Adding IGDB credentials upgrades it to full console coverage.
-And if every network path fails, the bundled catalogue keeps the site
-renderable rather than showing an error page.
+immediately**, even with zero configuration. Adding IGDB credentials upgrades
+it to full console coverage. Steam also stands in automatically if a specific
+IGDB request fails, so a transient IGDB hiccup degrades to Steam's live
+catalogue rather than to nothing.
 
 A provider returning "I can't answer this" falls through to the next one. A
 provider returning *zero results* does not — that's a real answer, so a genuine
-"no matches" is never disguised as a data-source problem.
+"no matches" is never disguised as a data-source problem. If every configured
+provider genuinely fails, pages render an honest "live data is unreachable"
+notice rather than fabricating content.
 
 ---
 
@@ -175,10 +179,11 @@ parsed so a quarter is shown as a quarter, not silently rounded to a day. The
 release calendar groups exact dates by month, windows under their own heading,
 and undated titles last.
 
-**Sample data is honest by construction.** Released titles carry real ship dates
-and critic scores; unreleased ones are marked TBA with no invented date. A
-visible notice labels sample mode wherever it appears, and live pages carry a
-provider attribution line.
+**No data source, no page.** There is no bundled catalogue to fall back on. If
+every configured provider fails on a given request, that request's data is
+labelled `"unavailable"` and the page shows an honest outage notice rather than
+inventing games to display. Successful requests carry a provider attribution
+line instead.
 
 **Firebase never blocks a render.** Config is validated up front and every accessor
 short-circuits on the server. With no config the app reports `enabled: false` and

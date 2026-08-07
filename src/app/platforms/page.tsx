@@ -28,7 +28,7 @@ export default async function PlatformsPage() {
       />
 
       <Container className="py-10 lg:py-14">
-        {source === "sample" && (
+        {source === "unavailable" && (
           <div className="mb-8">
             <DataSourceNotice source={source} />
           </div>

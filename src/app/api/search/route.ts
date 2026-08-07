@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim() ?? "";
 
   if (query.length < 2) {
-    return NextResponse.json({ results: [], source: "sample" });
+    return NextResponse.json({ results: [], source: "unavailable" });
   }
 
   try {
@@ -28,6 +28,6 @@ export async function GET(request: Request) {
     );
   } catch (err) {
     console.error("[api/search] failed", err);
-    return NextResponse.json({ results: [], source: "sample" }, { status: 200 });
+    return NextResponse.json({ results: [], source: "unavailable" }, { status: 200 });
   }
 }

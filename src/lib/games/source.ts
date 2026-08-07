@@ -1,27 +1,32 @@
 /**
  * The single data entry point for the whole app.
  *
- * Pages call these functions and never touch a provider directly. Each request
+ * Pages call these functions and never touch a provider directly. Every result
+ * is real, live data — there is no bundled placeholder catalogue. Each request
  * walks the provider chain in priority order and takes the first usable answer:
  *
  *   IGDB   — best coverage (every platform, covers, trailers, critic scores).
  *            Needs free Twitch credentials.
  *   Steam  — no credentials at all, so a fresh deploy still shows live data.
  *            PC-only, and browsing is limited to the storefront's own shelves.
- *   Sample — bundled catalogue. No network. Always succeeds.
+ *
+ * Steam also acts as a genuine fallback when IGDB is configured but a
+ * particular request fails — a transient IGDB outage degrades to Steam's live
+ * catalogue rather than to nothing.
  *
  * A provider returning null means "I can't answer this", never "no results" —
  * an empty-but-successful page is returned as an empty `Page`, which stops the
- * chain. That distinction is what keeps a legitimate "no matches" from silently
- * falling through to sample data.
+ * chain. That distinction is what keeps a legitimate "no matches" from being
+ * mistaken for an outage. If every configured provider genuinely fails, the
+ * result is labelled `"unavailable"` so the UI can say so honestly rather than
+ * inventing something to show.
  *
  * Every result carries the provider that produced it, so the UI can attribute
- * the data and label sample mode honestly.
+ * the data and surface an outage state truthfully.
  */
 
 import { igdbProvider, igdbTotalGames } from "./providers/igdb";
 import { enrichWithSteam, steamProvider } from "./providers/steam";
-import { sampleProvider } from "./providers/sample";
 import type { GameProvider } from "./providers/types";
 import type {
   BrowseFilters,
@@ -32,24 +37,17 @@ import type {
   Ref,
   Sourced,
 } from "./types";
-import { SAMPLE_GAMES } from "./catalogue";
 
 /**
  * Which providers answer list and detail queries, in order.
  *
- * Steam is deliberately *not* a general data source when IGDB is available.
- * IGDB covers every platform with better metadata, while Steam is PC-only and
- * its browsable surface is limited to the storefront's own shelves — mixing the
- * two produced a catalogue that looked arbitrarily incomplete. Steam is still
- * used for the one thing IGDB genuinely lacks: live pricing and system
- * requirements, applied as an enrichment in `getGame`.
- *
- * With no IGDB credentials Steam steps back in as the live fallback, so a
- * zero-config deploy still shows real data rather than only the sample set.
+ * IGDB leads whenever it's configured — better coverage, better metadata.
+ * Steam always follows it, both because it needs no credentials (so an
+ * unconfigured deploy still gets live data) and because it's a genuine
+ * fallback if a specific IGDB request fails.
  */
 function activeChain(): GameProvider[] {
-  if (igdbProvider.isConfigured()) return [igdbProvider, sampleProvider];
-  return [steamProvider, sampleProvider].filter((provider) => provider.isConfigured());
+  return [igdbProvider, steamProvider].filter((provider) => provider.isConfigured());
 }
 
 /**
@@ -84,18 +82,21 @@ const emptyPage = (page: number): Page<GameSummary> => ({
   page,
 });
 
+/** Fallback for when every configured provider failed outright. */
+const UNAVAILABLE: DataSource = "unavailable";
+
 /* ---------------------------------------------------------------------------
  * Public queries
  * ------------------------------------------------------------------------ */
 
 /** Which provider would answer right now, without performing a request. */
 export function dataMode(): DataSource {
-  return activeChain()[0]?.id ?? "sample";
+  return activeChain()[0]?.id ?? UNAVAILABLE;
 }
 
 export async function browseGames(filters: BrowseFilters): Promise<Sourced<Page<GameSummary>>> {
   const result = await resolve("browse", (provider) => provider.browse(filters));
-  return result ?? { data: emptyPage(filters.page ?? 1), source: "sample" };
+  return result ?? { data: emptyPage(filters.page ?? 1), source: UNAVAILABLE };
 }
 
 export async function getUpcoming(
@@ -106,22 +107,22 @@ export async function getUpcoming(
   const result = await resolve("upcoming", (provider) =>
     provider.upcoming(pageSize, page, filters),
   );
-  return result ?? { data: emptyPage(page), source: "sample" };
+  return result ?? { data: emptyPage(page), source: UNAVAILABLE };
 }
 
 export async function getTrending(pageSize = 12): Promise<Sourced<GameSummary[]>> {
   const result = await resolve("trending", (provider) => provider.trending(pageSize));
-  return result ?? { data: [], source: "sample" };
+  return result ?? { data: [], source: UNAVAILABLE };
 }
 
 export async function getTopRated(pageSize = 12): Promise<Sourced<GameSummary[]>> {
   const result = await resolve("topRated", (provider) => provider.topRated(pageSize));
-  return result ?? { data: [], source: "sample" };
+  return result ?? { data: [], source: UNAVAILABLE };
 }
 
 export async function getNewReleases(pageSize = 12): Promise<Sourced<GameSummary[]>> {
   const result = await resolve("newReleases", (provider) => provider.newReleases(pageSize));
-  return result ?? { data: [], source: "sample" };
+  return result ?? { data: [], source: UNAVAILABLE };
 }
 
 /**
@@ -158,8 +159,7 @@ export async function getGame(slug: string): Promise<Sourced<GameDetail> | null>
  *
  * `preferred` should be the source that produced the game being viewed, so the
  * rail is drawn from the same catalogue as the page around it. Without that,
- * a sample-backed detail page could show live related games (or vice versa),
- * and clicking one would jump between datasets mid-journey.
+ * clicking into a related title could jump between providers mid-journey.
  */
 export async function getRelated(
   game: GameDetail,
@@ -197,7 +197,7 @@ export async function getGenres(): Promise<Sourced<Ref[]>> {
     const genres = await provider.genres();
     return genres && genres.length > 0 ? genres : null;
   });
-  return result ?? { data: [], source: "sample" };
+  return result ?? { data: [], source: UNAVAILABLE };
 }
 
 export async function getPlatforms(): Promise<Sourced<Ref[]>> {
@@ -205,29 +205,45 @@ export async function getPlatforms(): Promise<Sourced<Ref[]>> {
     const platforms = await provider.platforms();
     return platforms && platforms.length > 0 ? platforms : null;
   });
-  return result ?? { data: [], source: "sample" };
+  return result ?? { data: [], source: UNAVAILABLE };
 }
 
 /**
  * How many games the active database holds.
  *
- * Only a live provider can answer this honestly; in sample mode the bundled
- * catalogue's own size is the truthful number.
+ * Only IGDB can answer this honestly — Steam has no "total catalogue size"
+ * concept, only a curated storefront pool. Returns null rather than a
+ * misleading number when it can't be known; callers should hide the stat
+ * entirely in that case rather than show a fabricated figure.
  */
-export async function getTotalGames(): Promise<number> {
-  const live = await igdbTotalGames();
-  return live && live > 0 ? live : SAMPLE_GAMES.length;
+export async function getTotalGames(): Promise<number | null> {
+  const total = await igdbTotalGames();
+  return total && total > 0 ? total : null;
 }
 
 /**
- * Slugs pre-rendered at build time.
+ * Slugs worth pre-rendering at build time: whatever is currently trending,
+ * top rated, and at the front of the release calendar.
  *
- * Only the bundled catalogue is enumerated: live provider slugs are discovered
- * at request time and cached by ISR, and pre-rendering a live catalogue would
- * mean thousands of build-time API calls for pages nobody has asked for.
+ * Best-effort by design — every query it depends on already degrades to an
+ * empty result rather than throwing, so an unreachable provider during the
+ * build simply means fewer pages are pre-rendered. `dynamicParams` still
+ * serves anything else on demand and caches it via ISR.
  */
-export function sampleSlugs(): string[] {
-  return SAMPLE_GAMES.map((game) => game.slug);
+export async function popularSlugs(limit = 60): Promise<string[]> {
+  const [trending, topRated, upcoming] = await Promise.all([
+    getTrending(30),
+    getTopRated(30),
+    getUpcoming(30),
+  ]);
+
+  const slugs = [
+    ...trending.data.map((game) => game.slug),
+    ...topRated.data.map((game) => game.slug),
+    ...upcoming.data.results.map((game) => game.slug),
+  ];
+
+  return [...new Set(slugs)].slice(0, limit);
 }
 
 /** ISO `YYYY-MM-DD` for today, in UTC. */
