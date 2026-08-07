@@ -149,6 +149,7 @@ export function WatchlistView() {
                     name={entry.name}
                     slug={entry.slug}
                     image={entry.image}
+                    imageFallback={entry.imageFallback}
                     width={160}
                     sizes="64px"
                   />

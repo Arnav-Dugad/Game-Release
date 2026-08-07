@@ -20,7 +20,7 @@
  */
 
 import { igdbProvider } from "./providers/igdb";
-import { steamProvider } from "./providers/steam";
+import { enrichWithSteam, steamProvider } from "./providers/steam";
 import { sampleProvider } from "./providers/sample";
 import type { GameProvider } from "./providers/types";
 import type {
@@ -115,7 +115,25 @@ export async function getNewReleases(pageSize = 12): Promise<Sourced<GameSummary
  * also keeps older bookmarked URLs working after credentials are added.
  */
 export async function getGame(slug: string): Promise<Sourced<GameDetail> | null> {
-  return resolve("detail", (provider) => provider.detail(slug));
+  const result = await resolve("detail", (provider) => provider.detail(slug));
+  if (!result) return null;
+
+  // Providers are merged, not just chained. IGDB knows every platform and has
+  // the better artwork and critic scores; Steam knows the current price and the
+  // system requirements. When IGDB tells us a title has a Steam listing, both
+  // are worth having.
+  if (result.source === "igdb" && result.data.steamAppId) {
+    try {
+      return { ...result, data: await enrichWithSteam(result.data) };
+    } catch (err) {
+      console.warn(
+        "[source] steam enrichment failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return result;
 }
 
 /**

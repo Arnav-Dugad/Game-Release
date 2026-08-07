@@ -216,6 +216,21 @@ interface IgdbGame {
   follows?: number;
   status?: number;
   url?: string;
+  /** Cross-store identifiers. Category 1 is Steam. */
+  external_games?: { category?: number; uid?: string }[];
+}
+
+/** IGDB's external-store category for Steam. */
+const EXTERNAL_STEAM = 1;
+
+function steamAppIdOf(game: IgdbGame): number | null {
+  for (const external of game.external_games ?? []) {
+    if (external.category === EXTERNAL_STEAM && external.uid) {
+      const appid = Number(external.uid);
+      if (Number.isFinite(appid) && appid > 0) return appid;
+    }
+  }
+  return null;
 }
 
 const SUMMARY_FIELDS = [
@@ -259,6 +274,8 @@ const DETAIL_FIELDS = [
   "involved_companies.company.slug",
   "websites.url",
   "websites.category",
+  "external_games.category",
+  "external_games.uid",
 ].join(",");
 
 /**
@@ -393,7 +410,10 @@ function mapSummary(game: IgdbGame): GameSummary {
     slug: game.slug,
     name: game.name,
     ...release,
+    // IGDB covers are already portrait 3:4 and high resolution, so no
+    // fallback asset is needed here.
     image: igdbImage(game.cover?.image_id, "cover_big_2x"),
+    imageFallback: null,
     // IGDB user ratings are 0–100; the UI's star scale is 0–5.
     rating: typeof game.rating === "number" ? Math.round((game.rating / 20) * 10) / 10 : 0,
     ratingsCount: game.rating_count ?? 0,
@@ -461,6 +481,9 @@ function mapDetail(game: IgdbGame): GameDetail {
   return {
     ...summary,
     description,
+    steamAppId: steamAppIdOf(game),
+    // IGDB publishes no pricing; the Steam merge fills this in when available.
+    price: null,
     website:
       game.websites?.find((site) => site.category === OFFICIAL_SITE)?.url?.trim() ||
       game.url?.trim() ||

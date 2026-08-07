@@ -181,6 +181,7 @@ function ReleaseRow({ game }: { game: GameSummary }) {
           name={game.name}
           slug={game.slug}
           image={game.image}
+          imageFallback={game.imageFallback}
           width={160}
           sizes="64px"
         />

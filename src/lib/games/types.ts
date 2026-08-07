@@ -39,6 +39,16 @@ export interface Requirement {
   recommended: string | null;
 }
 
+export interface Price {
+  /** Already formatted for display in the store's currency, e.g. "$59.99". */
+  current: string;
+  /** Pre-discount price, when the title is on sale. */
+  original: string | null;
+  /** 0 when not discounted. */
+  discountPercent: number;
+  isFree: boolean;
+}
+
 export interface GameSummary {
   id: number;
   slug: string;
@@ -57,7 +67,17 @@ export interface GameSummary {
   releaseWindow: string | null;
   /** No date information at all: announced, but nothing scheduled. */
   tba: boolean;
+  /**
+   * Preferred poster. Portrait 3:4 wherever the provider has one, since that is
+   * the shape every card renders at.
+   */
   image: string | null;
+  /**
+   * Used when `image` fails to load. Steam's portrait library capsule is the
+   * best-looking asset it has but is missing for a minority of apps, so the
+   * guaranteed 16:9 header sits behind it rather than being used by default.
+   */
+  imageFallback: string | null;
   /** 0–5 user score. */
   rating: number;
   ratingsCount: number;
@@ -76,6 +96,14 @@ export interface GameSummary {
 
 export interface GameDetail extends GameSummary {
   description: string;
+  /**
+   * Steam application id, when this title is known to have a Steam listing.
+   * IGDB publishes it via `external_games`, which is what lets an IGDB record
+   * be enriched with Steam's pricing and system requirements.
+   */
+  steamAppId: number | null;
+  /** Storefront pricing, when a provider exposes it. */
+  price: Price | null;
   website: string | null;
   developers: Ref[];
   publishers: Ref[];

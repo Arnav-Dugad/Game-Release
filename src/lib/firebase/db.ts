@@ -38,6 +38,8 @@ export interface WatchlistEntry {
   slug: string;
   name: string;
   image: string | null;
+  /** Poster fallback, mirroring `GameSummary`. See `GameCover`. */
+  imageFallback: string | null;
   released: string | null;
   /** Imprecise-but-known window, e.g. "Q4 2026". See `GameSummary`. */
   releaseWindow: string | null;
@@ -135,6 +137,7 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     slug: game.slug,
     name: game.name,
     image: game.image,
+    imageFallback: game.imageFallback,
     released: game.released,
     releaseWindow: game.releaseWindow,
     tba: game.tba,
@@ -181,7 +184,11 @@ export function subscribeWatchlist(
       // entirely, so normalise it rather than letting `undefined` reach the UI.
       const entries = snap.docs.map((d) => {
         const data = d.data() as WatchlistEntry;
-        return { ...data, releaseWindow: data.releaseWindow ?? null };
+        return {
+          ...data,
+          releaseWindow: data.releaseWindow ?? null,
+          imageFallback: data.imageFallback ?? null,
+        };
       });
       entries.sort((a, b) => b.addedAt - a.addedAt);
       onChange(entries);

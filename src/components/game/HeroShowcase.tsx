@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils/cn";
-import { releaseLabelLong, relativeReleaseLabel, truncate } from "@/lib/utils/format";
+import { isUnreleased, releaseLabelLong, relativeReleaseLabel, truncate } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 const ROTATE_MS = 7500;
@@ -87,6 +87,7 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
               name={active.name}
               slug={active.slug}
               image={active.image}
+              imageFallback={active.imageFallback}
               width={1920}
               priority
               sizes="100vw"
@@ -147,9 +148,11 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
                 </p>
               )}
 
-              {/* Only an exact date can be counted down to; a window renders
-                  as its label in the meta row above instead. */}
-              {active.released && <Countdown date={active.released} className="mt-6" />}
+              {/* Only an exact, still-future date can be counted down to; a
+                  window renders as its label in the meta row above instead. */}
+              {active.released && isUnreleased(active) && (
+                <Countdown date={active.released} className="mt-6" />
+              )}
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <Button href={`/game/${active.slug}`} size="lg" iconRight={<ArrowRight size={17} />}>
@@ -184,6 +187,7 @@ export function HeroShowcase({ games }: { games: GameSummary[] }) {
                   name={game.name}
                   slug={game.slug}
                   image={game.image}
+                  imageFallback={game.imageFallback}
                   width={256}
                   sizes="128px"
                 />

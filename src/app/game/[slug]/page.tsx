@@ -24,6 +24,7 @@ import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
+import { ExpandableText } from "@/components/ui/ExpandableText";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
@@ -31,6 +32,7 @@ import { getGame, getRelated, sampleSlugs } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import {
   compactNumber,
+  isUnreleased,
   playtimeLabel,
   releaseLabelLong,
   relativeRelease,
@@ -92,24 +94,21 @@ export default async function GamePage({ params }: { params: Params }) {
     <>
       <GameHero game={game} />
 
-      <Container className="relative z-10 -mt-2 space-y-3 pb-6">
+      <Container className="relative z-10 space-y-3 pb-2 pt-4">
         <DataSourceNotice source={source} />
         <SourceAttribution source={source} />
       </Container>
 
-      <Container className="grid gap-10 py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:py-12">
+      <Container className="grid gap-10 pb-8 pt-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:pb-12 lg:pt-10">
         <div className="min-w-0 space-y-14">
           {game.description && (
             <Reveal>
               <h2 className="mb-4 text-2xl font-bold sm:text-3xl">About this game</h2>
-              <div className="max-w-2xl space-y-4 text-[15px] leading-[1.75] text-muted">
-                {game.description
-                  .split(/\n{2,}/)
-                  .slice(0, 8)
-                  .map((paragraph, i) => (
-                    <p key={i}>{paragraph}</p>
-                  ))}
-              </div>
+              <ExpandableText
+                text={game.description}
+                className="max-w-2xl"
+                paragraphClassName="text-[15px] leading-[1.75] text-muted"
+              />
             </Reveal>
           )}
 
@@ -195,6 +194,7 @@ function GameHero({ game }: { game: GameDetail }) {
             name={game.name}
             slug={game.slug}
             image={backdrop}
+            imageFallback={game.imageFallback}
             width={1920}
             priority
             sizes="100vw"
@@ -205,19 +205,26 @@ function GameHero({ game }: { game: GameDetail }) {
         <div className="absolute inset-0 bg-gradient-to-r from-bg/90 to-transparent" />
       </div>
 
-      <Container className="pb-10 pt-28 lg:pb-14 lg:pt-40">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-8">
-          {/* Poster — hidden on the narrowest screens where it would crowd the title. */}
+      <Container className="pb-8 pt-24 lg:pb-12 lg:pt-32">
+        <div className="flex items-end gap-5 sm:gap-8">
+          {/* Poster sits inline with the title column at every breakpoint. */}
           <Reveal
             direction="right"
-            className="relative hidden aspect-[3/4] w-40 shrink-0 overflow-hidden rounded-2xl border border-line-strong shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] sm:block lg:w-52"
+            className={cn(
+              "relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl border border-line-strong",
+              "shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)]",
+              // Shown at every size — the poster is the strongest identifying
+              // element on the page, and hiding it on phones wasted that.
+              "w-32 sm:w-44 lg:w-60",
+            )}
           >
             <GameCover
               name={game.name}
               slug={game.slug}
               image={game.image}
-              width={480}
-              sizes="(max-width: 1024px) 160px, 208px"
+              imageFallback={game.imageFallback}
+              width={720}
+              sizes="(max-width: 640px) 128px, (max-width: 1024px) 176px, 240px"
               priority
             />
           </Reveal>
@@ -247,31 +254,34 @@ function GameHero({ game }: { game: GameDetail }) {
               {game.released && <Badge tone="brand">{relativeRelease(game.released)}</Badge>}
             </Reveal>
 
-            {game.released && (
+            {/* Only worth showing while a dated release is still ahead. */}
+            {game.released && isUnreleased(game) && (
               <Reveal delay={0.18}>
                 <Countdown date={game.released} className="mt-6" />
               </Reveal>
             )}
-
-            <Reveal delay={0.24} className="mt-7 flex flex-wrap items-center gap-3">
-              <WatchButton game={game} variant="full" />
-              {game.website && (
-                <Button
-                  href={game.website}
-                  external
-                  variant="secondary"
-                  icon={<Globe size={16} />}
-                  iconRight={<ExternalLink size={13} />}
-                >
-                  Official site
-                </Button>
-              )}
-              <Button href="#reviews" variant="ghost" icon={<Star size={16} />}>
-                Rate this game
-              </Button>
-            </Reveal>
           </div>
         </div>
+
+        {/* Actions span the full width rather than sharing the narrow title
+            column, which on a phone left no room for two buttons side by side. */}
+        <Reveal delay={0.24} className="mt-7 flex flex-wrap items-center gap-3">
+          <WatchButton game={game} variant="full" />
+          {game.website && (
+            <Button
+              href={game.website}
+              external
+              variant="secondary"
+              icon={<Globe size={16} />}
+              iconRight={<ExternalLink size={13} />}
+            >
+              Official site
+            </Button>
+          )}
+          <Button href="#reviews" variant="ghost" icon={<Star size={16} />}>
+            Rate this game
+          </Button>
+        </Reveal>
       </Container>
     </header>
   );
@@ -327,6 +337,28 @@ function GameSidebar({ game }: { game: GameDetail }) {
 
   return (
     <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+      {game.price && (
+        <Reveal className="glass flex items-center justify-between gap-4 rounded-2xl p-5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+              {game.price.isFree ? "Price" : "Steam price"}
+            </p>
+            <p className="mt-1.5 flex items-baseline gap-2">
+              <span className="font-display text-2xl font-bold text-mint">
+                {game.price.current}
+              </span>
+              {game.price.original && (
+                <span className="text-sm text-faint line-through">{game.price.original}</span>
+              )}
+            </p>
+          </div>
+          {game.price.discountPercent > 0 && (
+            <span className="shrink-0 rounded-lg bg-mint/15 px-2.5 py-1.5 text-sm font-bold text-mint tabular-nums">
+              −{game.price.discountPercent}%
+            </span>
+          )}
+        </Reveal>
+      )}
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
           {game.metacritic !== null && <ScoreRing score={game.metacritic} />}
@@ -338,12 +370,19 @@ function GameSidebar({ game }: { game: GameDetail }) {
               </>
             )}
             {game.rating > 0 && (
-              <p className={cn("flex items-center gap-1.5 text-sm text-muted", game.metacritic !== null && "mt-3")}>
-                <Star size={13} className="fill-gold text-gold" />
+              <p
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap text-sm text-muted",
+                  game.metacritic !== null && "mt-3",
+                )}
+              >
+                <Star size={13} className="shrink-0 fill-gold text-gold" />
                 <span className="font-semibold text-text tabular-nums">
-                  {game.rating.toFixed(1)}
+                  {game.rating.toFixed(1)}/5
                 </span>
-                / 5 from {compactNumber(game.ratingsCount)} players
+                {game.ratingsCount > 0 && (
+                  <span className="text-faint">· {compactNumber(game.ratingsCount)} ratings</span>
+                )}
               </p>
             )}
           </div>

@@ -93,8 +93,15 @@ check("unknown is dropped", platformKey("dreamcast"), null);
 console.log("\nIGDB image resizing");
 const cover = "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co4jni.jpg";
 check(
-  "downsizes for a card",
+  // 240px CSS is ~480px on a retina display, so the ladder deliberately stays
+  // at the 528px asset rather than dropping to the 264px one.
+  "card width keeps the retina-sized asset",
   sizedImage(cover, 240),
+  "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co4jni.jpg",
+);
+check(
+  "thumbnail width does drop to the small asset",
+  sizedImage(cover, 96),
   "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
 );
 check(

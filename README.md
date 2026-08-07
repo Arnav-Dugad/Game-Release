@@ -81,9 +81,25 @@ configured instead of failing.
 2. Import it at [vercel.com/new](https://vercel.com/new) — the framework is detected
    automatically, no build settings to change
 3. Add your environment variables under **Settings → Environment Variables**
-   (including `NEXT_PUBLIC_SITE_URL=https://your-domain.vercel.app` for correct
-   canonical URLs, sitemap and social cards)
 4. Deploy
+
+Every variable is optional — the site builds and runs with none of them set.
+
+| Variable | Needed for | Notes |
+| --- | --- | --- |
+| `IGDB_CLIENT_ID` | Full multi-platform game data | Server-only |
+| `IGDB_CLIENT_SECRET` | Full multi-platform game data | Server-only |
+| `NEXT_PUBLIC_SITE_URL` | Canonical URLs, sitemap, social cards | e.g. `https://ludex.vercel.app`, no trailing slash |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Accounts, watchlist, reviews | Public by design |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Accounts | |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Accounts | |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Accounts | |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Accounts | |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Accounts | |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | — | Unused; Analytics is not wired up |
+
+Set each for **Production, Preview and Development** unless you want them to
+differ per environment.
 
 If you add Firebase after the first deploy, remember step 6 above — add the Vercel
 domain to Firebase's authorised domains or Google sign-in will be rejected.
@@ -102,6 +118,10 @@ domain to Firebase's authorised domains or Google sign-in will be rejected.
 | `/login`, `/signup` | Split-screen auth with email/password and Google |
 | `/watchlist` | Tracked games with play status (want / playing / played) |
 | `/profile` | Identity, stats, review history, settings |
+
+Every game page also generates its own social card at
+`/game/[slug]/opengraph-image` — artwork, critic score and release date — so
+shared links preview properly instead of falling back to plain text.
 
 Search is a ⌘K command palette available from anywhere (also `/`, the header, and
 the mobile Search tab).
@@ -136,6 +156,17 @@ provider payload. `src/lib/games/source.ts` walks the provider chain; each
 provider in `src/lib/games/providers/` implements the same interface and returns
 `null` rather than throwing when it can't help. Adding a fourth backend means
 writing one file and appending it to the chain — no component changes.
+
+**Providers are merged, not just chained.** When IGDB reports that a title has
+a Steam listing (via `external_games`), the record is enriched with Steam's
+current price and system requirements — data IGDB does not carry. The base
+record wins every contested field; the merge only fills gaps and adds what
+Steam uniquely has, and a failed lookup returns the original untouched.
+
+**Posters degrade, they don't break.** Steam's portrait library capsule is a
+proper 600x900 poster but 404s for a minority of apps, so `GameCover` tries it
+first and swaps to the guaranteed 16:9 header on a load error, then to
+generated art keyed off the slug. No grey boxes, no broken images.
 
 **Release dates are never invented.** Providers distinguish an exact day from a
 window ("Q4 2026") from genuinely unknown. Steam publishes dates as localised

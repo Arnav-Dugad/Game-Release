@@ -24,6 +24,7 @@ import type {
   GameDetail,
   GameSummary,
   Page,
+  Price,
   Ref,
   Requirement,
   Trailer,
@@ -142,6 +143,12 @@ interface AppDetails {
   platforms?: { windows?: boolean; mac?: boolean; linux?: boolean };
   metacritic?: { score?: number; url?: string };
   recommendations?: { total?: number };
+  is_free?: boolean;
+  price_overview?: {
+    final_formatted?: string;
+    initial_formatted?: string;
+    discount_percent?: number;
+  };
   release_date?: { coming_soon?: boolean; date?: string };
   screenshots?: { id: number; path_thumbnail?: string; path_full?: string }[];
   movies?: {
@@ -283,6 +290,35 @@ function trailersOf(details: AppDetails): Trailer[] {
 const https = (url: string | undefined | null): string | null =>
   url ? url.replace(/^http:/, "https:") : null;
 
+/**
+ * Steam's portrait "library capsule" — a proper 600x900 poster, and by far the
+ * best-looking asset Steam has for a 3:4 card.
+ *
+ * It is not part of the appdetails payload and is missing for a minority of
+ * apps, so the URL is constructed and paired with the guaranteed 16:9 header as
+ * `imageFallback`. `GameCover` swaps to the fallback on a load error, which
+ * means a missing capsule costs one failed request rather than a broken image.
+ */
+function portraitCapsule(appid: number): string {
+  return `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/library_600x900.jpg`;
+}
+
+function priceOf(details: AppDetails): Price | null {
+  if (details.is_free) {
+    return { current: "Free to play", original: null, discountPercent: 0, isFree: true };
+  }
+  const overview = details.price_overview;
+  if (!overview?.final_formatted) return null;
+
+  const discount = overview.discount_percent ?? 0;
+  return {
+    current: overview.final_formatted,
+    original: discount > 0 ? overview.initial_formatted ?? null : null,
+    discountPercent: discount,
+    isFree: false,
+  };
+}
+
 function mapSummary(details: AppDetails): GameSummary | null {
   const appid = details.steam_appid;
   if (!appid || !details.name) return null;
@@ -295,7 +331,8 @@ function mapSummary(details: AppDetails): GameSummary | null {
     slug: steamSlug(details.name, appid),
     name: details.name,
     ...release,
-    image: https(details.header_image ?? details.capsule_image),
+    image: portraitCapsule(appid),
+    imageFallback: https(details.header_image ?? details.capsule_image),
     // Steam publishes no aggregate user score on this endpoint, only a
     // recommendation count. Leaving `rating` at 0 hides the star rather than
     // fabricating one.
@@ -325,6 +362,8 @@ function mapDetail(details: AppDetails): GameDetail | null {
   return {
     ...summary,
     description,
+    steamAppId: summary.id,
+    price: priceOf(details),
     website: https(details.website),
     developers: (details.developers ?? []).map((name, i) => ({
       id: i + 1,
@@ -603,3 +642,60 @@ export const steamProvider: GameProvider = {
     return STEAM_PLATFORMS;
   },
 };
+
+/* ---------------------------------------------------------------------------
+ * Cross-provider enrichment
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Merges Steam data into a record that came from another provider.
+ *
+ * IGDB and Steam are complementary rather than competing: IGDB knows every
+ * platform, has proper cover art and critic aggregates; Steam knows what a game
+ * costs today and what hardware it needs. Neither publishes the other's data,
+ * so a game with a Steam listing is strictly better described by both.
+ *
+ * The base record wins every contested field — this only fills gaps and adds
+ * what Steam uniquely has. A failed or slow Steam lookup returns the original
+ * untouched, so enrichment can never degrade a page that already rendered.
+ */
+export async function enrichWithSteam(base: GameDetail): Promise<GameDetail> {
+  if (!base.steamAppId) return base;
+
+  const details = await fetchAppDetails(base.steamAppId, TTL.detail);
+  if (!details) return base;
+
+  const steamStore = {
+    id: base.steamAppId,
+    slug: "steam",
+    name: "Steam",
+    domain: "store.steampowered.com",
+    url: `https://store.steampowered.com/app/${base.steamAppId}/`,
+  };
+
+  const steamScreenshots = (details.screenshots ?? [])
+    .map((shot) => https(shot.path_full ?? shot.path_thumbnail))
+    .filter((url): url is string => Boolean(url));
+
+  return {
+    ...base,
+
+    // Steam-only data — the entire point of the merge.
+    price: base.price ?? priceOf(details),
+    requirements: base.requirements.length > 0 ? base.requirements : requirementsOf(details),
+    stores: base.stores.some((store) => store.slug === "steam")
+      ? base.stores
+      : [...base.stores, steamStore],
+
+    // Gap-fills. The base provider's value is kept whenever it has one.
+    image: base.image ?? portraitCapsule(base.steamAppId),
+    imageFallback: base.imageFallback ?? https(details.header_image ?? details.capsule_image),
+    metacritic: base.metacritic ?? (details.metacritic?.score ?? null),
+    screenshots: base.screenshots.length > 0 ? base.screenshots : steamScreenshots,
+    trailers: base.trailers.length > 0 ? base.trailers : trailersOf(details),
+    website: base.website ?? https(details.website),
+    esrb: base.esrb ?? ageLabel(details),
+    description: base.description || stripHtml(details.short_description ?? ""),
+    metacriticUrl: base.metacriticUrl ?? (details.metacritic?.url ?? null),
+  };
+}

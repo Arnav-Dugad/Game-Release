@@ -15,10 +15,18 @@ const IGDB_HOST = "images.igdb.com";
 /** Matches the `/t_<size>/` segment in an IGDB media URL. */
 const IGDB_SIZE_SEGMENT = /\/t_[a-z0-9_]+\//i;
 
+/**
+ * Deliberately biased one step up.
+ *
+ * The width passed in is a CSS width, but the browser requests roughly 2x that
+ * on a retina display. Picking the source purely by CSS width would serve a
+ * 264px cover into a 440px slot and look soft on exactly the screens people
+ * notice it on.
+ */
 function igdbSizeFor(width: number): string {
-  if (width <= 300) return "cover_big";
-  if (width <= 600) return "cover_big_2x";
-  if (width <= 1280) return "720p";
+  if (width <= 200) return "cover_big";
+  if (width <= 400) return "cover_big_2x";
+  if (width <= 900) return "720p";
   return "1080p";
 }
 

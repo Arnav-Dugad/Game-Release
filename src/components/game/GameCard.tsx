@@ -60,6 +60,7 @@ export function GameCard({
           name={game.name}
           slug={game.slug}
           image={game.image}
+          imageFallback={game.imageFallback}
           width={shape === "poster" ? 480 : 640}
           priority={priority}
           sizes={

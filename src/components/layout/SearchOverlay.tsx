@@ -230,6 +230,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                             name={game.name}
                             slug={game.slug}
                             image={game.image}
+                            imageFallback={game.imageFallback}
                             width={96}
                             sizes="44px"
                           />
