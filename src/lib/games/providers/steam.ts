@@ -349,6 +349,8 @@ function mapSummary(details: AppDetails): GameSummary | null {
       .filter((url): url is string => Boolean(url)),
     esrb: ageLabel(details),
     heroTrailer: trailersOf(details).at(0) ?? null,
+    // Steam publishes no popularity index comparable to IGDB's PopScore.
+    popScore: null,
     playtime: 0,
     added: details.recommendations?.total ?? 0,
   };

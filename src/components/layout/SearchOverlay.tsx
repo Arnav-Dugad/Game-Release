@@ -10,19 +10,100 @@
  */
 
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CornerDownLeft, Loader2, Search, TrendingUp, X } from "lucide-react";
+import { Building2, CornerDownLeft, Loader2, Search, TrendingUp, User, X } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
-import { ScorePill } from "@/components/ui/ScoreRing";
 import { useDebouncedValue, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
-import { releaseLabel } from "@/lib/utils/format";
-import type { GameSummary } from "@/lib/games/types";
+
+/**
+ * One search result, which may be a game, a character or a studio.
+ *
+ * Mirrors `IgdbSearchHit` on the server. Kept as a local shape rather than
+ * imported so the palette never pulls the provider module — and its
+ * credentials — into the client bundle.
+ */
+interface SearchHit {
+  kind: "game" | "character" | "company";
+  id: number;
+  name: string;
+  slug: string;
+  subtitle: string | null;
+  image: string | null;
+}
 
 /** Stable identity for the "no results" case. */
-const EMPTY_RESULTS: GameSummary[] = [];
+const EMPTY_RESULTS: SearchHit[] = [];
+
+/**
+ * Where a hit navigates.
+ *
+ * Only games have their own page. Characters and studios resolve to a filtered
+ * search, which is honest — it shows what the site can actually tell you about
+ * them rather than a stub page.
+ */
+function hrefForHit(hit: SearchHit): string {
+  if (hit.kind === "game") return `/game/${hit.slug}`;
+  return `/browse?search=${encodeURIComponent(hit.name)}`;
+}
+
+const GROUP_LABELS: Record<SearchHit["kind"], string> = {
+  game: "Games",
+  character: "Characters",
+  company: "Studios",
+};
+
+/**
+ * Thumbnail per result kind.
+ *
+ * Games keep the 3:4 poster treatment; characters get a square portrait; a
+ * studio logo is a transparent mark that needs padding and `object-contain`,
+ * not a cover crop, or it ends up sliced.
+ */
+function HitThumb({ hit }: { hit: SearchHit }) {
+  if (hit.kind === "game") {
+    return (
+      <span className="relative h-14 w-11 shrink-0 overflow-hidden rounded-lg">
+        <GameCover
+          name={hit.name}
+          slug={hit.slug}
+          image={hit.image}
+          imageFallback={null}
+          width={96}
+          sizes="44px"
+        />
+      </span>
+    );
+  }
+
+  if (!hit.image) {
+    return (
+      <span className="grid h-14 w-11 shrink-0 place-items-center rounded-lg bg-white/5 text-faint">
+        {hit.kind === "character" ? <User size={16} /> : <Building2 size={16} />}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "relative h-14 w-11 shrink-0 overflow-hidden rounded-lg bg-white/5",
+        hit.kind === "company" && "p-1.5",
+      )}
+    >
+      <Image
+        src={hit.image}
+        alt=""
+        fill
+        sizes="44px"
+        className={hit.kind === "company" ? "object-contain" : "object-cover"}
+      />
+    </span>
+  );
+}
 
 const QUICK_LINKS = [
   { label: "Upcoming releases", href: "/upcoming" },
@@ -39,7 +120,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
    * as separate state — means an in-flight request can never briefly show the
    * previous term's results, and there's no loading flag to get stuck.
    */
-  const [settled, setSettled] = useState<{ term: string; results: GameSummary[] }>({
+  const [settled, setSettled] = useState<{ term: string; results: SearchHit[] }>({
     term: "",
     results: [],
   });
@@ -89,9 +170,9 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
     const controller = new AbortController();
 
     fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : { results: [] }))
-      .then((data: { results?: GameSummary[] }) => {
-        setSettled({ term, results: data.results ?? [] });
+      .then((res) => (res.ok ? res.json() : { hits: [] }))
+      .then((data: { hits?: SearchHit[] }) => {
+        setSettled({ term, results: data.hits ?? [] });
         setCursor(0);
       })
       .catch((err) => {
@@ -105,10 +186,10 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   }, [term]);
 
   const submit = useCallback(
-    (target?: GameSummary) => {
-      const game = target ?? results[activeIndex];
-      if (game) {
-        router.push(`/game/${game.slug}`);
+    (target?: SearchHit) => {
+      const hit = target ?? results[activeIndex];
+      if (hit) {
+        router.push(hrefForHit(hit));
       } else if (query.trim()) {
         router.push(`/browse?search=${encodeURIComponent(query.trim())}`);
       }
@@ -214,41 +295,45 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                 </div>
               ) : (
                 <ul className="space-y-1">
-                  {results.map((game, i) => (
-                    <li key={game.id}>
-                      <Link
-                        href={`/game/${game.slug}`}
-                        onClick={onClose}
-                        onPointerEnter={() => setCursor(i)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-xl p-2 transition-colors",
-                          i === activeIndex ? "bg-white/8" : "hover:bg-white/5",
+                  {results.map((hit, i) => {
+                    // A section label whenever the kind changes, so a mixed
+                    // result list reads as grouped rather than jumbled.
+                    const newGroup = i === 0 || results[i - 1].kind !== hit.kind;
+                    return (
+                      <li key={`${hit.kind}-${hit.id}`}>
+                        {newGroup && (
+                          <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+                            {GROUP_LABELS[hit.kind]}
+                          </p>
                         )}
-                      >
-                        <span className="relative h-14 w-11 shrink-0 overflow-hidden rounded-lg">
-                          <GameCover
-                            name={game.name}
-                            slug={game.slug}
-                            image={game.image}
-                            imageFallback={game.imageFallback}
-                            width={96}
-                            sizes="44px"
-                          />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{game.name}</span>
-                          <span className="mt-0.5 block truncate text-xs text-faint">
-                            {releaseLabel(game)}
-                            {game.genres[0] ? ` · ${game.genres[0].name}` : ""}
+                        <Link
+                          href={hrefForHit(hit)}
+                          onClick={onClose}
+                          onPointerEnter={() => setCursor(i)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl p-2 transition-colors",
+                            i === activeIndex ? "bg-white/8" : "hover:bg-white/5",
+                          )}
+                        >
+                          <HitThumb hit={hit} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{hit.name}</span>
+                            {hit.subtitle && (
+                              <span className="mt-0.5 block truncate text-xs text-faint">
+                                {hit.subtitle}
+                              </span>
+                            )}
                           </span>
-                        </span>
-                        <ScorePill score={game.metacritic} />
-                        {i === activeIndex && (
-                          <CornerDownLeft size={14} className="hidden shrink-0 text-faint fine:block" />
-                        )}
-                      </Link>
-                    </li>
-                  ))}
+                          {i === activeIndex && (
+                            <CornerDownLeft
+                              size={14}
+                              className="hidden shrink-0 text-faint fine:block"
+                            />
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

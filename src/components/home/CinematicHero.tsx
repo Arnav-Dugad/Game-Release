@@ -30,6 +30,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Info, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { BackdropTrailer } from "@/components/game/BackdropTrailer";
 import { GameCover } from "@/components/game/GameCover";
 import { PlatformIcons } from "@/components/game/PlatformIcons";
 import { WatchButton } from "@/components/game/WatchButton";
@@ -45,26 +46,6 @@ import type { GameSummary } from "@/lib/games/types";
 const SLIDE_MS = 15_000;
 /** Beat before the trailer replaces the still. */
 const TRAILER_DELAY_MS = 1800;
-
-function youtubeSrc(id: string, muted: boolean) {
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: muted ? "1" : "0",
-    controls: "0",
-    modestbranding: "1",
-    rel: "0",
-    showinfo: "0",
-    iv_load_policy: "3",
-    disablekb: "1",
-    fs: "0",
-    playsinline: "1",
-    cc_load_policy: "0",
-    // A single-video playlist is what makes `loop` actually loop.
-    loop: "1",
-    playlist: id,
-  });
-  return `https://www.youtube-nocookie.com/embed/${id}?${params}`;
-}
 
 export function CinematicHero({ games }: { games: GameSummary[] }) {
   const featured = games.filter((game) => game.image || game.heroTrailer).slice(0, 6);
@@ -158,53 +139,14 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
           </motion.div>
         </AnimatePresence>
 
-        <AnimatePresence>
-          {showTrailer && trailer && (
-            <motion.div
-              key={`trailer-${active.id}`}
-              className="absolute inset-0 overflow-hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              // Nothing inside is interactive, so no click can reach YouTube.
-              style={{ pointerEvents: "none" }}
-            >
-              {trailer.kind === "youtube" && trailer.youtubeId ? (
-                <iframe
-                  key={`${trailer.youtubeId}-${muted}`}
-                  src={youtubeSrc(trailer.youtubeId, muted)}
-                  title={`${active.name} trailer`}
-                  allow="autoplay; encrypted-media"
-                  tabIndex={-1}
-                  aria-hidden
-                  /*
-                   * Oversized and centred: this is what actually removes the
-                   * player's title bar and corner buttons, which no embed
-                   * parameter can turn off. 16:9 is preserved via the aspect
-                   * ratio so the crop stays even on any viewport.
-                   */
-                  className={cn(
-                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border-0",
-                    "h-[300%] w-[300%] sm:h-[180%] sm:w-[180%] lg:h-[145%] lg:w-[145%]",
-                    "min-h-[100vh] min-w-[177.77vh]",
-                  )}
-                />
-              ) : trailer.url ? (
-                <video
-                  key={trailer.url}
-                  src={trailer.url}
-                  autoPlay
-                  muted={muted}
-                  loop
-                  playsInline
-                  poster={trailer.preview ?? undefined}
-                  className="h-full w-full object-cover"
-                />
-              ) : null}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Keyed on the slide so switching games tears down the old player
+            rather than leaving two iframes stacked. */}
+        <BackdropTrailer
+          key={`trailer-${active.id}`}
+          trailer={showTrailer ? trailer : null}
+          muted={muted}
+          delayMs={0}
+        />
 
         {/* Legibility stack. Two gradients: one anchors the copy, one keeps the
             whole frame from competing with it. */}

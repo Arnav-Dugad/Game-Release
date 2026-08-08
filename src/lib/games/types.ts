@@ -44,6 +44,62 @@ export interface AgeRating {
   organization: string;
   /** e.g. "M", "18". */
   rating: string;
+  /**
+   * Why the board gave that rating — "Blood and Gore", "Strong Language".
+   * Empty when the board publishes none, which is common outside ESRB/PEGI.
+   */
+  descriptors: string[];
+}
+
+/**
+ * A company, platform or engine that has a brand mark on IGDB.
+ *
+ * `logo` is IGDB's own asset rather than a bundled icon, so it covers the long
+ * tail of studios no icon set will ever have. Null when IGDB has none, which
+ * the UI must handle rather than render a broken image.
+ */
+export interface LogoRef extends Ref {
+  logo: string | null;
+}
+
+/** A studio's role on a specific game. */
+export interface CompanyRef extends LogoRef {
+  developer: boolean;
+  publisher: boolean;
+  porting: boolean;
+  supporting: boolean;
+  /** The studio's own site, when IGDB has it. */
+  website: string | null;
+}
+
+/** A platform, with IGDB's mark and the family it rolls up to. */
+export interface PlatformRef extends LogoRef {
+  /** Icon family slug — "playstation", "xbox" — for the bundled brand icons. */
+  family: string | null;
+  abbreviation: string | null;
+  /** e.g. "console", "portable", "computer". */
+  category: string | null;
+  generation: number | null;
+}
+
+/** One dated release, for a specific region and platform. */
+export interface ReleaseEvent {
+  /** ISO `YYYY-MM-DD`, or null when only a window is known. */
+  date: string | null;
+  /** Human label as IGDB renders it — "Q4 2026", "Feb 25, 2022". */
+  human: string;
+  /** "North America", "Europe", "Japan", … or null when unspecified. */
+  region: string | null;
+  platform: string | null;
+}
+
+/** A named character appearing in a game. */
+export interface CharacterRef extends Ref {
+  description: string | null;
+  /** Portrait, IGDB's "mug shot". */
+  image: string | null;
+  species: string | null;
+  gender: string | null;
 }
 
 export interface WebsiteRef {
@@ -113,6 +169,13 @@ export interface GameSummary {
   screenshots: string[];
   esrb: string | null;
   /**
+   * IGDB's own popularity signal, recomputed daily from page visits and list
+   * additions. Distinct from `added`, which counts library saves: this reflects
+   * what people are *looking at* right now, which is what "trending" means.
+   * Null when IGDB has no score for the title.
+   */
+  popScore: number | null;
+  /**
    * A single trailer, carried on the summary so list views can autoplay one
    * without fetching the full detail record. Null when the provider has none.
    */
@@ -136,6 +199,8 @@ export interface GameDetail extends GameSummary {
   /** Storefront pricing, when a provider exposes it. */
   price: Price | null;
   website: string | null;
+  /** Every involved studio with its role and brand mark. */
+  companies: CompanyRef[];
   developers: Ref[];
   publishers: Ref[];
   supportingStudios: Ref[];
@@ -143,16 +208,28 @@ export interface GameDetail extends GameSummary {
   themes: Ref[];
   gameModes: Ref[];
   playerPerspectives: Ref[];
-  engines: Ref[];
+  engines: LogoRef[];
   /** Franchises and collections merged — both answer "what series is this?". */
   franchises: Ref[];
+  /** Free-form IGDB keywords, useful for discovery beyond formal genres. */
+  keywords: Ref[];
   ageRatings: AgeRating[];
   languages: string[];
   multiplayerModes: MultiplayerModes | null;
   /** Key art, distinct from in-game screenshots. */
   artworks: string[];
+  /** Platforms with IGDB marks and hardware metadata. */
+  platformDetails: PlatformRef[];
+  /** Per-region, per-platform release dates. */
+  releases: ReleaseEvent[];
+  /** Named cast, when IGDB has character records for the title. */
+  characters: CharacterRef[];
   /** DLC and expansions. */
   expansions: Ref[];
+  /** Remakes, remasters, ports and standalone expansions of this title. */
+  editions: Ref[];
+  /** The base game, when this record is itself a DLC or expansion. */
+  parentGame: Ref | null;
   /** Provider-curated similar titles, already expanded. */
   similar: GameSummary[];
   /** Combined critic + user score, 0–100. */

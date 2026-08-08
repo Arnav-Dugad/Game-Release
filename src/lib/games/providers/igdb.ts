@@ -33,10 +33,14 @@ import { unstable_cache } from "next/cache";
 import type {
   AgeRating,
   BrowseFilters,
+  CharacterRef,
+  CompanyRef,
   GameDetail,
   GameSummary,
   MultiplayerModes,
+  PlatformRef,
   Ref,
+  ReleaseEvent,
   StoreRef,
   Trailer,
   WebsiteRef,
@@ -361,13 +365,33 @@ async function negotiate(label: string, candidates: string[][]): Promise<string[
   return [];
 }
 
-let schemaPromise: Promise<{ release: string[]; ageRating: string[] }> | null = null;
+let schemaPromise: Promise<{
+  release: string[];
+  ageRating: string[];
+  descriptors: string[];
+}> | null = null;
 
 function schema() {
   if (!schemaPromise) {
     schemaPromise = (async () => {
-      const [release, ageRating] = await Promise.all([
+      const [release, ageRating, descriptors] = await Promise.all([
+        // `region` and the platform name ride along with the date so the detail
+        // page can show a real per-region release table rather than one date.
         negotiate("release_dates", [
+          [
+            "release_dates.date_format",
+            "release_dates.date",
+            "release_dates.human",
+            "release_dates.region",
+            "release_dates.platform.name",
+          ],
+          [
+            "release_dates.category",
+            "release_dates.date",
+            "release_dates.human",
+            "release_dates.region",
+            "release_dates.platform.name",
+          ],
           ["release_dates.date_format", "release_dates.date", "release_dates.human"],
           ["release_dates.category", "release_dates.date", "release_dates.human"],
           [],
@@ -377,8 +401,16 @@ function schema() {
           ["age_ratings.category", "age_ratings.rating"],
           [],
         ]),
+        // Content descriptors are a separate probe: they were renamed
+        // independently of the rating fields, so pinning them to the same
+        // candidate list would lose the ratings whenever the descriptors moved.
+        negotiate("age_rating_descriptions", [
+          ["age_ratings.rating_content_descriptions.description"],
+          ["age_ratings.content_descriptions.description"],
+          [],
+        ]),
       ]);
-      return { release, ageRating };
+      return { release, ageRating, descriptors };
     })().catch((err) => {
       // Never cache a rejected probe — a transient outage would otherwise
       // permanently strip these fields for the life of the server.
@@ -453,16 +485,36 @@ const CORE_DETAIL = [
   "player_perspectives.slug",
   "game_engines.name",
   "game_engines.slug",
+  "game_engines.logo.image_id",
+  "keywords.name",
+  "keywords.slug",
   "franchises.name",
   "franchises.slug",
   "collections.name",
   "collections.slug",
+  // Platform marks and hardware metadata, so a platform row can show real
+  // logos and say what generation of hardware it is.
+  "platforms.platform_logo.image_id",
+  "platforms.generation",
+  "platforms.category",
   "involved_companies.developer",
   "involved_companies.publisher",
   "involved_companies.porting",
   "involved_companies.supporting",
   "involved_companies.company.name",
   "involved_companies.company.slug",
+  "involved_companies.company.logo.image_id",
+  "involved_companies.company.websites.url",
+  "parent_game.name",
+  "parent_game.slug",
+  "remakes.name",
+  "remakes.slug",
+  "remasters.name",
+  "remasters.slug",
+  "ports.name",
+  "ports.slug",
+  "standalone_expansions.name",
+  "standalone_expansions.slug",
   "alternative_names.name",
   "language_supports.language.name",
   "multiplayer_modes.campaigncoop",
@@ -498,8 +550,8 @@ async function summaryFields(): Promise<string> {
 }
 
 async function detailFields(): Promise<string> {
-  const { release, ageRating } = await schema();
-  return [...CORE_DETAIL, ...release, ...ageRating].join(",");
+  const { release, ageRating, descriptors } = await schema();
+  return [...CORE_DETAIL, ...release, ...ageRating, ...descriptors].join(",");
 }
 
 /**
@@ -527,6 +579,32 @@ interface IgdbReleaseDate {
   category?: number;
   date?: number;
   human?: string;
+  /** Region enum; see `RELEASE_REGIONS`. */
+  region?: number;
+  platform?: IgdbNamed;
+}
+
+interface IgdbLogo {
+  image_id?: string;
+}
+
+interface IgdbCompany extends IgdbNamed {
+  logo?: IgdbLogo;
+  websites?: { url?: string }[];
+}
+
+interface IgdbPlatform extends IgdbNamed {
+  abbreviation?: string;
+  platform_logo?: IgdbLogo;
+  generation?: number;
+  category?: number;
+}
+
+interface IgdbCharacter extends IgdbNamed {
+  description?: string;
+  mug_shot?: IgdbLogo;
+  species?: number;
+  gender?: number;
 }
 
 interface IgdbGame {
@@ -544,18 +622,24 @@ interface IgdbGame {
   themes?: IgdbNamed[];
   game_modes?: IgdbNamed[];
   player_perspectives?: IgdbNamed[];
-  game_engines?: IgdbNamed[];
+  game_engines?: (IgdbNamed & { logo?: IgdbLogo })[];
+  keywords?: IgdbNamed[];
   franchises?: IgdbNamed[];
   collections?: IgdbNamed[];
-  platforms?: (IgdbNamed & { abbreviation?: string })[];
+  platforms?: IgdbPlatform[];
   release_dates?: IgdbReleaseDate[];
   involved_companies?: {
     developer?: boolean;
     publisher?: boolean;
     porting?: boolean;
     supporting?: boolean;
-    company?: IgdbNamed;
+    company?: IgdbCompany;
   }[];
+  parent_game?: IgdbNamed;
+  remakes?: IgdbNamed[];
+  remasters?: IgdbNamed[];
+  ports?: IgdbNamed[];
+  standalone_expansions?: IgdbNamed[];
   alternative_names?: { name?: string }[];
   language_supports?: { language?: { name?: string } }[];
   multiplayer_modes?: {
@@ -577,6 +661,10 @@ interface IgdbGame {
     organization?: number | { name?: string };
     category?: number;
     rating?: number;
+    /** Modern spelling of the descriptor list. */
+    rating_content_descriptions?: { description?: string }[];
+    /** Legacy spelling of the same list. */
+    content_descriptions?: { description?: string }[];
   }[];
   aggregated_rating?: number;
   aggregated_rating_count?: number;
@@ -586,6 +674,12 @@ interface IgdbGame {
   total_rating_count?: number;
   hypes?: number;
   status?: number;
+  /**
+   * Not an IGDB field — attached locally from `/popularity_primitives`, which
+   * is a separate endpoint keyed by game id. Carried here so the value can flow
+   * through the normal mapping path.
+   */
+  popScore?: number;
 }
 
 /* ---------------------------------------------------------------------------
@@ -599,12 +693,24 @@ export type IgdbImageSize =
   | "screenshot_med"
   | "screenshot_big"
   | "screenshot_huge"
+  | "logo_med"
+  | "thumb"
   | "720p"
   | "1080p";
 
+/**
+ * Company, platform and engine marks are served as PNG.
+ *
+ * These are transparent logos; requesting them as `.jpg` — which every other
+ * IGDB asset uses — flattens the alpha onto black, so a dark logo becomes an
+ * unreadable black rectangle on a dark page.
+ */
+const TRANSPARENT_SIZES = new Set<IgdbImageSize>(["logo_med"]);
+
 export function igdbImage(imageId: string | null | undefined, size: IgdbImageSize): string | null {
   if (!imageId) return null;
-  return `https://images.igdb.com/igdb/image/upload/t_${size}/${imageId}.jpg`;
+  const extension = TRANSPARENT_SIZES.has(size) ? "png" : "jpg";
+  return `https://images.igdb.com/igdb/image/upload/t_${size}/${imageId}.${extension}`;
 }
 
 /* ---------------------------------------------------------------------------
@@ -642,6 +748,76 @@ const toRefs = (items: IgdbNamed[] | undefined): Ref[] =>
     slug: item.slug ?? String(item.id),
     name: item.name,
   }));
+
+/**
+ * IGDB's platform category enum.
+ *
+ * Only the values worth naming in the UI are mapped; anything else reads as
+ * unknown rather than being guessed at.
+ */
+const PLATFORM_CATEGORIES: Record<number, string> = {
+  1: "Console",
+  2: "Arcade",
+  3: "Platform",
+  4: "Operating system",
+  5: "Portable console",
+  6: "Computer",
+};
+
+function toPlatformDetails(platforms: IgdbPlatform[] | undefined): PlatformRef[] {
+  return (platforms ?? []).map((platform) => ({
+    id: platform.id,
+    slug: platform.slug ?? String(platform.id),
+    name: platform.name,
+    logo: igdbImage(platform.platform_logo?.image_id, "logo_med"),
+    family: platformKey(platform.slug ?? platform.name ?? ""),
+    abbreviation: platform.abbreviation ?? null,
+    category:
+      typeof platform.category === "number"
+        ? PLATFORM_CATEGORIES[platform.category] ?? null
+        : null,
+    generation: typeof platform.generation === "number" ? platform.generation : null,
+  }));
+}
+
+function toCompanies(game: IgdbGame): CompanyRef[] {
+  const out: CompanyRef[] = [];
+  for (const entry of game.involved_companies ?? []) {
+    const company = entry.company;
+    if (!company) continue;
+    out.push({
+      id: company.id,
+      slug: company.slug ?? String(company.id),
+      name: company.name,
+      logo: igdbImage(company.logo?.image_id, "logo_med"),
+      developer: Boolean(entry.developer),
+      publisher: Boolean(entry.publisher),
+      porting: Boolean(entry.porting),
+      supporting: Boolean(entry.supporting),
+      website: company.websites?.[0]?.url ?? null,
+    });
+  }
+  return out;
+}
+
+/**
+ * IGDB's release region enum.
+ *
+ * Worth resolving rather than dropping: "out in Japan, not yet in Europe" is
+ * exactly the kind of thing a release calendar exists to answer.
+ */
+const RELEASE_REGIONS: Record<number, string> = {
+  1: "Europe",
+  2: "North America",
+  3: "Australia",
+  4: "New Zealand",
+  5: "Japan",
+  6: "China",
+  7: "Asia",
+  8: "Worldwide",
+  9: "Korea",
+  10: "Brazil",
+};
 
 /* ---------------------------------------------------------------------------
  * Release resolution
@@ -692,6 +868,43 @@ function resolveRelease(game: IgdbGame): {
   return { released: null, releaseWindow: null, tba: true };
 }
 
+/**
+ * Every dated release, one row per region and platform.
+ *
+ * `resolveRelease` above collapses all of this into the single headline date a
+ * card needs. This keeps the full picture for the detail page, where staggered
+ * launches are genuinely interesting. Only day-level entries get an ISO date —
+ * the same rule as everywhere else, so a "Q4 2026" row renders as its window
+ * rather than as an invented day.
+ */
+function toReleaseEvents(game: IgdbGame): ReleaseEvent[] {
+  const events: ReleaseEvent[] = [];
+
+  for (const entry of game.release_dates ?? []) {
+    const precision = entry.date_format ?? entry.category;
+    const exact = precision === 0 && typeof entry.date === "number";
+    const human = entry.human?.trim();
+
+    // A row with neither a date nor a label says nothing worth rendering.
+    if (!exact && !human) continue;
+
+    events.push({
+      date: exact ? isoFromUnix(entry.date!) : null,
+      human: human || (exact ? isoFromUnix(entry.date!) : ""),
+      region: typeof entry.region === "number" ? RELEASE_REGIONS[entry.region] ?? null : null,
+      platform: entry.platform?.name ?? null,
+    });
+  }
+
+  // Chronological, with undated windows last so the concrete dates lead.
+  return events.sort((a, b) => {
+    if (a.date && b.date) return a.date.localeCompare(b.date);
+    if (a.date) return -1;
+    if (b.date) return 1;
+    return 0;
+  });
+}
+
 /* ---------------------------------------------------------------------------
  * Age ratings
  * ------------------------------------------------------------------------ */
@@ -706,6 +919,16 @@ const PEGI_LEGACY: Record<number, string> = {
 function mapAgeRatings(game: IgdbGame): AgeRating[] {
   const out: AgeRating[] = [];
   for (const entry of game.age_ratings ?? []) {
+    // Either spelling of the descriptor list; whichever the account's API
+    // revision actually returned.
+    const descriptors = [
+      ...new Set(
+        [...(entry.rating_content_descriptions ?? []), ...(entry.content_descriptions ?? [])]
+          .map((item) => item.description?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+
     // Modern spelling expands to objects; legacy returns bare enum ids.
     const modernRating =
       typeof entry.rating_category === "object" ? entry.rating_category?.rating : undefined;
@@ -713,15 +936,15 @@ function mapAgeRatings(game: IgdbGame): AgeRating[] {
       typeof entry.organization === "object" ? entry.organization?.name : undefined;
 
     if (modernRating && modernOrg) {
-      out.push({ organization: modernOrg, rating: modernRating });
+      out.push({ organization: modernOrg, rating: modernRating, descriptors });
       continue;
     }
 
     if (typeof entry.category === "number" && typeof entry.rating === "number") {
       if (entry.category === 1 && ESRB_LEGACY[entry.rating]) {
-        out.push({ organization: "ESRB", rating: ESRB_LEGACY[entry.rating] });
+        out.push({ organization: "ESRB", rating: ESRB_LEGACY[entry.rating], descriptors });
       } else if (entry.category === 2 && PEGI_LEGACY[entry.rating]) {
-        out.push({ organization: "PEGI", rating: PEGI_LEGACY[entry.rating] });
+        out.push({ organization: "PEGI", rating: PEGI_LEGACY[entry.rating], descriptors });
       }
     }
   }
@@ -774,6 +997,7 @@ function mapSummary(game: IgdbGame): GameSummary {
       .filter((url): url is string => Boolean(url)),
     esrb: ratings.find((r) => r.organization.toUpperCase().includes("ESRB"))?.rating ?? null,
     heroTrailer: toTrailers(game).at(0) ?? null,
+    popScore: typeof game.popScore === "number" ? game.popScore : null,
     playtime: 0,
     // `hypes` counts pre-release anticipation, `total_rating_count` post-release
     // engagement. Either is a reasonable popularity proxy for its lifecycle stage.
@@ -849,6 +1073,7 @@ function mapDetail(game: IgdbGame): GameDetail {
     steamAppId,
     price: null,
     website: officialSite,
+    companies: toCompanies(game),
     developers: companiesWhere((entry) => Boolean(entry.developer)),
     publishers: companiesWhere((entry) => Boolean(entry.publisher)),
     supportingStudios: companiesWhere(
@@ -858,8 +1083,14 @@ function mapDetail(game: IgdbGame): GameDetail {
     themes: toRefs(game.themes),
     gameModes: toRefs(game.game_modes),
     playerPerspectives: toRefs(game.player_perspectives),
-    engines: toRefs(game.game_engines),
+    engines: (game.game_engines ?? []).map((engine) => ({
+      id: engine.id,
+      slug: engine.slug ?? String(engine.id),
+      name: engine.name,
+      logo: igdbImage(engine.logo?.image_id, "logo_med"),
+    })),
     franchises: [...toRefs(game.franchises), ...toRefs(game.collections)],
+    keywords: toRefs(game.keywords).slice(0, 24),
     ageRatings: mapAgeRatings(game),
     languages: [
       ...new Set(
@@ -872,7 +1103,25 @@ function mapDetail(game: IgdbGame): GameDetail {
     artworks: (game.artworks ?? [])
       .map((art) => igdbImage(art.image_id, "1080p"))
       .filter((url): url is string => Boolean(url)),
+    platformDetails: toPlatformDetails(game.platforms),
+    releases: toReleaseEvents(game),
+    // Filled by `detail()`, which fetches the cast separately — characters are
+    // their own IGDB endpoint rather than an expandable field on a game.
+    characters: [],
     expansions: [...toRefs(game.dlcs), ...toRefs(game.expansions)],
+    editions: [
+      ...toRefs(game.remakes),
+      ...toRefs(game.remasters),
+      ...toRefs(game.ports),
+      ...toRefs(game.standalone_expansions),
+    ],
+    parentGame: game.parent_game
+      ? {
+          id: game.parent_game.id,
+          slug: game.parent_game.slug ?? String(game.parent_game.id),
+          name: game.parent_game.name,
+        }
+      : null,
     similar: (game.similar_games ?? [])
       .filter((candidate) => candidate?.slug && candidate.status !== CANCELLED)
       .map(mapSummary),
@@ -936,6 +1185,140 @@ async function genreIdsForSlugs(slugs: string[]): Promise<number[]> {
   const genres = await fetchGenres();
   const wanted = new Set(slugs);
   return genres.filter((genre) => wanted.has(genre.slug)).map((genre) => genre.id);
+}
+
+/* ---------------------------------------------------------------------------
+ * Characters
+ * ------------------------------------------------------------------------ */
+
+/** IGDB's gender and species enums, resolved only where the label is useful. */
+const CHARACTER_GENDERS: Record<number, string> = { 0: "Male", 1: "Female", 2: "Other" };
+const CHARACTER_SPECIES: Record<number, string> = {
+  1: "Human", 2: "Alien", 3: "Animal", 4: "Android", 5: "Unknown",
+};
+
+/**
+ * The named cast of a game.
+ *
+ * Characters are their own endpoint keyed by game, not an expandable field, so
+ * this is a second request. Sorted by whether they have a portrait first —
+ * a cast row of blank silhouettes is worse than a shorter one with faces.
+ */
+async function fetchCharacters(gameId: number): Promise<CharacterRef[]> {
+  const query = queryFor(TTL.detail);
+  const rows = await query<IgdbCharacter[]>(
+    "characters",
+    apicalypse({
+      fields: "name,slug,description,mug_shot.image_id,species,gender",
+      where: `games = (${gameId})`,
+      limit: 24,
+    }),
+  );
+
+  return rows
+    .map((row) => ({
+      id: row.id,
+      slug: row.slug ?? String(row.id),
+      name: row.name,
+      description: row.description?.trim() || null,
+      image: igdbImage(row.mug_shot?.image_id, "thumb"),
+      species: typeof row.species === "number" ? CHARACTER_SPECIES[row.species] ?? null : null,
+      gender: typeof row.gender === "number" ? CHARACTER_GENDERS[row.gender] ?? null : null,
+    }))
+    .sort((a, b) => Number(Boolean(b.image)) - Number(Boolean(a.image)));
+}
+
+/* ---------------------------------------------------------------------------
+ * PopScore
+ * ------------------------------------------------------------------------ */
+
+/**
+ * IGDB's popularity signals, recomputed every 24 hours.
+ *
+ * `popularity_primitives` carries one row per game per *type*, and the types
+ * are not interchangeable. Verified against the live API:
+ *
+ *   1 "Visits"            unusable — tops out on shovelware nobody has heard
+ *                         of, so ordering by it fills a shelf with junk
+ *   2 "Want to Play"      anticipation: Cyberpunk 2077, GTA VI, Elden Ring
+ *   3 "Playing"           current activity: Roblox, GTA V, Minecraft, Fortnite
+ *   4 "Played"            all-time completion, effectively a classics list
+ *   5 "24hr Peak Players" Steam concurrents: Counter-Strike 2, PUBG
+ *
+ * `value` is a normalised float well below 1, not a count, so it is only ever
+ * meaningful as an *ordering*. It is deliberately never shown to the reader:
+ * "0.004" answers no question anyone has.
+ */
+const POPULARITY = {
+  /** What people are playing now — the honest basis for "trending". */
+  playing: 3,
+  /** What people are waiting for — the right signal for a hero shelf. */
+  wantToPlay: 2,
+} as const;
+
+type PopularityType = (typeof POPULARITY)[keyof typeof POPULARITY];
+
+/**
+ * Returns an empty map on any failure. Popularity is an ordering hint, never a
+ * reason to fail a page.
+ */
+async function fetchPopScores(
+  gameIds: number[],
+  revalidate: number = TTL.list,
+): Promise<Map<number, number>> {
+  if (gameIds.length === 0) return new Map();
+
+  try {
+    const query = queryFor(revalidate);
+    const rows = await query<{ game_id?: number; value?: number }[]>(
+      "popularity_primitives",
+      apicalypse({
+        fields: "game_id,value",
+        where: `game_id = (${gameIds.join(",")}) & popularity_type = ${POPULARITY.playing}`,
+        sort: "value desc",
+        limit: Math.min(gameIds.length, 500),
+      }),
+    );
+
+    const scores = new Map<number, number>();
+    for (const row of rows) {
+      // Kept as the raw float: rounding a value of 0.004 to an integer erases
+      // the entire signal, which is what made every score read as zero.
+      if (typeof row.game_id === "number" && typeof row.value === "number") {
+        scores.set(row.game_id, row.value);
+      }
+    }
+    return scores;
+  } catch (err) {
+    warn("popularity", err);
+    return new Map();
+  }
+}
+
+/**
+ * The most popular games right now, best-first, for a given signal.
+ *
+ * This is the honest basis for a "trending" shelf: it reflects what people are
+ * doing this week, rather than a rating count that took years to accumulate and
+ * therefore never changes.
+ */
+async function fetchPopularGameIds(
+  limit: number,
+  type: PopularityType = POPULARITY.playing,
+): Promise<number[]> {
+  const query = queryFor(TTL.list);
+  const rows = await query<{ game_id?: number }[]>(
+    "popularity_primitives",
+    apicalypse({
+      fields: "game_id,value",
+      where: `popularity_type = ${type}`,
+      sort: "value desc",
+      limit,
+    }),
+  );
+  return rows
+    .map((row) => row.game_id)
+    .filter((id): id is number => typeof id === "number");
 }
 
 /* ---------------------------------------------------------------------------
@@ -1036,41 +1419,204 @@ function normalise(value: string): string {
     .trim();
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Titles that are an *edition of* something rather than a distinct game.
+ *
+ * IGDB indexes these as full records, so a search for "elden ring" returns the
+ * Collector's Edition and the Tarnished Edition alongside the game itself. They
+ * are legitimate results, just never the one someone means first.
+ */
+const EDITION_MARKERS =
+  /\b(collector|deluxe|ultimate|goty|game of the year|complete|definitive|remaster|bundle|edition|pack|season pass|demo|trial|beta)\b/;
+
+/** How well one string answers the query. Lower is better. */
+function matchTier(candidate: string, q: string): number {
+  const n = normalise(candidate);
+  if (!n) return 5;
+  if (n === q) return 0;
+  if (n.startsWith(`${q} `)) return 1;
+  if (n.startsWith(q)) return 2;
+  if (new RegExp(`\\b${escapeRegExp(q)}\\b`).test(n)) return 3;
+  if (n.includes(q)) return 4;
+  return 5;
+}
+
 /**
  * Re-ranks IGDB search results against the query the reader actually typed.
  *
- * Scoring, strongest signal first: an exact title match, then a prefix match,
- * then whole-word containment, then a loose substring. Popularity only breaks
- * ties — it must never let a famous unrelated game outrank the precise answer,
- * which is the usual failure mode of naive relevance sorting.
+ * IGDB's own `search` ordering routinely puts editions, bundles and loosely
+ * related titles above the obvious answer, and it cannot be combined with
+ * `sort`, so ranking has to happen here.
  *
- * Recognisable titles are additionally nudged up within a tier, because IGDB's
- * index contains a long tail of near-identically-named shovelware.
+ * Strongest signal first: an exact title match, then a prefix, then whole-word
+ * containment, then a loose substring. Alternative names are scored too and the
+ * best of the two wins, which is what makes "GTA V" find "Grand Theft Auto V"
+ * and "FF7" find "Final Fantasy VII".
+ *
+ * Popularity only ever breaks ties within a tier — letting it cross tiers is
+ * the usual failure mode of naive relevance sorting, where a famous unrelated
+ * game outranks the precise answer. Editions are demoted one step for the same
+ * reason: "Elden Ring" should outrank "Elden Ring: Collector's Edition", but
+ * still beat an unrelated title.
  */
-export function rankSearchResults(games: GameSummary[], query: string): GameSummary[] {
+export function rankSearchResults(
+  games: GameSummary[],
+  query: string,
+  /** Alternative titles per game id, when the caller fetched them. */
+  altNames?: Map<number, string[]>,
+): GameSummary[] {
   const q = normalise(query);
   if (!q) return games;
 
-  const tierOf = (name: string): number => {
-    const n = normalise(name);
-    if (n === q) return 0;
-    if (n.startsWith(`${q} `) || n.startsWith(q)) return 1;
-    if (new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(n)) return 2;
-    if (n.includes(q)) return 3;
-    return 4;
+  const scoreOf = (game: GameSummary): number => {
+    const candidates = [game.name, ...(altNames?.get(game.id) ?? [])];
+    const best = Math.min(...candidates.map((name) => matchTier(name, q)));
+    // An edition is a worse answer than the plain title at the same tier, but
+    // must not fall below a genuinely weaker match.
+    const isEdition = EDITION_MARKERS.test(normalise(game.name)) && !EDITION_MARKERS.test(q);
+    return best * 2 + (isEdition ? 1 : 0);
   };
 
   return [...games]
-    .map((game, index) => ({ game, index, tier: tierOf(game.name) }))
+    .map((game, index) => ({ game, index, score: scoreOf(game) }))
     .sort((a, b) => {
-      if (a.tier !== b.tier) return a.tier - b.tier;
-      // Within a tier, prefer titles people actually engage with…
+      if (a.score !== b.score) return a.score - b.score;
+      // Within a tier, prefer what people actually engage with — PopScore when
+      // IGDB has it, since it reflects current attention, then library saves.
+      const pop = (b.game.popScore ?? 0) - (a.game.popScore ?? 0);
+      if (pop !== 0) return pop;
       const engagement = b.game.added - a.game.added;
       if (engagement !== 0) return engagement;
       // …then fall back to IGDB's own ordering rather than reshuffling.
       return a.index - b.index;
     })
     .map((entry) => entry.game);
+}
+
+/**
+ * Search that also reads alternative names.
+ *
+ * A plain summary query omits them, so "GTA V" scored no better than an
+ * unrelated title and fell back to popularity order. Fetching them costs one
+ * extra field on a query that already runs, and it is the single biggest
+ * accuracy win available here.
+ */
+async function searchPool(term: string, where: string, limit: number, revalidate: number) {
+  const query = queryFor(revalidate);
+  const { release } = await schema();
+  const rows = await query<IgdbGame[]>(
+    "games",
+    apicalypse({
+      fields: [...CORE_SUMMARY, ...release, "alternative_names.name"].join(","),
+      search: term,
+      where,
+      limit,
+    }),
+  );
+
+  const usableRows = usable(rows);
+  const altNames = new Map<number, string[]>(
+    usableRows.map((row) => [
+      row.id,
+      (row.alternative_names ?? [])
+        .map((entry) => entry.name)
+        .filter((name): name is string => Boolean(name)),
+    ]),
+  );
+
+  return { games: usableRows.map(mapSummary), altNames };
+}
+
+/* ---------------------------------------------------------------------------
+ * Multi-entity search
+ * ------------------------------------------------------------------------ */
+
+export interface IgdbSearchHit {
+  kind: "game" | "character" | "company";
+  id: number;
+  name: string;
+  /** Route target — games link to their page, others to a filtered browse. */
+  slug: string;
+  subtitle: string | null;
+  image: string | null;
+}
+
+/**
+ * Searches games, characters and companies in one pass.
+ *
+ * IGDB indexes all three, and someone typing "Kratos" or "FromSoftware" is
+ * asking a question the game index alone cannot answer. Each entity is its own
+ * endpoint, so these run in parallel and any one failing degrades that section
+ * rather than the whole palette.
+ */
+export async function igdbSearchAll(
+  term: string,
+  limits = { games: 8, characters: 4, companies: 4 },
+): Promise<IgdbSearchHit[]> {
+  if (!igdbConfigured() || term.trim().length < 2) return [];
+  const query = queryFor(TTL.search);
+
+  const [games, characters, companies] = await Promise.all([
+    searchPool(term, MAIN_GAMES, Math.min(120, limits.games * 6), TTL.search)
+      .then(({ games: pool, altNames }) =>
+        rankSearchResults(pool, term, altNames).slice(0, limits.games),
+      )
+      .catch((err) => {
+        warn("search.games", err);
+        return [] as GameSummary[];
+      }),
+    query<IgdbCharacter[]>(
+      "characters",
+      apicalypse({
+        fields: "name,slug,mug_shot.image_id,species",
+        search: term,
+        limit: limits.characters,
+      }),
+    ).catch((err) => {
+      warn("search.characters", err);
+      return [] as IgdbCharacter[];
+    }),
+    query<IgdbCompany[]>(
+      "companies",
+      apicalypse({
+        fields: "name,slug,logo.image_id,country",
+        search: term,
+        limit: limits.companies,
+      }),
+    ).catch((err) => {
+      warn("search.companies", err);
+      return [] as IgdbCompany[];
+    }),
+  ]);
+
+  return [
+    ...games.map((game): IgdbSearchHit => ({
+      kind: "game",
+      id: game.id,
+      name: game.name,
+      slug: game.slug,
+      subtitle: game.genres[0]?.name ?? null,
+      image: game.image,
+    })),
+    ...characters.map((character): IgdbSearchHit => ({
+      kind: "character",
+      id: character.id,
+      name: character.name,
+      slug: character.slug ?? String(character.id),
+      subtitle: "Character",
+      image: igdbImage(character.mug_shot?.image_id, "thumb"),
+    })),
+    ...companies.map((company): IgdbSearchHit => ({
+      kind: "company",
+      id: company.id,
+      name: company.name,
+      slug: company.slug ?? String(company.id),
+      subtitle: "Studio",
+      image: igdbImage(company.logo?.image_id, "logo_med"),
+    })),
+  ];
 }
 
 export const igdbProvider: GameProvider = {
@@ -1098,12 +1644,14 @@ export const igdbProvider: GameProvider = {
         // related titles above the obvious answer. Over-fetch, then re-rank
         // locally against the actual query so the exact title wins.
         const overFetch = Math.min(200, pageSize * 4);
-        const pool = await listGames(
-          { search: term, where, limit: overFetch },
+        const { games: pool, altNames } = await searchPool(
+          term,
+          where,
+          overFetch,
           revalidate,
         );
 
-        const ranked = rankSearchResults(pool, term);
+        const ranked = rankSearchResults(pool, term, altNames);
         const start = (page - 1) * pageSize;
         return {
           results: ranked.slice(start, start + pageSize),
@@ -1163,9 +1711,39 @@ export const igdbProvider: GameProvider = {
     }
   },
 
+  /**
+   * Trending, driven by IGDB's own PopScore rather than a rating count.
+   *
+   * A rating count measures accumulated attention over a title's whole life, so
+   * ordering by it returns the same canonical hits every week — the opposite of
+   * trending. PopScore is recomputed daily from page visits, so it moves.
+   *
+   * The popularity endpoint returns ids only, so the games are fetched in a
+   * second query and re-sorted back into popularity order, which `where id =
+   * (…)` does not preserve. If popularity is unavailable, this falls back to the
+   * old engagement ordering rather than returning nothing.
+   */
   async trending(pageSize: number) {
     if (!igdbConfigured()) return null;
     try {
+      const popularIds = await fetchPopularGameIds(pageSize * 3).catch((err) => {
+        warn("popularity", err);
+        return [] as number[];
+      });
+
+      if (popularIds.length > 0) {
+        const games = await listGames(
+          { where: `${MAIN_GAMES} & id = (${popularIds.join(",")})`, limit: pageSize * 3 },
+          TTL.list,
+        );
+        const rank = new Map(popularIds.map((id, index) => [id, index]));
+        const ordered = games
+          .filter((game) => rank.has(game.id))
+          .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+          .slice(0, pageSize);
+        if (ordered.length > 0) return ordered;
+      }
+
       return await listGames(
         {
           where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${nowSeconds()}`,
@@ -1227,7 +1805,24 @@ export const igdbProvider: GameProvider = {
           limit: 1,
         }),
       );
-      return rows.length > 0 ? mapDetail(rows[0]) : null;
+      if (rows.length === 0) return null;
+
+      const detail = mapDetail(rows[0]);
+
+      // Cast and popularity live on their own endpoints. Both are enrichment,
+      // so a failure in either leaves the page intact rather than losing it.
+      const [characters, popScores] = await Promise.all([
+        fetchCharacters(detail.id).catch((err) => {
+          warn("characters", err);
+          return [];
+        }),
+        // Detail's own TTL, not the shorter list one: a fetch that declares a
+        // shorter lifetime than the page drags the whole route's revalidate
+        // down with it, which silently cut game pages from daily to 6-hourly.
+        fetchPopScores([detail.id], TTL.detail),
+      ]);
+
+      return { ...detail, characters, popScore: popScores.get(detail.id) ?? null };
     } catch (err) {
       warn("detail", err);
       return null;
@@ -1275,6 +1870,64 @@ export const igdbProvider: GameProvider = {
     return PLATFORM_FAMILIES;
   },
 };
+
+/**
+ * Games for the homepage hero.
+ *
+ * IGDB-only by design, and exported separately from the provider interface so
+ * it can never be answered by the fallback chain. The hero autoplays trailers
+ * and leans on key art, and Steam supplies neither in a list query — a hero
+ * quietly served from Steam is a row of static PC capsules, which is precisely
+ * the "why does this look like a storefront?" failure this avoids.
+ *
+ * Ordered by PopScore so the shelf reflects what people are actually looking at
+ * today, and filtered to records that genuinely have a trailer, since a hero
+ * slide with nothing to play is the one case the design can't absorb.
+ */
+export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
+  if (!igdbConfigured()) return null;
+
+  const withTrailer = (games: GameSummary[]) =>
+    games.filter((game) => game.heroTrailer && game.image);
+
+  try {
+    // "Want to Play" rather than "Playing": a hero shelf should lead on what
+    // people are excited about, and those titles reliably have a real trailer.
+    const popularIds = await fetchPopularGameIds(limit * 8, POPULARITY.wantToPlay).catch(
+      (err) => {
+        warn("spotlight.popularity", err);
+        return [] as number[];
+      },
+    );
+
+    if (popularIds.length > 0) {
+      const games = await listGames(
+        { where: `${MAIN_GAMES} & id = (${popularIds.join(",")})`, limit: limit * 8 },
+        TTL.list,
+      );
+      const rank = new Map(popularIds.map((id, index) => [id, index]));
+      const ordered = withTrailer(games)
+        .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+        .slice(0, limit);
+      if (ordered.length > 0) return ordered;
+    }
+
+    // Nothing popular had a trailer — fall back to the most anticipated
+    // upcoming titles, which almost always do.
+    const anticipated = await listGames(
+      {
+        where: `${MAIN_GAMES} & hypes > 0 & first_release_date > ${nowSeconds()}`,
+        sort: "hypes desc",
+        limit: limit * 4,
+      },
+      TTL.list,
+    );
+    return withTrailer(anticipated).slice(0, limit);
+  } catch (err) {
+    warn("spotlight", err);
+    return null;
+  }
+}
 
 /** Themes power the recommendation engine's taste profile. */
 export async function igdbThemes(): Promise<Ref[] | null> {

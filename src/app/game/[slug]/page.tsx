@@ -23,12 +23,22 @@ import { GameCover } from "@/components/game/GameCover";
 import { Countdown } from "@/components/game/Countdown";
 import { GameRail } from "@/components/game/GameRail";
 import { PlatformIcons, PlatformList } from "@/components/game/PlatformIcons";
+import { BackdropTrailer } from "@/components/game/BackdropTrailer";
+import {
+  AgeRatingPanel,
+  CharacterRail,
+  CompanyGrid,
+  EngineRow,
+  PlatformGrid,
+  ReleaseTable,
+  StudioCredit,
+} from "@/components/game/GameEntities";
 import { MediaGallery } from "@/components/game/MediaGallery";
 import { CommunityLinks, StoreLinks } from "@/components/game/StoreLinks";
 import { ReviewSection } from "@/components/game/ReviewSection";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { WatchButton } from "@/components/game/WatchButton";
-import { ScoreRing } from "@/components/ui/ScoreRing";
+import { ScorePill, ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
@@ -159,12 +169,57 @@ export default async function GamePage({ params }: { params: Params }) {
             </section>
           )}
 
-          {game.expansions.length > 0 && (
+          {game.characters.length > 0 && (
+            <section>
+              <Reveal>
+                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Characters</h2>
+              </Reveal>
+              <CharacterRail characters={game.characters} />
+            </section>
+          )}
+
+          {game.companies.length > 0 && (
             <Reveal>
-              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Expansions & DLC</h2>
+              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Who made it</h2>
+              <CompanyGrid companies={game.companies} />
+              {game.engines.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+                    Built with
+                  </h3>
+                  <EngineRow engines={game.engines} />
+                </div>
+              )}
+            </Reveal>
+          )}
+
+          {game.platformDetails.length > 0 && (
+            <Reveal>
+              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Platforms</h2>
+              <PlatformGrid platforms={game.platformDetails} />
+            </Reveal>
+          )}
+
+          {game.releases.length > 1 && (
+            <Reveal>
+              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Release history</h2>
+              <ReleaseTable releases={game.releases} />
+            </Reveal>
+          )}
+
+          {(game.expansions.length > 0 || game.editions.length > 0 || game.parentGame) && (
+            <Reveal>
+              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">In this series</h2>
               <ul className="flex flex-wrap gap-2">
-                {game.expansions.map((item) => (
-                  <li key={item.id}>
+                {game.parentGame && (
+                  <li>
+                    <Chip href={`/game/${game.parentGame.slug}`}>
+                      Base game: {game.parentGame.name}
+                    </Chip>
+                  </li>
+                )}
+                {[...game.expansions, ...game.editions].map((item) => (
+                  <li key={`${item.id}-${item.slug}`}>
                     <Chip href={`/game/${item.slug}`}>{item.name}</Chip>
                   </li>
                 ))}
@@ -172,7 +227,7 @@ export default async function GamePage({ params }: { params: Params }) {
             </Reveal>
           )}
 
-          {game.tags.length > 0 && (
+          {(game.tags.length > 0 || game.keywords.length > 0) && (
             <Reveal>
               <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h2>
               <div className="flex flex-wrap gap-2">
@@ -188,6 +243,23 @@ export default async function GamePage({ params }: { params: Params }) {
                   game.gameModes.length === 0 &&
                   game.tags.map((tag) => <Badge key={tag.id}>{tag.name}</Badge>)}
               </div>
+
+              {game.keywords.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+                    Tags
+                  </h3>
+                  <ul className="flex flex-wrap gap-2">
+                    {game.keywords.map((keyword) => (
+                      <li key={keyword.id}>
+                        <Chip href={`/browse?search=${encodeURIComponent(keyword.name)}`}>
+                          {keyword.name}
+                        </Chip>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Reveal>
           )}
 
@@ -226,7 +298,7 @@ export default async function GamePage({ params }: { params: Params }) {
 /* -------------------------------------------------------------------------- */
 
 function GameHero({ game }: { game: GameDetail }) {
-  const backdrop = game.screenshots[0] ?? game.image;
+  const backdrop = game.artworks[0] ?? game.screenshots[0] ?? game.image;
 
   return (
     <header className="noise relative isolate overflow-hidden">
@@ -243,57 +315,65 @@ function GameHero({ game }: { game: GameDetail }) {
             rounded="rounded-none"
           />
         </Parallax>
+
+        {/* The trailer dissolves in over the key art, muted and chrome-free.
+            Sits under the scrims so the title never loses contrast. */}
+        <BackdropTrailer trailer={game.trailers[0] ?? game.heroTrailer} />
+
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/90 to-bg/55" />
         <div className="absolute inset-0 bg-gradient-to-r from-bg/90 to-transparent" />
       </div>
 
       <Container className="pb-8 pt-24 lg:pb-12 lg:pt-32">
-        <div className="flex items-end gap-5 sm:gap-8">
-          {/* Poster sits inline with the title column at every breakpoint. */}
-          <Reveal
-            direction="right"
-            className={cn(
-              "relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl border border-line-strong",
-              "shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)]",
-              // Shown at every size — the poster is the strongest identifying
-              // element on the page, and hiding it on phones wasted that.
-              "w-32 sm:w-44 lg:w-60",
-            )}
-          >
-            <GameCover
-              name={game.name}
-              slug={game.slug}
-              image={game.image}
-              imageFallback={game.imageFallback}
-              width={720}
-              sizes="(max-width: 640px) 128px, (max-width: 1024px) 176px, 240px"
-              priority
-            />
-          </Reveal>
-
-          {/* Platform marks sit directly beside the poster — the two together
-              answer "what is this and can I play it?" before any text. */}
-          {game.parentPlatforms.length > 0 && (
+        {/*
+          Stacks on a phone and goes side-by-side from `sm` up.
+          The poster and platform marks together answer "what is this, and can
+          I play it?" before any text is read, so they lead on both layouts.
+        */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-8">
+          <div className="flex items-end gap-4 sm:gap-8">
             <Reveal
-              delay={0.08}
-              className="hidden shrink-0 self-end pb-1 sm:block"
+              direction="right"
+              className={cn(
+                "relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl border border-line-strong",
+                "shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)]",
+                // Shown at every size — the poster is the strongest identifying
+                // element on the page, and hiding it on phones wasted that.
+                "w-28 sm:w-44 lg:w-60",
+              )}
             >
-              <ul className="flex flex-col gap-2.5">
-                {game.parentPlatforms.slice(0, 5).map((platform) => (
-                  <li
-                    key={platform.id}
-                    title={platform.name}
-                    className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white/[0.04] transition-colors hover:border-line-strong lg:h-11 lg:w-11"
-                  >
-                    <PlatformIcons platforms={[platform]} size={18} max={1} tinted />
-                  </li>
-                ))}
-              </ul>
+              <GameCover
+                name={game.name}
+                slug={game.slug}
+                image={game.image}
+                imageFallback={game.imageFallback}
+                width={720}
+                sizes="(max-width: 640px) 112px, (max-width: 1024px) 176px, 240px"
+                priority
+              />
             </Reveal>
-          )}
+
+            {/* Platform marks sit directly beside the poster, on every size —
+                a column on desktop, a compact stack on a phone. */}
+            {game.parentPlatforms.length > 0 && (
+              <Reveal delay={0.08} className="shrink-0 self-end pb-1">
+                <ul className="flex flex-col gap-2 sm:gap-2.5">
+                  {game.parentPlatforms.slice(0, 5).map((platform) => (
+                    <li
+                      key={platform.id}
+                      title={platform.name}
+                      className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-white/[0.04] transition-colors hover:border-line-strong sm:h-10 sm:w-10 lg:h-11 lg:w-11"
+                    >
+                      <PlatformIcons platforms={[platform]} size={17} max={1} tinted />
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+            )}
+          </div>
 
           <div className="min-w-0 flex-1">
-            <Reveal className="mb-4 flex flex-wrap items-center gap-2">
+            <Reveal className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4">
               {game.genres.slice(0, 3).map((genre) => (
                 <Chip key={genre.id} href={`/browse?genres=${genre.slug}`}>
                   {genre.name}
@@ -305,10 +385,31 @@ function GameHero({ game }: { game: GameDetail }) {
             <TextReveal
               as="h1"
               text={game.name}
-              className="font-display text-[clamp(2rem,6.5vw,4rem)] font-black leading-[1.02] tracking-[-0.04em]"
+              className="font-display text-[clamp(1.75rem,6.5vw,4rem)] font-black leading-[1.02] tracking-[-0.04em]"
             />
 
-            <Reveal delay={0.12} className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <Reveal delay={0.1} className="mt-3">
+              <StudioCredit developers={game.developers} publishers={game.publishers} />
+            </Reveal>
+
+            {/* Score, release and popularity in one scannable row — the three
+                things that decide whether someone reads any further. */}
+            <Reveal delay={0.14} className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2.5">
+              {game.metacritic !== null && (
+                <span className="flex items-center gap-2">
+                  <ScorePill score={game.metacritic} />
+                  <span className="text-xs text-faint">Critics</span>
+                </span>
+              )}
+              {game.rating > 0 && (
+                <span className="flex items-center gap-1.5 text-sm text-muted">
+                  <Star size={14} className="fill-gold text-gold" />
+                  <span className="font-semibold text-text tabular-nums">
+                    {game.rating.toFixed(1)}
+                  </span>
+                  <span className="text-faint">/5</span>
+                </span>
+              )}
               <span className="flex items-center gap-2 text-sm text-muted">
                 <CalendarDays size={15} className="text-faint" />
                 {releaseLabelLong(game)}
@@ -320,7 +421,7 @@ function GameHero({ game }: { game: GameDetail }) {
             {/* Only worth showing while a dated release is still ahead. */}
             {game.released && isUnreleased(game) && (
               <Reveal delay={0.18}>
-                <Countdown date={game.released} className="mt-6" />
+                <Countdown date={game.released} className="mt-5" />
               </Reveal>
             )}
           </div>
@@ -461,17 +562,12 @@ function GameSidebar({ game }: { game: GameDetail }) {
           },
         ]
       : []),
-    ...(game.ageRatings.length
-      ? [
-          {
-            label: game.ageRatings.length > 1 ? "Age ratings" : "Age rating",
-            value: game.ageRatings.map((r) => `${r.organization} ${r.rating}`).join(" · "),
-            icon: <ShieldCheck size={14} />,
-          },
-        ]
-      : game.esrb
-        ? [{ label: "Age rating", value: game.esrb, icon: <ShieldCheck size={14} /> }]
-        : []),
+    // Ratings get their own panel below when IGDB has content descriptors,
+    // since the descriptors are the half people actually want. This row is the
+    // fallback for records that only carry the bare rating.
+    ...(game.ageRatings.length === 0 && game.esrb
+      ? [{ label: "Age rating", value: game.esrb, icon: <ShieldCheck size={14} /> }]
+      : []),
     ...(game.languages.length
       ? [
           {
@@ -492,6 +588,9 @@ function GameSidebar({ game }: { game: GameDetail }) {
           },
         ]
       : []),
+    // `popScore` is deliberately not shown: IGDB returns it as a normalised
+    // float far below 1, which is meaningful for ordering shelves and search
+    // but answers no question a reader would ask. It ranks, it doesn't display.
     ...(game.added
       ? [
           {
@@ -561,6 +660,15 @@ function GameSidebar({ game }: { game: GameDetail }) {
           ))}
         </dl>
       </Reveal>
+
+      {game.ageRatings.length > 0 && (
+        <Reveal delay={0.09} className="glass rounded-2xl p-5">
+          <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+            {game.ageRatings.length > 1 ? "Age ratings" : "Age rating"}
+          </h2>
+          <AgeRatingPanel ratings={game.ageRatings} />
+        </Reveal>
+      )}
 
       {game.parentPlatforms.length > 0 && (
         <Reveal delay={0.12} className="glass rounded-2xl p-5">

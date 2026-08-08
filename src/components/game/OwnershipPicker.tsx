@@ -9,15 +9,14 @@
  * instant rather than waiting on a round-trip.
  */
 
-import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Check, Library, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BrandIcon } from "@/components/brand/BrandIcon";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
-import { useClickOutside, useEscapeKey } from "@/hooks";
+import { Popover } from "@/components/ui/Popover";
 import { OWNERSHIP_PLATFORMS } from "@/lib/games/stores-catalog";
 import { cn } from "@/lib/utils/cn";
 import type { GameSummary } from "@/lib/games/types";
@@ -36,10 +35,8 @@ export function OwnershipPicker({
 
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<string[] | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useClickOutside(ref, () => setOpen(false), open);
-  useEscapeKey(() => setOpen(false), open);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
 
   const owned = pending ?? ownershipOf(game.id);
 
@@ -72,11 +69,13 @@ export function OwnershipPicker({
   };
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
+    <div className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
+        aria-haspopup="dialog"
         className={cn(
           "inline-flex min-h-12 items-center gap-2 rounded-full border px-5 text-sm font-semibold transition-all duration-300 active:scale-[0.97]",
           owned.length > 0
@@ -98,46 +97,42 @@ export function OwnershipPicker({
         )}
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="glass glass-blur absolute left-0 top-[calc(100%+8px)] z-40 w-64 origin-top-left overflow-hidden rounded-2xl p-1.5"
-          >
-            <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
-              Where do you own it?
-            </p>
-            <ul className="max-h-72 overflow-y-auto overscroll-contain">
-              {OWNERSHIP_PLATFORMS.map((platform) => {
-                const active = owned.includes(platform.slug);
-                return (
-                  <li key={platform.slug}>
-                    <button
-                      type="button"
-                      onClick={() => choose(platform.slug)}
-                      className={cn(
-                        "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
-                        active ? "bg-mint/12 text-text" : "text-muted hover:bg-white/6 hover:text-text",
-                      )}
-                    >
-                      {platform.icon ? (
-                        <BrandIcon name={platform.icon} size={15} title={null} tinted={active} />
-                      ) : (
-                        <Plus size={15} className="text-faint" />
-                      )}
-                      <span className="flex-1">{platform.name}</span>
-                      {active && <Check size={14} className="text-mint" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Popover
+        open={open}
+        onClose={close}
+        anchorRef={triggerRef}
+        width={264}
+        label="Where do you own this game?"
+      >
+        <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+          Where do you own it?
+        </p>
+        <ul className="max-h-[min(60vh,18rem)] overflow-y-auto overscroll-contain">
+          {OWNERSHIP_PLATFORMS.map((platform) => {
+            const active = owned.includes(platform.slug);
+            return (
+              <li key={platform.slug}>
+                <button
+                  type="button"
+                  onClick={() => choose(platform.slug)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
+                    active ? "bg-mint/12 text-text" : "text-muted hover:bg-white/6 hover:text-text",
+                  )}
+                >
+                  {platform.icon ? (
+                    <BrandIcon name={platform.icon} size={15} title={null} tinted={active} />
+                  ) : (
+                    <Plus size={15} className="text-faint" />
+                  )}
+                  <span className="flex-1">{platform.name}</span>
+                  {active && <Check size={14} className="text-mint" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Popover>
     </div>
   );
 }

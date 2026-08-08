@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { igdbConfigured, igdbSearchAll } from "@/lib/games/providers/igdb";
 import { searchGames } from "@/lib/games/source";
 
 /**
@@ -7,27 +8,51 @@ import { searchGames } from "@/lib/games/source";
  * Exists so provider credentials stay server-side — the palette is a client
  * component and must not hold them. Responses are cached briefly at the edge:
  * repeated keystrokes across users hit the same popular prefixes constantly.
+ *
+ * When IGDB is available this searches games, characters and companies
+ * together, because "Kratos" and "FromSoftware" are questions the game index
+ * alone cannot answer. Without IGDB it falls back to the provider chain's game
+ * search, which is all Steam can offer.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
 
   if (query.length < 2) {
-    return NextResponse.json({ results: [], source: "unavailable" });
+    return NextResponse.json({ results: [], hits: [], source: "unavailable" });
   }
 
+  const headers = {
+    "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+  };
+
   try {
+    if (igdbConfigured()) {
+      const hits = await igdbSearchAll(query);
+      if (hits.length > 0) {
+        return NextResponse.json({ hits, source: "igdb" }, { headers });
+      }
+    }
+
+    // Either IGDB isn't configured or it genuinely found nothing; the chain
+    // gives the honest answer either way.
     const { data, source } = await searchGames(query, 8);
     return NextResponse.json(
-      { results: data.results, source },
       {
-        headers: {
-          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-        },
+        hits: data.results.map((game) => ({
+          kind: "game" as const,
+          id: game.id,
+          name: game.name,
+          slug: game.slug,
+          subtitle: game.genres[0]?.name ?? null,
+          image: game.image,
+        })),
+        source,
       },
+      { headers },
     );
   } catch (err) {
     console.error("[api/search] failed", err);
-    return NextResponse.json({ results: [], source: "unavailable" }, { status: 200 });
+    return NextResponse.json({ hits: [], source: "unavailable" }, { status: 200 });
   }
 }

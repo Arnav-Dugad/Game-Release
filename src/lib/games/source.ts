@@ -25,7 +25,7 @@
  * the data and surface an outage state truthfully.
  */
 
-import { igdbProvider, igdbTotalGames } from "./providers/igdb";
+import { igdbProvider, igdbSpotlight, igdbTotalGames } from "./providers/igdb";
 import { enrichWithSteam, steamProvider } from "./providers/steam";
 import type { GameProvider } from "./providers/types";
 import type {
@@ -148,6 +148,22 @@ export async function getUpcoming(
     provider.upcoming(pageSize, page, filters),
   );
   return result ?? { data: emptyPage(page), source: UNAVAILABLE };
+}
+
+/**
+ * The homepage hero shelf.
+ *
+ * Deliberately bypasses the provider chain: this is IGDB or nothing. The hero
+ * autoplays trailers over key art, and Steam list queries carry neither, so a
+ * chain fallback here would silently turn the site's front door into a row of
+ * static PC capsules. An empty hero is the honest outcome, and the page below
+ * it still fills from the chain as usual.
+ */
+export async function getSpotlight(limit = 6): Promise<Sourced<GameSummary[]>> {
+  const data = await igdbSpotlight(limit);
+  return data && data.length > 0
+    ? { data, source: "igdb" }
+    : { data: [], source: UNAVAILABLE };
 }
 
 export async function getTrending(pageSize = 12): Promise<Sourced<GameSummary[]>> {

@@ -16,6 +16,7 @@ import {
   getNewReleases,
   getTopRated,
   getTotalGames,
+  getSpotlight,
   getTrending,
   getUpcoming,
   isDegraded,
@@ -26,22 +27,26 @@ import { hueFromString } from "@/lib/utils/format";
 export const revalidate = 3600;
 
 export default async function HomePage() {
-  // One await point: these four queries are independent and must not waterfall.
-  const [upcoming, trending, topRated, newReleases, genres, totalGames] = await Promise.all([
-    getUpcoming(18),
-    getTrending(14),
-    getTopRated(10),
-    getNewReleases(14),
-    getGenres(),
-    getTotalGames(),
-  ]);
+  // One await point: these queries are independent and must not waterfall.
+  const [spotlight, upcoming, trending, topRated, newReleases, genres, totalGames] =
+    await Promise.all([
+      getSpotlight(6),
+      getUpcoming(18),
+      getTrending(14),
+      getTopRated(10),
+      getNewReleases(14),
+      getGenres(),
+      getTotalGames(),
+    ]);
 
   const source = upcoming.source;
   const featured = upcoming.data.results;
 
   return (
     <>
-      <CinematicHero games={featured} />
+      {/* IGDB-only, and only titles that actually have a trailer to play.
+          Falls back to the upcoming shelf so the page never opens on a void. */}
+      <CinematicHero games={spotlight.data.length > 0 ? spotlight.data : featured} />
 
       {source === "unavailable" && (
         <Container className="pt-8">
