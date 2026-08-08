@@ -112,6 +112,11 @@ export interface GameSummary {
   genres: Ref[];
   screenshots: string[];
   esrb: string | null;
+  /**
+   * A single trailer, carried on the summary so list views can autoplay one
+   * without fetching the full detail record. Null when the provider has none.
+   */
+  heroTrailer: Trailer | null;
   /** Median hours to complete, per RAWG. */
   playtime: number;
   /** RAWG's popularity signal — how many users have it in a library. */

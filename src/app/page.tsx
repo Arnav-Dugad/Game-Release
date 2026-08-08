@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Database, Flame, Trophy } from "lucide-react";
-import { HeroShowcase } from "@/components/game/HeroShowcase";
-import { GameRail } from "@/components/game/GameRail";
+import { CinematicHero } from "@/components/home/CinematicHero";
+import { NetflixRow } from "@/components/home/NetflixRow";
 import { GameGrid } from "@/components/game/GameGrid";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
@@ -18,6 +18,7 @@ import {
   getTotalGames,
   getTrending,
   getUpcoming,
+  isDegraded,
 } from "@/lib/games/source";
 import { hueFromString } from "@/lib/utils/format";
 
@@ -40,11 +41,11 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroShowcase games={featured} />
+      <CinematicHero games={featured} />
 
       {source === "unavailable" && (
         <Container className="pt-8">
-          <DataSourceNotice source={source} />
+          <DataSourceNotice source={source} degraded={isDegraded(source)} />
         </Container>
       )}
 
@@ -67,7 +68,7 @@ export default async function HomePage() {
           />
         </Container>
         <div className="mt-7">
-          <GameRail games={featured} priorityCount={3} />
+          <NetflixRow games={featured} priorityCount={3} />
         </div>
       </Section>
 
@@ -81,7 +82,7 @@ export default async function HomePage() {
           />
         </Container>
         <div className="mt-7">
-          <GameRail games={trending.data} />
+          <NetflixRow games={trending.data} />
         </div>
       </Section>
 
@@ -111,7 +112,7 @@ export default async function HomePage() {
           />
         </Container>
         <div className="mt-7">
-          <GameRail games={newReleases.data} />
+          <NetflixRow games={newReleases.data} />
         </div>
       </Section>
 

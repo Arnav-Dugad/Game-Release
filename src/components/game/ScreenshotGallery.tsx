@@ -72,8 +72,6 @@ export function ScreenshotGallery({
             <button
               type="button"
               onClick={() => setOpenAt(i)}
-              data-cursor="view"
-              data-cursor-label="Expand"
               aria-label={`View screenshot ${i + 1} of ${shots.length}`}
               className="group relative block aspect-video w-full overflow-hidden rounded-xl border border-line bg-panel transition-colors duration-300 fine:hover:border-line-strong"
             >

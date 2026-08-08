@@ -65,21 +65,70 @@ export function igdbConfigured(): boolean {
 let tokenCache: { value: string; expiresAt: number } | null = null;
 let tokenInFlight: Promise<string> | null = null;
 
-async function fetchToken(clientId: string, clientSecret: string): Promise<string> {
-  const url = new URL(TOKEN_URL);
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("client_secret", clientSecret);
-  url.searchParams.set("grant_type", "client_credentials");
+/**
+ * How long Next may reuse a cached token response.
+ *
+ * Twitch client-credentials tokens live for weeks, so this is extremely
+ * conservative; freshness is really governed by `tokenCache` below, which
+ * refreshes a minute before actual expiry.
+ */
+const TOKEN_CACHE_SECONDS = 3000;
 
-  const res = await fetch(url, {
+/**
+ * Twitch distinguishes its two credential failures, and the difference is the
+ * single most useful thing to know when the site goes quiet:
+ *
+ *   400 "invalid client"        → the client id is wrong or the app was deleted
+ *   403 "invalid client secret" → the id is fine, the secret is wrong/rotated
+ *
+ * Both used to surface as a bare status code, so the message is preserved here
+ * and mapped to an actionable hint by `igdbDiagnostics`.
+ *
+ * `refresh` busts the cache entry after a 401. It is part of the URL rather
+ * than the body because the URL is what makes this a distinct cache key.
+ */
+async function fetchToken(
+  clientId: string,
+  clientSecret: string,
+  refresh = 0,
+): Promise<string> {
+  const res = await fetch(refresh > 0 ? `${TOKEN_URL}?refresh=${refresh}` : TOKEN_URL, {
     method: "POST",
-    cache: "no-store",
+    // Form-encoded body is Twitch's documented form for this grant.
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+    }),
+    /*
+     * Deliberately cached, not `no-store`.
+     *
+     * `/game/[slug]` is statically prerendered, and schema negotiation forces a
+     * token exchange outside any `unstable_cache` boundary. A `no-store` fetch
+     * opts the request out of caching "even if Request-time APIs are not
+     * detected", which promotes the static route to dynamic *at runtime* — a
+     * hard error in Next 16, so every affected detail page returned a 500.
+     *
+     * Caching is opt-in and covers POST with credentials, so `force-cache` plus
+     * a lifetime is the documented way to make this request static-safe. It
+     * also stops a cold lambda re-authenticating on every render.
+     */
+    cache: "force-cache",
+    next: { revalidate: TOKEN_CACHE_SECONDS, tags: ["igdb-token"] },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`[igdb] token request failed: ${res.status}`);
+
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((body: { message?: string }) => body?.message ?? "")
+      .catch(() => "");
+    throw new TokenError(res.status, detail);
+  }
 
   const json = (await res.json()) as { access_token?: string; expires_in?: number };
-  if (!json.access_token) throw new Error("[igdb] token response had no access_token");
+  if (!json.access_token) throw new TokenError(res.status, "response had no access_token");
 
   tokenCache = {
     value: json.access_token,
@@ -88,17 +137,39 @@ async function fetchToken(clientId: string, clientSecret: string): Promise<strin
   return json.access_token;
 }
 
-async function getToken(): Promise<string> {
+/** Carries Twitch's status and message so callers can explain the failure. */
+export class TokenError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: string,
+  ) {
+    super(`[igdb] token request failed: ${status}${detail ? ` — ${detail}` : ""}`);
+    this.name = "TokenError";
+  }
+}
+
+/** Increments on every forced refresh so each retry is its own cache entry. */
+let tokenGeneration = 0;
+
+async function getToken(forceRefresh = false): Promise<string> {
   const creds = credentials();
   if (!creds) throw new Error("[igdb] not configured");
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.value;
+
+  if (forceRefresh) {
+    tokenCache = null;
+    tokenGeneration += 1;
+  } else if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) {
+    return tokenCache.value;
+  }
 
   // Collapse concurrent refreshes so a cold start doesn't fire one token
   // request per in-flight render.
   if (!tokenInFlight) {
-    tokenInFlight = fetchToken(creds.clientId, creds.clientSecret).finally(() => {
-      tokenInFlight = null;
-    });
+    tokenInFlight = fetchToken(creds.clientId, creds.clientSecret, tokenGeneration).finally(
+      () => {
+        tokenInFlight = null;
+      },
+    );
   }
   return tokenInFlight;
 }
@@ -106,6 +177,80 @@ async function getToken(): Promise<string> {
 /* ---------------------------------------------------------------------------
  * Transport
  * ------------------------------------------------------------------------ */
+
+/** Carries the HTTP status so callers can tell *why* a query failed. */
+export class IgdbHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly endpoint: string,
+    readonly detail: string,
+  ) {
+    super(`[igdb] ${endpoint} → ${status} ${detail.slice(0, 240)}`);
+    this.name = "IgdbHttpError";
+  }
+}
+
+/*
+ * Rate limiting.
+ *
+ * IGDB's free tier allows roughly four requests a second and answers anything
+ * above that with a 429. Nothing here used to bound concurrency, so a single
+ * homepage render (six parallel queries, each expanding covers and platforms)
+ * or a `generateStaticParams` build sweep would burst straight through the
+ * ceiling. Every 429 then surfaced as "IGDB can't answer", and the resolver
+ * fell through to Steam — which is exactly the "everything is from Steam"
+ * symptom, with working credentials the whole time.
+ *
+ * This is per-instance, not global, so it cannot guarantee the account-wide
+ * rate. It removes the self-inflicted bursts, which are the dominant cause;
+ * `retryAfter` handles whatever still slips through.
+ */
+const MAX_CONCURRENT = 3;
+const MIN_SPACING_MS = 260;
+
+let inFlight = 0;
+let nextSlotAt = 0;
+const waiting: Array<() => void> = [];
+
+function pump() {
+  while (inFlight < MAX_CONCURRENT && waiting.length > 0) {
+    inFlight += 1;
+    waiting.shift()!();
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function withRateLimit<T>(run: () => Promise<T>): Promise<T> {
+  await new Promise<void>((resolve) => {
+    waiting.push(resolve);
+    pump();
+  });
+
+  // Space request *starts* so a burst of permitted-concurrency calls still
+  // can't exceed the per-second ceiling.
+  const now = Date.now();
+  const startAt = Math.max(now, nextSlotAt);
+  nextSlotAt = startAt + MIN_SPACING_MS;
+  if (startAt > now) await sleep(startAt - now);
+
+  try {
+    return await run();
+  } finally {
+    inFlight -= 1;
+    pump();
+  }
+}
+
+/** How long to wait before retrying a 429, honouring Retry-After when sent. */
+function retryDelayMs(res: Response, attempt: number): number {
+  const header = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(header) && header > 0) return Math.min(header * 1000, 4000);
+  // Otherwise back off geometrically from the spacing interval.
+  return Math.min(MIN_SPACING_MS * 2 ** attempt, 4000);
+}
+
+const MAX_ATTEMPTS = 3;
 
 async function rawQuery<T>(endpoint: string, body: string): Promise<T> {
   const creds = credentials();
@@ -121,24 +266,36 @@ async function rawQuery<T>(endpoint: string, body: string): Promise<T> {
         Accept: "application/json",
       },
       body,
-      cache: "no-store",
+      // Not `no-store`: see `fetchToken`. Caching is opt-in, so an uncached
+      // POST is still fetched every time — without opting the whole route out
+      // of static rendering. `queryFor` provides the real caching layer.
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-  let res = await run(await getToken());
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const res = await withRateLimit(async () => {
+      let response = await run(await getToken());
+      // A revoked or expired token reads as 401; force a fresh one and retry.
+      if (response.status === 401) {
+        response = await run(await getToken(true));
+      }
+      return response;
+    });
 
-  // A revoked or expired token reads as 401; drop it and retry once.
-  if (res.status === 401) {
-    tokenCache = null;
-    res = await run(await getToken());
+    if (res.status === 429 && attempt < MAX_ATTEMPTS - 1) {
+      await sleep(retryDelayMs(res, attempt));
+      continue;
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new IgdbHttpError(res.status, endpoint, detail);
+    }
+
+    return (await res.json()) as T;
   }
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`[igdb] ${endpoint} → ${res.status} ${detail.slice(0, 240)}`);
-  }
-
-  return (await res.json()) as T;
+  throw new IgdbHttpError(429, endpoint, "rate limited after retries");
 }
 
 /** One cached wrapper per TTL bucket; arguments form the rest of the key. */
@@ -168,6 +325,16 @@ const queryFor = (() => {
  * per server lifetime. An empty array is always the final candidate, meaning
  * "skip this data entirely" — losing one optional field is infinitely better
  * than failing every query.
+ *
+ * Only a 400 answers the question being asked. IGDB rejects an unknown field
+ * with 400, so that genuinely means "this spelling is gone, try the next one".
+ * Every other failure — 429, 5xx, a timeout — says nothing about the schema.
+ * Treating those as rejection too was silently catastrophic: under rate
+ * limiting all three candidates "failed", the empty set won, and the client
+ * concluded IGDB had dropped `release_dates` and `age_ratings` entirely. Those
+ * fields were then stripped from every query for the life of the server, so
+ * release dates and age ratings vanished site-wide until the next deploy.
+ * Rethrowing instead lets `schema()` discard the attempt and probe again.
  */
 async function negotiate(label: string, candidates: string[][]): Promise<string[]> {
   for (const fields of candidates) {
@@ -178,8 +345,9 @@ async function negotiate(label: string, candidates: string[][]): Promise<string[
     try {
       await rawQuery("games", `fields ${fields.join(",")};\nlimit 1;`);
       return fields;
-    } catch {
-      // Try the next spelling.
+    } catch (err) {
+      if (err instanceof IgdbHttpError && err.status === 400) continue;
+      throw err;
     }
   }
   return [];
@@ -257,6 +425,10 @@ const CORE_SUMMARY = [
   "total_rating_count",
   "hypes",
   "status",
+  // Needed by the homepage hero, which autoplays a trailer straight from a
+  // list query rather than fetching each game's full record.
+  "videos.video_id",
+  "videos.name",
 ];
 
 const CORE_DETAIL = [
@@ -265,8 +437,6 @@ const CORE_DETAIL = [
   "storyline",
   "url",
   "artworks.image_id",
-  "videos.video_id",
-  "videos.name",
   "themes.name",
   "themes.slug",
   "game_modes.name",
@@ -557,6 +727,21 @@ function mapAgeRatings(game: IgdbGame): AgeRating[] {
 /** Drops cancelled titles, which IGDB keeps in the index with status 6. */
 const CANCELLED = 6;
 
+/** IGDB hosts no media itself — `video_id` is always a YouTube id. */
+function toTrailers(game: IgdbGame): Trailer[] {
+  return (game.videos ?? [])
+    .filter((video) => video.video_id)
+    .slice(0, 6)
+    .map((video, index) => ({
+      id: index,
+      name: video.name?.trim() || "Trailer",
+      kind: "youtube" as const,
+      youtubeId: video.video_id!,
+      preview: `https://i.ytimg.com/vi/${video.video_id}/hqdefault.jpg`,
+      url: `https://www.youtube.com/watch?v=${video.video_id}`,
+    }));
+}
+
 function mapSummary(game: IgdbGame): GameSummary {
   const release = resolveRelease(game);
   const ratings = mapAgeRatings(game);
@@ -580,6 +765,7 @@ function mapSummary(game: IgdbGame): GameSummary {
       .map((shot) => igdbImage(shot.image_id, "screenshot_huge"))
       .filter((url): url is string => Boolean(url)),
     esrb: ratings.find((r) => r.organization.toUpperCase().includes("ESRB"))?.rating ?? null,
+    heroTrailer: toTrailers(game).at(0) ?? null,
     playtime: 0,
     // `hypes` counts pre-release anticipation, `total_rating_count` post-release
     // engagement. Either is a reasonable popularity proxy for its lifecycle stage.
@@ -599,17 +785,7 @@ function mapDetail(game: IgdbGame): GameDetail {
         name: entry.company!.name,
       }));
 
-  const trailers: Trailer[] = (game.videos ?? [])
-    .filter((video) => video.video_id)
-    .slice(0, 6)
-    .map((video, index) => ({
-      id: index,
-      name: video.name?.trim() || "Trailer",
-      kind: "youtube" as const,
-      youtubeId: video.video_id!,
-      preview: `https://i.ytimg.com/vi/${video.video_id}/hqdefault.jpg`,
-      url: `https://www.youtube.com/watch?v=${video.video_id}`,
-    }));
+  const trailers = toTrailers(game);
 
   const description = [game.summary?.trim(), game.storyline?.trim()]
     .filter(Boolean)
@@ -843,6 +1019,52 @@ async function buildWhere(filters: BrowseFilters): Promise<string | null> {
   return clauses.join(" & ");
 }
 
+/** Strips punctuation and case so "Marvel's Spider-Man" matches "marvels spiderman". */
+function normalise(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Re-ranks IGDB search results against the query the reader actually typed.
+ *
+ * Scoring, strongest signal first: an exact title match, then a prefix match,
+ * then whole-word containment, then a loose substring. Popularity only breaks
+ * ties — it must never let a famous unrelated game outrank the precise answer,
+ * which is the usual failure mode of naive relevance sorting.
+ *
+ * Recognisable titles are additionally nudged up within a tier, because IGDB's
+ * index contains a long tail of near-identically-named shovelware.
+ */
+export function rankSearchResults(games: GameSummary[], query: string): GameSummary[] {
+  const q = normalise(query);
+  if (!q) return games;
+
+  const tierOf = (name: string): number => {
+    const n = normalise(name);
+    if (n === q) return 0;
+    if (n.startsWith(`${q} `) || n.startsWith(q)) return 1;
+    if (new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(n)) return 2;
+    if (n.includes(q)) return 3;
+    return 4;
+  };
+
+  return [...games]
+    .map((game, index) => ({ game, index, tier: tierOf(game.name) }))
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      // Within a tier, prefer titles people actually engage with…
+      const engagement = b.game.added - a.game.added;
+      if (engagement !== 0) return engagement;
+      // …then fall back to IGDB's own ordering rather than reshuffling.
+      return a.index - b.index;
+    })
+    .map((entry) => entry.game);
+}
+
 export const igdbProvider: GameProvider = {
   id: "igdb",
 
@@ -860,9 +1082,31 @@ export const igdbProvider: GameProvider = {
       if (where === null) return { results: [], count: 0, hasNext: false, page };
 
       const revalidate = filters.search ? TTL.search : TTL.list;
+      const term = filters.search?.trim();
+
+      if (term) {
+        // IGDB scores `search` internally and forbids combining it with `sort`,
+        // and its raw ordering routinely puts editions, bundles and loosely
+        // related titles above the obvious answer. Over-fetch, then re-rank
+        // locally against the actual query so the exact title wins.
+        const overFetch = Math.min(200, pageSize * 4);
+        const pool = await listGames(
+          { search: term, where, limit: overFetch },
+          revalidate,
+        );
+
+        const ranked = rankSearchResults(pool, term);
+        const start = (page - 1) * pageSize;
+        return {
+          results: ranked.slice(start, start + pageSize),
+          count: ranked.length,
+          hasNext: start + pageSize < ranked.length,
+          page,
+        };
+      }
+
       const results = await listGames(
         {
-          search: filters.search,
           where,
           sort: sortClause(filters.ordering),
           limit: pageSize,
@@ -871,12 +1115,12 @@ export const igdbProvider: GameProvider = {
         revalidate,
       );
 
-      // `search` scores rather than filters, so a total isn't meaningful there.
-      const count = filters.search
-        ? results.length + (page - 1) * pageSize
-        : await countGames(where, revalidate);
-
-      return { results, count, hasNext: results.length >= pageSize, page };
+      return {
+        results,
+        count: await countGames(where, revalidate),
+        hasNext: results.length >= pageSize,
+        page,
+      };
     } catch (err) {
       warn("browse", err);
       return null;
@@ -1069,6 +1313,87 @@ export async function igdbRecommend(input: {
     warn("recommend", err);
     return null;
   }
+}
+
+export interface IgdbDiagnostics {
+  ok: boolean;
+  configured: boolean;
+  /** Whether the Twitch OAuth exchange succeeded. */
+  authenticated: boolean;
+  /** Whether a real query returned rows. */
+  querying: boolean;
+  problem: string | null;
+  /** Plain-language next step, when something is wrong. */
+  hint: string | null;
+}
+
+/**
+ * Reports exactly where the IGDB pipeline breaks.
+ *
+ * Deliberately never returns the credentials themselves — only whether each
+ * stage succeeded, plus an actionable hint. This exists because a silent
+ * provider failure is close to undiagnosable from a deployed site otherwise.
+ */
+export async function igdbDiagnostics(): Promise<IgdbDiagnostics> {
+  const base: IgdbDiagnostics = {
+    ok: false,
+    configured: false,
+    authenticated: false,
+    querying: false,
+    problem: null,
+    hint: null,
+  };
+
+  if (!igdbConfigured()) {
+    return {
+      ...base,
+      problem: "IGDB_CLIENT_ID and/or IGDB_CLIENT_SECRET are not set.",
+      hint: "Add both to your environment (Vercel → Settings → Environment Variables), then redeploy.",
+    };
+  }
+
+  try {
+    await getToken();
+  } catch (err) {
+    if (err instanceof TokenError) {
+      const hint =
+        err.status === 403
+          ? "The client id is valid but the secret is wrong — most likely it was rotated. Generate a new secret at dev.twitch.tv/console/apps and update IGDB_CLIENT_SECRET, then redeploy."
+          : err.status === 400
+            ? "Twitch doesn't recognise this client id. Check IGDB_CLIENT_ID matches your app at dev.twitch.tv/console/apps."
+            : "Twitch rejected the token request. Check the credentials and try again shortly.";
+      return { ...base, configured: true, problem: err.message, hint };
+    }
+    return {
+      ...base,
+      configured: true,
+      problem: err instanceof Error ? err.message : String(err),
+      hint: "Couldn't reach Twitch to authenticate. This is usually transient.",
+    };
+  }
+
+  try {
+    const rows = await rawQuery<unknown[]>("games", "fields name; limit 1;");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return {
+        ...base,
+        configured: true,
+        authenticated: true,
+        problem: "Authenticated, but a test query returned no rows.",
+        hint: "The credentials work; IGDB may be rate-limiting. Try again shortly.",
+      };
+    }
+  } catch (err) {
+    return {
+      ...base,
+      configured: true,
+      authenticated: true,
+      problem: err instanceof Error ? err.message : String(err),
+      hint: "Authentication works but queries are failing — likely a rate limit or an API change.",
+    };
+  }
+
+  return { ok: true, configured: true, authenticated: true, querying: true, problem: null, hint: null };
 }
 
 function warn(operation: string, err: unknown) {

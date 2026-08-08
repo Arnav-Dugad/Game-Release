@@ -46,8 +46,6 @@ export function GameCard({
     <TiltCard className={cn("rounded-2xl", className)} intensity={7} scale={1.03}>
       <Link
         href={`/game/${game.slug}`}
-        data-cursor="view"
-        data-cursor-label="View"
         className={cn(
           "group relative block w-full overflow-hidden rounded-2xl border border-line bg-panel",
           "transition-[border-color,box-shadow] duration-500",

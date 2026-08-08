@@ -8,7 +8,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { getGenres, getPlatforms, getUpcoming } from "@/lib/games/source";
+import { getGenres, getPlatforms, getUpcoming, isDegraded } from "@/lib/games/source";
 import type { SortKey } from "@/lib/games/types";
 
 export const revalidate = 3600;
@@ -66,7 +66,7 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
       <Container className="py-8 lg:py-12">
         {source === "unavailable" && (
           <div className="mb-7">
-            <DataSourceNotice source={source} />
+            <DataSourceNotice source={source} degraded={isDegraded(source)} />
           </div>
         )}
 

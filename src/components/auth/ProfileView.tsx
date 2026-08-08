@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, LogOut, MessageSquare, Pencil, Star, Bookmark } from "lucide-react";
+import { OwnedLibrary } from "./OwnedLibrary";
 import { PlayHistory } from "./PlayHistory";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
@@ -178,6 +179,14 @@ export function ProfileView() {
           </div>
         </Reveal>
       )}
+
+      <section id="library" className="mt-12 scroll-mt-28">
+        <h2 className="text-2xl font-bold sm:text-3xl">Games you own</h2>
+        <p className="mt-1.5 text-sm text-muted">
+          Your collection, grouped by where you bought it.
+        </p>
+        <OwnedLibrary />
+      </section>
 
       <section id="history" className="mt-12 scroll-mt-28">
         <h2 className="text-2xl font-bold sm:text-3xl">Play history</h2>

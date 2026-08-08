@@ -32,6 +32,7 @@ import type {
 import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { slugify, stripHtml } from "@/lib/utils/html";
 import { DETAIL_DEFAULTS } from "../detail";
+import { DEFAULT_STEAM_REGION, isValidRegion } from "../stores-catalog";
 
 const STORE = "https://store.steampowered.com/api";
 
@@ -347,6 +348,7 @@ function mapSummary(details: AppDetails): GameSummary | null {
       .map((shot) => https(shot.path_full ?? shot.path_thumbnail))
       .filter((url): url is string => Boolean(url)),
     esrb: ageLabel(details),
+    heroTrailer: trailersOf(details).at(0) ?? null,
     playtime: 0,
     added: details.recommendations?.total ?? 0,
   };
@@ -406,9 +408,18 @@ function mapDetail(details: AppDetails): GameDetail | null {
  * Fetch helpers
  * ------------------------------------------------------------------------ */
 
-async function fetchAppDetails(appid: number, revalidate: number): Promise<AppDetails | null> {
+async function fetchAppDetails(
+  appid: number,
+  revalidate: number,
+  /**
+   * Steam prices in the currency of whichever country code it's given, so this
+   * is effectively the currency selector. Validated by the caller against the
+   * known region list before it ever reaches the URL.
+   */
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<AppDetails | null> {
   const payload = await getJson<Record<string, { success?: boolean; data?: AppDetails }>>(
-    `${STORE}/appdetails?appids=${appid}&cc=us&l=english`,
+    `${STORE}/appdetails?appids=${appid}&cc=${encodeURIComponent(region)}&l=english`,
     revalidate,
   );
   const entry = payload?.[String(appid)];
@@ -687,10 +698,14 @@ export const steamProvider: GameProvider = {
  * what Steam uniquely has. A failed or slow Steam lookup returns the original
  * untouched, so enrichment can never degrade a page that already rendered.
  */
-export async function enrichWithSteam(base: GameDetail): Promise<GameDetail> {
+export async function enrichWithSteam(
+  base: GameDetail,
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<GameDetail> {
   if (!base.steamAppId) return base;
 
-  const details = await fetchAppDetails(base.steamAppId, TTL.detail);
+  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
+  const details = await fetchAppDetails(base.steamAppId, TTL.detail, safeRegion);
   if (!details) return base;
 
   const steamStore = {

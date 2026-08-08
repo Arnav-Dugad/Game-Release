@@ -225,7 +225,9 @@ export default async function OpengraphImage({
           }}
         >
           {cover ? (
-            // Satori renders to a static image; next/image has no role here.
+            // Satori rasterises this to a PNG on the server — there is no
+            // browser and no LCP here, so next/image has no role.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={cover}
               alt=""

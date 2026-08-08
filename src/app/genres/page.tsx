@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Container } from "@/components/ui/SectionHeading";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
 import { Stagger, StaggerItem } from "@/components/motion/Reveal";
-import { getGenres } from "@/lib/games/source";
+import { getGenres, isDegraded } from "@/lib/games/source";
 import { hueFromString } from "@/lib/utils/format";
 
 export const revalidate = 604800;
@@ -29,7 +29,7 @@ export default async function GenresPage() {
       <Container className="py-10 lg:py-14">
         {source === "unavailable" && (
           <div className="mb-8">
-            <DataSourceNotice source={source} />
+            <DataSourceNotice source={source} degraded={isDegraded(source)} />
           </div>
         )}
 

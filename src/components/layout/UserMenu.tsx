@@ -103,7 +103,7 @@ export function UserMenu() {
             <MenuLink href="/watchlist" icon={<Bookmark size={15} />} onClick={() => setOpen(false)}>
               Watchlist
             </MenuLink>
-            <MenuLink href="/profile#settings" icon={<Settings size={15} />} onClick={() => setOpen(false)}>
+            <MenuLink href="/settings" icon={<Settings size={15} />} onClick={() => setOpen(false)}>
               Settings
             </MenuLink>
             <button

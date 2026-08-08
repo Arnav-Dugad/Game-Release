@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { SiteChrome } from "@/components/layout/SiteChrome";
 import { Footer } from "@/components/layout/Footer";
+import { REGION_COOKIE } from "@/lib/preferences/PreferencesProvider";
 
 /**
  * Sora carries the display voice (tight, geometric, high contrast at large
@@ -68,7 +70,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Read here so the very first paint prices in the right currency.
+  const region = (await cookies()).get(REGION_COOKIE)?.value;
+
   return (
     <html lang="en" className={`${sora.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh-safe bg-bg text-text antialiased">
@@ -79,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
 
-        <Providers>
+        <Providers initialRegion={region}>
           <SiteChrome />
           <main id="main">{children}</main>
           <Footer />

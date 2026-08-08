@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Owns everything that frames the page: header, touch tab bar, search overlay,
- * scroll progress and the custom cursor.
+ * Owns everything that frames the page: header, touch tab bar, search overlay
+ * and scroll progress.
  *
  * Search-open state lives here because three separate surfaces trigger it — the
  * header button, the mobile Search tab, and the ⌘K shortcut.
@@ -12,7 +12,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Header } from "./Header";
 import { MobileTabBar } from "./MobileTabBar";
 import { SearchOverlay } from "./SearchOverlay";
-import { CustomCursor } from "@/components/motion/CustomCursor";
 import { ScrollProgress } from "@/components/motion/ScrollProgress";
 
 export function SiteChrome() {
@@ -51,7 +50,6 @@ export function SiteChrome() {
       <Header onOpenSearch={openSearch} />
       <MobileTabBar onOpenSearch={openSearch} />
       <SearchOverlay open={searchOpen} onClose={closeSearch} />
-      <CustomCursor />
     </>
   );
 }

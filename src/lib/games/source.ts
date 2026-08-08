@@ -39,15 +39,42 @@ import type {
 } from "./types";
 
 /**
- * Which providers answer list and detail queries, in order.
+ * Which providers answer list and detail queries.
  *
- * IGDB leads whenever it's configured — better coverage, better metadata.
- * Steam always follows it, both because it needs no credentials (so an
- * unconfigured deploy still gets live data) and because it's a genuine
- * fallback if a specific IGDB request fails.
+ * When IGDB is configured it is the *only* browsing source. Steam is
+ * deliberately not a fallback for a failing IGDB: its catalogue is the
+ * storefront's own promotional shelves, so silently substituting it turns the
+ * whole site into a list of whatever Steam is currently pushing — which reads
+ * as a broken product rather than as the outage it actually is. Letting IGDB
+ * failures surface as an honest "unavailable" state makes them diagnosable
+ * instead of invisible.
+ *
+ * Steam is still used for the two things IGDB genuinely lacks — live pricing
+ * and system requirements — via `enrichWithSteam` on the detail page.
+ *
+ * Steam only becomes a browsing source when IGDB has no credentials at all,
+ * which is a local-development convenience rather than a production path.
  */
 function activeChain(): GameProvider[] {
-  return [igdbProvider, steamProvider].filter((provider) => provider.isConfigured());
+  if (igdbProvider.isConfigured()) return [igdbProvider];
+  return [steamProvider];
+}
+
+/**
+ * Last-resort providers, tried only after every preferred one has failed.
+ *
+ * `isConfigured()` can only check that credentials are *present*, not that they
+ * still work — a rotated Twitch secret leaves IGDB configured but rejecting
+ * every request. Without this, that single failure mode empties the entire
+ * site. Steam is a poor substitute for IGDB's catalogue, so it never competes
+ * for a request that IGDB can serve; it exists here purely so a total IGDB
+ * outage degrades to a smaller live catalogue instead of to nothing.
+ *
+ * This is not silent: every result carries the provider that produced it, and
+ * `SourceAttribution` renders it, so a page served from the fallback says so.
+ */
+function fallbackChain(): GameProvider[] {
+  return igdbProvider.isConfigured() ? [steamProvider] : [];
 }
 
 /**
@@ -58,7 +85,7 @@ async function resolve<T>(
   operation: string,
   attempt: (provider: GameProvider) => Promise<T | null>,
 ): Promise<Sourced<T> | null> {
-  for (const provider of activeChain()) {
+  for (const provider of [...activeChain(), ...fallbackChain()]) {
     try {
       const data = await attempt(provider);
       if (data !== null && data !== undefined) {
@@ -92,6 +119,19 @@ const UNAVAILABLE: DataSource = "unavailable";
 /** Which provider would answer right now, without performing a request. */
 export function dataMode(): DataSource {
   return activeChain()[0]?.id ?? UNAVAILABLE;
+}
+
+/**
+ * True when a result came from the fallback rather than the intended source.
+ *
+ * IGDB being configured but a page arriving from Steam means the credentials
+ * are present and failing — the exact state that once turned the whole site
+ * into a list of Steam promotions with no explanation. Surfacing it lets the
+ * UI say so plainly instead of leaving the reader to wonder why the catalogue
+ * looks wrong.
+ */
+export function isDegraded(source: DataSource): boolean {
+  return source === "steam" && igdbProvider.isConfigured();
 }
 
 export async function browseGames(filters: BrowseFilters): Promise<Sourced<Page<GameSummary>>> {
@@ -132,7 +172,11 @@ export async function getNewReleases(pageSize = 12): Promise<Sourced<GameSummary
  * a miss in the active provider legitimately falls through to the next. That
  * also keeps older bookmarked URLs working after credentials are added.
  */
-export async function getGame(slug: string): Promise<Sourced<GameDetail> | null> {
+export async function getGame(
+  slug: string,
+  /** Steam country code, so prices render in the reader's currency. */
+  region?: string,
+): Promise<Sourced<GameDetail> | null> {
   const result = await resolve("detail", (provider) => provider.detail(slug));
   if (!result) return null;
 
@@ -142,7 +186,7 @@ export async function getGame(slug: string): Promise<Sourced<GameDetail> | null>
   // are worth having.
   if (result.source === "igdb" && result.data.steamAppId) {
     try {
-      return { ...result, data: await enrichWithSteam(result.data) };
+      return { ...result, data: await enrichWithSteam(result.data, region) };
     } catch (err) {
       console.warn(
         "[source] steam enrichment failed:",
@@ -166,11 +210,10 @@ export async function getRelated(
   preferred?: DataSource,
   limit = 8,
 ): Promise<GameSummary[]> {
+  const chain = [...activeChain(), ...fallbackChain()];
   const ordered = preferred
-    ? [...activeChain()].sort((a, b) =>
-        a.id === preferred ? -1 : b.id === preferred ? 1 : 0,
-      )
-    : activeChain();
+    ? chain.sort((a, b) => (a.id === preferred ? -1 : b.id === preferred ? 1 : 0))
+    : chain;
 
   for (const provider of ordered) {
     try {

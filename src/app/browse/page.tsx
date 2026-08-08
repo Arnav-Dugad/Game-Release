@@ -7,7 +7,7 @@ import { Container } from "@/components/ui/SectionHeading";
 import { Pagination } from "@/components/ui/Pagination";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
 import { Button } from "@/components/ui/Button";
-import { browseGames, getGenres, getPlatforms } from "@/lib/games/source";
+import { browseGames, getGenres, getPlatforms, isDegraded } from "@/lib/games/source";
 import type { SortKey } from "@/lib/games/types";
 
 export const revalidate = 3600;
@@ -58,7 +58,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
       <Container className="py-8 lg:py-12">
         {source === "unavailable" && (
           <div className="mb-7">
-            <DataSourceNotice source={source} />
+            <DataSourceNotice source={source} degraded={isDegraded(source)} />
           </div>
         )}
 

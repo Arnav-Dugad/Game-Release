@@ -16,16 +16,27 @@ import { useState } from "react";
 import { Play } from "lucide-react";
 import type { Trailer } from "@/lib/games/types";
 
-export function TrailerPlayer({ trailer }: { trailer: Trailer }) {
-  const [playing, setPlaying] = useState(false);
+export function TrailerPlayer({
+  trailer,
+  /**
+   * Starts immediately. Only ever set from the lightbox, which is opened by a
+   * deliberate click — so this never autoplays unprompted.
+   */
+  autoPlay = false,
+}: {
+  trailer: Trailer;
+  autoPlay?: boolean;
+}) {
+  const [playing, setPlaying] = useState(autoPlay);
 
   if (trailer.kind === "mp4" && trailer.url) {
     return (
       <video
         controls
-        preload="none"
+        autoPlay={autoPlay}
+        preload={autoPlay ? "auto" : "none"}
         poster={trailer.preview ?? undefined}
-        className="aspect-video w-full bg-black"
+        className="h-full w-full bg-black"
       >
         <source src={trailer.url} type="video/mp4" />
         Your browser can&rsquo;t play this video.
@@ -43,7 +54,7 @@ export function TrailerPlayer({ trailer }: { trailer: Trailer }) {
         title={trailer.name}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        className="aspect-video w-full border-0 bg-black"
+        className="h-full w-full border-0 bg-black"
       />
     );
   }
@@ -53,9 +64,7 @@ export function TrailerPlayer({ trailer }: { trailer: Trailer }) {
       type="button"
       onClick={() => setPlaying(true)}
       aria-label={`Play ${trailer.name}`}
-      data-cursor="view"
-      data-cursor-label="Play"
-      className="group relative block aspect-video w-full overflow-hidden bg-black"
+      className="group relative block h-full w-full overflow-hidden bg-black"
     >
       {trailer.preview && (
         <Image

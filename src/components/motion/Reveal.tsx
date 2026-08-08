@@ -112,6 +112,18 @@ interface StaggerProps {
   once?: boolean;
   amount?: number;
   as?: "div" | "ul" | "section";
+  /**
+   * Animate on mount instead of on scroll.
+   *
+   * Scroll-triggered reveals assume the user arrives above the content. That
+   * assumption breaks for anything rendered *after* a navigation — paginated
+   * grids especially, where the reader is already deep in the page. If the
+   * observer never fires, children stay at `opacity: 0` and the section looks
+   * empty rather than merely un-animated. Mount-based reveal removes that
+   * failure mode entirely, so it's the right choice wherever content arrives
+   * in response to a click.
+   */
+  onMount?: boolean;
 }
 
 /**
@@ -126,9 +138,28 @@ export function Stagger({
   once = true,
   amount = 0.15,
   as = "div",
+  onMount = false,
 }: StaggerProps) {
   const reduced = useReducedMotion();
   const Component = motion[as];
+
+  const orchestration = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: reduced ? 0 : gap,
+        delayChildren: delay,
+      },
+    },
+  };
+
+  if (onMount) {
+    return (
+      <Component className={className} initial="hidden" animate="visible" variants={orchestration}>
+        {children}
+      </Component>
+    );
+  }
 
   return (
     <Component
@@ -136,15 +167,7 @@ export function Stagger({
       initial="hidden"
       whileInView="visible"
       viewport={{ once, amount }}
-      variants={{
-        hidden: {},
-        visible: {
-          transition: {
-            staggerChildren: reduced ? 0 : gap,
-            delayChildren: delay,
-          },
-        },
-      }}
+      variants={orchestration}
     >
       {children}
     </Component>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import {
   Building2,
   CalendarDays,
@@ -12,6 +13,7 @@ import {
   Globe,
   Languages,
   Layers,
+  MonitorCog,
   ShieldCheck,
   Star,
   Tag,
@@ -21,11 +23,11 @@ import {
 import { GameCover } from "@/components/game/GameCover";
 import { Countdown } from "@/components/game/Countdown";
 import { GameRail } from "@/components/game/GameRail";
-import { PlatformList } from "@/components/game/PlatformIcons";
-import { ScreenshotGallery } from "@/components/game/ScreenshotGallery";
+import { PlatformIcons, PlatformList } from "@/components/game/PlatformIcons";
+import { MediaGallery } from "@/components/game/MediaGallery";
 import { CommunityLinks, StoreLinks } from "@/components/game/StoreLinks";
 import { ReviewSection } from "@/components/game/ReviewSection";
-import { TrailerPlayer } from "@/components/game/TrailerPlayer";
+import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { WatchButton } from "@/components/game/WatchButton";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
@@ -33,11 +35,13 @@ import { Button } from "@/components/ui/Button";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
 import { ExpandableText } from "@/components/ui/ExpandableText";
+import { Collapsible } from "@/components/ui/Collapsible";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
-import { getGame, getRelated, popularSlugs } from "@/lib/games/source";
+import { getGame, getRelated, popularSlugs, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
+import { REGION_COOKIE } from "@/lib/preferences/PreferencesProvider";
 import {
   compactNumber,
   isUnreleased,
@@ -94,7 +98,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function GamePage({ params }: { params: Params }) {
   const { slug } = await params;
-  const result = await getGame(slug);
+  // Read on the server so the price is right on the first paint rather than
+  // flipping currency after hydration.
+  const region = (await cookies()).get(REGION_COOKIE)?.value;
+  const result = await getGame(slug, region);
   if (!result) notFound();
 
   const { data: game, source } = result;
@@ -110,7 +117,7 @@ export default async function GamePage({ params }: { params: Params }) {
       <GameHero game={game} />
 
       <Container className="relative z-10 space-y-3 pb-2 pt-4">
-        <DataSourceNotice source={source} />
+        <DataSourceNotice source={source} degraded={isDegraded(source)} />
         <SourceAttribution source={source} />
       </Container>
 
@@ -127,6 +134,18 @@ export default async function GamePage({ params }: { params: Params }) {
             </Reveal>
           )}
 
+          {game.trailers.length > 0 && (
+            <section>
+              <Reveal>
+                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Trailers</h2>
+              </Reveal>
+              <MediaGallery
+                items={game.trailers.map((trailer) => ({ kind: "trailer" as const, trailer }))}
+                gameName={game.name}
+              />
+            </section>
+          )}
+
           {media.length > 0 && (
             <section>
               <Reveal>
@@ -134,31 +153,12 @@ export default async function GamePage({ params }: { params: Params }) {
                   {game.artworks.length > 0 ? "Screenshots & art" : "Screenshots"}
                 </h2>
               </Reveal>
-              <ScreenshotGallery screenshots={media} gameName={game.name} />
+              <MediaGallery
+                items={media.map((src) => ({ kind: "image" as const, src }))}
+                gameName={game.name}
+              />
             </section>
           )}
-
-          {game.trailers.length > 0 && (
-            <section>
-              <Reveal>
-                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Trailers</h2>
-              </Reveal>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {game.trailers.slice(0, 4).map((trailer) => (
-                  <Reveal key={trailer.id} blur={false}>
-                    <figure className="overflow-hidden rounded-2xl border border-line bg-panel">
-                      <TrailerPlayer trailer={trailer} />
-                      <figcaption className="px-4 py-3 text-sm text-muted">
-                        {trailer.name}
-                      </figcaption>
-                    </figure>
-                  </Reveal>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {game.requirements.length > 0 && <Requirements game={game} />}
 
           {game.expansions.length > 0 && (
             <Reveal>
@@ -191,6 +191,11 @@ export default async function GamePage({ params }: { params: Params }) {
               </div>
             </Reveal>
           )}
+
+          {/* Bulky, and relevant to a minority of readers — so it sits at the
+              end of the article, closed, rather than between the media and the
+              conversation about the game. */}
+          {game.requirements.length > 0 && <Requirements game={game} />}
 
           <section id="reviews">
             <ReviewSection game={game} />
@@ -267,6 +272,27 @@ function GameHero({ game }: { game: GameDetail }) {
             />
           </Reveal>
 
+          {/* Platform marks sit directly beside the poster — the two together
+              answer "what is this and can I play it?" before any text. */}
+          {game.parentPlatforms.length > 0 && (
+            <Reveal
+              delay={0.08}
+              className="hidden shrink-0 self-end pb-1 sm:block"
+            >
+              <ul className="flex flex-col gap-2.5">
+                {game.parentPlatforms.slice(0, 5).map((platform) => (
+                  <li
+                    key={platform.id}
+                    title={platform.name}
+                    className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white/[0.04] transition-colors hover:border-line-strong lg:h-11 lg:w-11"
+                  >
+                    <PlatformIcons platforms={[platform]} size={18} max={1} tinted />
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          )}
+
           <div className="min-w-0 flex-1">
             <Reveal className="mb-4 flex flex-wrap items-center gap-2">
               {game.genres.slice(0, 3).map((genre) => (
@@ -305,6 +331,7 @@ function GameHero({ game }: { game: GameDetail }) {
             column, which on a phone left no room for two buttons side by side. */}
         <Reveal delay={0.24} className="mt-7 flex flex-wrap items-center gap-3">
           <WatchButton game={game} variant="full" />
+          <OwnershipPicker game={game} />
           {game.website && (
             <Button
               href={game.website}
@@ -603,40 +630,47 @@ function GameSidebar({ game }: { game: GameDetail }) {
 }
 
 function Requirements({ game }: { game: GameDetail }) {
+  const platforms = game.requirements.map((req) => req.platform).join(", ");
+
   return (
     <Reveal>
-      <h2 className="mb-5 text-2xl font-bold sm:text-3xl">System requirements</h2>
-      <div className="space-y-4">
-        {game.requirements.map((req) => (
-          <div key={req.platform} className="overflow-hidden rounded-2xl border border-line">
-            <h3 className="border-b border-line bg-white/[0.03] px-4 py-3 text-sm font-semibold">
-              {req.platform}
-            </h3>
-            <div className="grid gap-px bg-line sm:grid-cols-2">
-              {req.minimum && (
-                <div className="bg-bg p-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint">
-                    Minimum
-                  </p>
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
-                    {req.minimum}
-                  </p>
-                </div>
-              )}
-              {req.recommended && (
-                <div className="bg-bg p-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint">
-                    Recommended
-                  </p>
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
-                    {req.recommended}
-                  </p>
-                </div>
-              )}
+      <Collapsible
+        title="System requirements"
+        subtitle={platforms}
+        icon={<MonitorCog size={17} />}
+      >
+        <div className="space-y-4">
+          {game.requirements.map((req) => (
+            <div key={req.platform} className="overflow-hidden rounded-xl border border-line">
+              <h3 className="border-b border-line bg-white/[0.03] px-4 py-3 text-sm font-semibold">
+                {req.platform}
+              </h3>
+              <div className="grid gap-px bg-line sm:grid-cols-2">
+                {req.minimum && (
+                  <div className="bg-bg p-4">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint">
+                      Minimum
+                    </p>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                      {req.minimum}
+                    </p>
+                  </div>
+                )}
+                {req.recommended && (
+                  <div className="bg-bg p-4">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint">
+                      Recommended
+                    </p>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                      {req.recommended}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Collapsible>
     </Reveal>
   );
 }

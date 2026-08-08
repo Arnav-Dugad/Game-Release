@@ -63,6 +63,13 @@ export interface WatchlistEntry {
   genreIds: number[];
   /** Platform family slugs the game is available on. */
   platformSlugs: string[];
+  /**
+   * Storefronts/platforms the user actually owns this on — e.g. ["steam",
+   * "playstation"]. Distinct from `platform`, which records where they *played*
+   * it: people routinely own a game somewhere they've never launched it, and
+   * own the same game in more than one place.
+   */
+  ownedOn: string[];
   /** Epoch ms. Written client-side so the list can sort before the server timestamp lands. */
   addedAt: number;
 }
@@ -163,6 +170,7 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     platform: null,
     startedAt: status === "playing" ? Date.now() : null,
     finishedAt: status === "played" ? Date.now() : null,
+    ownedOn: [],
     genreIds: game.genres.map((genre) => genre.id),
     platformSlugs: game.parentPlatforms.map((platform) => platform.slug),
     addedAt: Date.now(),
@@ -196,6 +204,24 @@ export async function setWatchStatus(
   if (status === "playing" && !current?.startedAt) patch.startedAt = Date.now();
   if (status === "played" && !current?.finishedAt) patch.finishedAt = Date.now();
   await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), patch);
+}
+
+/**
+ * Records where the user owns a game.
+ *
+ * Written as a whole array rather than an arrayUnion so removing an entry uses
+ * the same path as adding one, and so the caller's optimistic state and the
+ * stored value can never diverge in shape.
+ */
+export async function setOwnedOn(
+  uid: string,
+  gameId: number,
+  ownedOn: string[],
+): Promise<void> {
+  const db = requireDb();
+  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), {
+    ownedOn: [...new Set(ownedOn)],
+  });
 }
 
 /** Records which platform the user is playing a tracked game on. */
@@ -236,6 +262,7 @@ export function subscribeWatchlist(
           startedAt: data.startedAt ?? null,
           finishedAt: data.finishedAt ?? null,
           genreIds: data.genreIds ?? [],
+          ownedOn: data.ownedOn ?? [],
           platformSlugs: data.platformSlugs ?? [],
         };
       });

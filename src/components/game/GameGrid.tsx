@@ -26,7 +26,9 @@ export function GameGrid({
         className,
       )}
       gap={0.045}
-      amount={0.02}
+      // Grids are the main target of pagination and filtering, so they must
+      // never depend on where the reader happens to be scrolled.
+      onMount
     >
       {games.map((game, i) => (
         <StaggerItem key={game.id}>

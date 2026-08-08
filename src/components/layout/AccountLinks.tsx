@@ -16,13 +16,15 @@ const SIGNED_OUT = [
   { label: "Create account", href: "/signup" },
   { label: "Your watchlist", href: "/watchlist" },
   { label: "Your profile", href: "/profile" },
+  { label: "Settings", href: "/settings" },
 ];
 
 const SIGNED_IN = [
   { label: "Your watchlist", href: "/watchlist" },
+  { label: "Games you own", href: "/profile#library" },
   { label: "Play history", href: "/profile#history" },
   { label: "Your reviews", href: "/profile" },
-  { label: "Account settings", href: "/profile#settings" },
+  { label: "Settings", href: "/settings" },
 ];
 
 export function AccountLinks() {

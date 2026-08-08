@@ -24,6 +24,7 @@ import { useAuth } from "./AuthProvider";
 import {
   addToWatchlist,
   removeFromWatchlist,
+  setOwnedOn,
   setWatchPlatform,
   setWatchStatus,
   subscribeWatchlist,
@@ -43,6 +44,9 @@ interface WatchlistContextValue {
   setStatus: (gameId: number, status: WatchStatus) => Promise<void>;
   /** Records which platform the user is playing on. */
   setPlatform: (gameId: number, platform: string | null) => Promise<void>;
+  /** Records where the user owns the game. */
+  setOwnership: (gameId: number, ownedOn: string[]) => Promise<void>;
+  ownershipOf: (gameId: number) => string[];
   remove: (gameId: number) => Promise<void>;
 }
 
@@ -128,6 +132,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     [user, entries],
   );
 
+  const setOwnership = useCallback(
+    async (gameId: number, ownedOn: string[]) => {
+      if (!user) throw new Error("Sign in to track what you own.");
+      await setOwnedOn(user.uid, gameId, ownedOn);
+    },
+    [user],
+  );
+
+  const ownershipOf = useCallback(
+    (gameId: number) => entries.find((entry) => entry.gameId === gameId)?.ownedOn ?? [],
+    [entries],
+  );
+
   const setPlatform = useCallback(
     async (gameId: number, platform: string | null) => {
       if (!user) throw new Error("Sign in to use your watchlist.");
@@ -146,8 +163,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<WatchlistContextValue>(
-    () => ({ entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, remove }),
-    [entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, remove],
+    () => ({
+      entries,
+      loading,
+      isWatched,
+      statusOf,
+      toggle,
+      setStatus,
+      setPlatform,
+      setOwnership,
+      ownershipOf,
+      remove,
+    }),
+    [entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, setOwnership, ownershipOf, remove],
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

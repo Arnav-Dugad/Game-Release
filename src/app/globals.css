@@ -169,6 +169,19 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* The in-app opt-out from Settings, for people whose OS setting is off but
+     who still want this particular site to sit still. Set on <html> by
+     `PreferencesProvider`. */
+  [data-reduce-motion="true"],
+  [data-reduce-motion="true"] *,
+  [data-reduce-motion="true"] *::before,
+  [data-reduce-motion="true"] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ============================================================================
@@ -319,13 +332,6 @@
   .gpu {
     transform: translateZ(0);
     backface-visibility: hidden;
-  }
-
-  /* Set by <CustomCursor /> once it has actually mounted, so a failure to
-     mount can never leave the user with no cursor at all. */
-  .has-custom-cursor,
-  .has-custom-cursor * {
-    cursor: none !important;
   }
 
   .line-clamp-1-safe {
