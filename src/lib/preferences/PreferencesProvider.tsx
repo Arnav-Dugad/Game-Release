@@ -53,30 +53,36 @@ function writeRegionCookie(cc: string) {
   document.cookie = `${REGION_COOKIE}=${cc}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
-export function PreferencesProvider({
-  /** Region resolved from the cookie during SSR, so the first paint is correct. */
-  initialRegion = DEFAULT_STEAM_REGION,
-  children,
-}: {
-  initialRegion?: string;
-  children: ReactNode;
-}) {
-  const [region, setRegionState] = useState(initialRegion);
+/** The region the server would see, read from the browser's own cookie jar. */
+function readRegionCookie(): string | null {
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${REGION_COOKIE}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function PreferencesProvider({ children }: { children: ReactNode }) {
+  // Always starts at the default so server and client markup agree. The real
+  // value lands on mount, below.
+  const [region, setRegionState] = useState<string>(DEFAULT_STEAM_REGION);
   const [reduceMotion, setReduceMotionState] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Deferred a frame so nothing is written during the effect itself. The
-    // cookie already supplied the correct region during SSR, so this is only a
-    // backstop for when the cookie was cleared but localStorage survived.
+    // Deferred a frame so nothing is written during the effect itself.
+    //
+    // localStorage is the source of truth for this device; the cookie is the
+    // mirror the server reads. Preferring localStorage and then re-asserting
+    // the cookie converges the two, and reading the cookie as a fallback covers
+    // a browser that kept cookies but cleared site storage.
     const frame = requestAnimationFrame(() => {
       try {
-        const storedRegion = window.localStorage.getItem(REGION_KEY);
-        if (storedRegion && isValidRegion(storedRegion)) {
-          setRegionState(storedRegion);
-          // Re-assert the cookie so the server agrees with the device on the
-          // next navigation.
-          writeRegionCookie(storedRegion);
+        const stored = window.localStorage.getItem(REGION_KEY);
+        const resolved = stored && isValidRegion(stored) ? stored : readRegionCookie();
+
+        if (resolved && isValidRegion(resolved)) {
+          setRegionState(resolved);
+          writeRegionCookie(resolved);
         }
         setReduceMotionState(window.localStorage.getItem(MOTION_KEY) === "true");
       } catch {

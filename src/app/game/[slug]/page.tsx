@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
 import {
   Building2,
   CalendarDays,
@@ -41,7 +40,7 @@ import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
 import { getGame, getRelated, popularSlugs, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
-import { REGION_COOKIE } from "@/lib/preferences/PreferencesProvider";
+import { PriceCard } from "@/components/game/PriceCard";
 import {
   compactNumber,
   isUnreleased,
@@ -98,10 +97,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function GamePage({ params }: { params: Params }) {
   const { slug } = await params;
-  // Read on the server so the price is right on the first paint rather than
-  // flipping currency after hydration.
-  const region = (await cookies()).get(REGION_COOKIE)?.value;
-  const result = await getGame(slug, region);
+  // No region here on purpose: everything this page renders is identical for
+  // every reader, which is what lets it stay prerendered. The one personalised
+  // part, the Steam price, is fetched client-side by `PriceCard`.
+  const result = await getGame(slug);
   if (!result) notFound();
 
   const { data: game, source } = result;
@@ -515,28 +514,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
 
   return (
     <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-      {game.price && (
-        <Reveal className="glass flex items-center justify-between gap-4 rounded-2xl p-5">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
-              {game.price.isFree ? "Price" : "Steam price"}
-            </p>
-            <p className="mt-1.5 flex items-baseline gap-2">
-              <span className="font-display text-2xl font-bold text-mint">
-                {game.price.current}
-              </span>
-              {game.price.original && (
-                <span className="text-sm text-faint line-through">{game.price.original}</span>
-              )}
-            </p>
-          </div>
-          {game.price.discountPercent > 0 && (
-            <span className="shrink-0 rounded-lg bg-mint/15 px-2.5 py-1.5 text-sm font-bold text-mint tabular-nums">
-              −{game.price.discountPercent}%
-            </span>
-          )}
-        </Reveal>
-      )}
+      <PriceCard steamAppId={game.steamAppId} />
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
           {game.metacritic !== null && <ScoreRing score={game.metacritic} />}

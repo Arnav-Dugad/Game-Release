@@ -1,11 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
 import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { SiteChrome } from "@/components/layout/SiteChrome";
 import { Footer } from "@/components/layout/Footer";
-import { REGION_COOKIE } from "@/lib/preferences/PreferencesProvider";
 
 /**
  * Sora carries the display voice (tight, geometric, high contrast at large
@@ -70,10 +68,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Read here so the very first paint prices in the right currency.
-  const region = (await cookies()).get(REGION_COOKIE)?.value;
-
+/*
+ * Deliberately not `async`, and deliberately reads no cookies.
+ *
+ * The region preference used to be read here so the provider could be seeded
+ * during SSR. `cookies()` in the *root layout* is the widest possible dynamic
+ * opt-in: it forces every route in the application to be server-rendered on
+ * demand, which cost the site all of its prerendering and ISR — the homepage,
+ * browse, genres, platforms and all 60 prerendered game pages included.
+ *
+ * That is a very large bill for a very small benefit. The region only affects
+ * Steam price formatting, `PreferencesProvider` already recovers it on mount
+ * from localStorage and the cookie, and the one page where the price is shown
+ * resolves it separately. So the read belongs there, not here.
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sora.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh-safe bg-bg text-text antialiased">
@@ -84,7 +93,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
 
-        <Providers initialRegion={region}>
+        <Providers>
           <SiteChrome />
           <main id="main">{children}</main>
           <Footer />

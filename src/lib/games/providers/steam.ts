@@ -430,6 +430,22 @@ async function fetchAppDetails(
   return entry.data;
 }
 
+/**
+ * Current price for one app in one region.
+ *
+ * Split out from the detail merge so the price can be resolved on its own,
+ * without the page that shows it having to be personalised. See
+ * `app/api/price/route.ts`.
+ */
+export async function steamPrice(
+  appid: number,
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<Price | null> {
+  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
+  const details = await fetchAppDetails(appid, TTL.detail, safeRegion);
+  return details ? priceOf(details) : null;
+}
+
 async function summariesFor(appids: number[], revalidate: number): Promise<GameSummary[]> {
   const details = await mapWithLimit(appids, CONCURRENCY, (appid) =>
     fetchAppDetails(appid, revalidate),

@@ -68,11 +68,19 @@ let tokenInFlight: Promise<string> | null = null;
 /**
  * How long Next may reuse a cached token response.
  *
- * Twitch client-credentials tokens live for weeks, so this is extremely
- * conservative; freshness is really governed by `tokenCache` below, which
- * refreshes a minute before actual expiry.
+ * Must not be *lower* than any route's own revalidate window. A fetch that
+ * declares a shorter lifetime than the page it renders in drags the whole
+ * route down to match, and because the token is fetched lazily that hit landed
+ * on whichever page happened to authenticate first — one game page silently
+ * revalidating every 50 minutes instead of daily, and re-querying IGDB 28×
+ * more often than intended.
+ *
+ * A week clears the longest route window (a day) while staying far inside the
+ * token's real lifetime, which Twitch currently issues at around eight weeks.
+ * Freshness is governed by `tokenCache` below regardless, and a revoked token
+ * self-heals through the 401 path rather than waiting this out.
  */
-const TOKEN_CACHE_SECONDS = 3000;
+const TOKEN_CACHE_SECONDS = 604_800;
 
 /**
  * Twitch distinguishes its two credential failures, and the difference is the

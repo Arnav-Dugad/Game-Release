@@ -13,16 +13,9 @@ import { ToastProvider } from "@/components/ui/Toast";
  * watchlist listener keys off the signed-in user, so it sits inside auth; and
  * toasts are leaf-level so anything below can surface a message.
  */
-export function Providers({
-  children,
-  initialRegion,
-}: {
-  children: ReactNode;
-  /** Resolved from the region cookie during SSR. */
-  initialRegion?: string;
-}) {
+export function Providers({ children }: { children: ReactNode }) {
   return (
-    <PreferencesProvider initialRegion={initialRegion}>
+    <PreferencesProvider>
       <AuthProvider>
         <WatchlistProvider>
           <ToastProvider>{children}</ToastProvider>
