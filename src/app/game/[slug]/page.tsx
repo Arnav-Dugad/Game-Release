@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  ArrowLeft,
   Building2,
   CalendarDays,
   Cpu,
@@ -52,6 +53,7 @@ import { Parallax } from "@/components/motion/effects";
 import { getGame, getRelated, popularSlugs, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import { PriceCard } from "@/components/game/PriceCard";
+import { GameCollectionShowcase } from "@/components/game/GameCollectionShowcase";
 import {
   compactNumber,
   isUnreleased,
@@ -134,18 +136,23 @@ export default async function GamePage({ params }: { params: Params }) {
       <Container className="grid gap-10 pb-8 pt-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:pb-12 lg:pt-10">
         <div className="min-w-0 space-y-14">
           {game.description && (
-            <Reveal>
-              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">About this game</h2>
-              <ExpandableText
-                text={game.description}
-                className="max-w-2xl"
-                paragraphClassName="text-[15px] leading-[1.75] text-muted"
-              />
-            </Reveal>
+            <section id="overview">
+              <Reveal>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-soft">The overview</p>
+                <h2 className="mb-4 text-2xl font-bold sm:text-3xl">About this game</h2>
+                <ExpandableText
+                  text={game.description}
+                  className="max-w-3xl"
+                  paragraphClassName="text-[15px] leading-[1.8] text-muted sm:text-base"
+                />
+              </Reveal>
+            </section>
           )}
 
+          <GameCollectionShowcase game={game} />
+
           {game.trailers.length > 0 && (
-            <section>
+            <section id="trailers">
               <Reveal>
                 <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Trailers</h2>
               </Reveal>
@@ -157,7 +164,7 @@ export default async function GamePage({ params }: { params: Params }) {
           )}
 
           {media.length > 0 && (
-            <section>
+            <section id="media">
               <Reveal>
                 <h2 className="mb-5 text-2xl font-bold sm:text-3xl">
                   {game.artworks.length > 0 ? "Screenshots & art" : "Screenshots"}
@@ -205,26 +212,6 @@ export default async function GamePage({ params }: { params: Params }) {
             <Reveal>
               <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Release history</h2>
               <ReleaseTable releases={game.releases} />
-            </Reveal>
-          )}
-
-          {(game.expansions.length > 0 || game.editions.length > 0 || game.parentGame) && (
-            <Reveal>
-              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">In this series</h2>
-              <ul className="flex flex-wrap gap-2">
-                {game.parentGame && (
-                  <li>
-                    <Chip href={`/game/${game.parentGame.slug}`}>
-                      Base game: {game.parentGame.name}
-                    </Chip>
-                  </li>
-                )}
-                {[...game.expansions, ...game.editions].map((item) => (
-                  <li key={`${item.id}-${item.slug}`}>
-                    <Chip href={`/game/${item.slug}`}>{item.name}</Chip>
-                  </li>
-                ))}
-              </ul>
             </Reveal>
           )}
 
@@ -325,13 +312,32 @@ function GameHero({ game }: { game: GameDetail }) {
         <div className="absolute inset-0 bg-gradient-to-r from-bg/90 to-transparent" />
       </div>
 
-      <Container className="pb-8 pt-24 lg:pb-12 lg:pt-32">
+      <Container className="flex min-h-[620px] flex-col justify-end pb-8 pt-24 sm:min-h-[680px] lg:min-h-[760px] lg:pb-12 lg:pt-32">
+        <Reveal>
+          <div className="mb-7 flex flex-wrap items-center gap-2 text-xs text-white/55">
+            <Link
+              href="/browse"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-white/20 hover:text-white"
+            >
+              <ArrowLeft size={13} />
+              Browse
+            </Link>
+            {game.franchises[0] && (
+              <Link
+                href={`/franchise/${game.franchises[0].slug}`}
+                className="rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-brand/40 hover:text-brand-soft"
+              >
+                {game.franchises[0].name} series
+              </Link>
+            )}
+          </div>
+        </Reveal>
         {/*
           Stacks on a phone and goes side-by-side from `sm` up.
           The poster and platform marks together answer "what is this, and can
           I play it?" before any text is read, so they lead on both layouts.
         */}
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-9 lg:gap-12">
           <div className="flex items-end gap-4 sm:gap-8">
             <Reveal
               direction="right"
@@ -340,7 +346,7 @@ function GameHero({ game }: { game: GameDetail }) {
                 "shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)]",
                 // Shown at every size — the poster is the strongest identifying
                 // element on the page, and hiding it on phones wasted that.
-                "w-28 sm:w-44 lg:w-60",
+                "w-36 sm:w-48 lg:w-64",
               )}
             >
               <GameCover
@@ -349,7 +355,7 @@ function GameHero({ game }: { game: GameDetail }) {
                 image={game.image}
                 imageFallback={game.imageFallback}
                 width={720}
-                sizes="(max-width: 640px) 112px, (max-width: 1024px) 176px, 240px"
+                sizes="(max-width: 640px) 144px, (max-width: 1024px) 192px, 256px"
                 priority
               />
             </Reveal>
@@ -386,7 +392,7 @@ function GameHero({ game }: { game: GameDetail }) {
             <TextReveal
               as="h1"
               text={game.name}
-              className="font-display text-[clamp(1.75rem,6.5vw,4rem)] font-black leading-[1.02] tracking-[-0.04em]"
+              className="max-w-4xl font-display text-[clamp(2.25rem,7vw,5.5rem)] font-black leading-[0.94] tracking-[-0.055em] text-white [text-shadow:0_10px_50px_rgba(0,0,0,0.45)]"
             />
 
             <Reveal delay={0.1} className="mt-3">
@@ -452,8 +458,52 @@ function GameHero({ game }: { game: GameDetail }) {
             Rate this game
           </Button>
         </Reveal>
+
+        <Reveal delay={0.28}>
+          <nav
+            aria-label="On this page"
+            className="mt-8 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-1.5 text-xs font-medium text-white/60 backdrop-blur-xl sm:w-fit sm:text-sm"
+          >
+            {game.description && <QuickLink href="#overview">Overview</QuickLink>}
+            {game.trailers.length > 0 && <QuickLink href="#trailers">Trailers</QuickLink>}
+            {(game.franchises.length > 0 || game.expansions.length > 0 || game.editions.length > 0) && (
+              <QuickLink href="#collection">Series & DLC</QuickLink>
+            )}
+            {(game.screenshots.length > 0 || game.artworks.length > 0) && <QuickLink href="#media">Gallery</QuickLink>}
+            <QuickLink href="#reviews">Reviews</QuickLink>
+          </nav>
+        </Reveal>
       </Container>
     </header>
+  );
+}
+
+function QuickLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      className="shrink-0 rounded-xl px-3.5 py-2.5 transition-colors hover:bg-white/[0.08] hover:text-white"
+    >
+      {children}
+    </a>
+  );
+}
+
+function StudioLinks({ studios }: { studios: GameDetail["developers"] }) {
+  return (
+    <span className="flex flex-wrap gap-x-1.5 gap-y-1">
+      {studios.map((studio, index) => (
+        <span key={studio.id}>
+          <Link
+            href={`/studio/${studio.slug}`}
+            className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-brand-soft"
+          >
+            {studio.name}
+          </Link>
+          {index < studios.length - 1 && ","}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -481,7 +531,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
       ? [
           {
             label: game.developers.length > 1 ? "Developers" : "Developer",
-            value: game.developers.map((d) => d.name).join(", "),
+            value: <StudioLinks studios={game.developers} />,
             icon: <Building2 size={14} />,
           },
         ]
@@ -490,17 +540,8 @@ function GameSidebar({ game }: { game: GameDetail }) {
       ? [
           {
             label: game.publishers.length > 1 ? "Publishers" : "Publisher",
-            value: game.publishers.map((p) => p.name).join(", "),
+            value: <StudioLinks studios={game.publishers} />,
             icon: <Users size={14} />,
-          },
-        ]
-      : []),
-    ...(game.playtime
-      ? [
-          {
-            label: "Typical playtime",
-            value: playtimeLabel(game.playtime),
-            icon: <Timer size={14} />,
           },
         ]
       : []),

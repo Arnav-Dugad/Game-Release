@@ -224,10 +224,10 @@ export interface GameDetail extends GameSummary {
   releases: ReleaseEvent[];
   /** Named cast, when IGDB has character records for the title. */
   characters: CharacterRef[];
-  /** DLC and expansions. */
-  expansions: Ref[];
+  /** DLC and expansions, expanded so detail pages can present real poster art. */
+  expansions: GameSummary[];
   /** Remakes, remasters, ports and standalone expansions of this title. */
-  editions: Ref[];
+  editions: GameSummary[];
   /** The base game, when this record is itself a DLC or expansion. */
   parentGame: Ref | null;
   /** Provider-curated similar titles, already expanded. */

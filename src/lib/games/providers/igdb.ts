@@ -510,12 +510,28 @@ const CORE_DETAIL = [
   "parent_game.slug",
   "remakes.name",
   "remakes.slug",
+  "remakes.first_release_date",
+  "remakes.cover.image_id",
+  "remakes.total_rating",
+  "remakes.aggregated_rating",
   "remasters.name",
   "remasters.slug",
+  "remasters.first_release_date",
+  "remasters.cover.image_id",
+  "remasters.total_rating",
+  "remasters.aggregated_rating",
   "ports.name",
   "ports.slug",
+  "ports.first_release_date",
+  "ports.cover.image_id",
+  "ports.total_rating",
+  "ports.aggregated_rating",
   "standalone_expansions.name",
   "standalone_expansions.slug",
+  "standalone_expansions.first_release_date",
+  "standalone_expansions.cover.image_id",
+  "standalone_expansions.total_rating",
+  "standalone_expansions.aggregated_rating",
   "alternative_names.name",
   "language_supports.language.name",
   "multiplayer_modes.campaigncoop",
@@ -528,8 +544,16 @@ const CORE_DETAIL = [
   "multiplayer_modes.offlinemax",
   "dlcs.name",
   "dlcs.slug",
+  "dlcs.first_release_date",
+  "dlcs.cover.image_id",
+  "dlcs.total_rating",
+  "dlcs.aggregated_rating",
   "expansions.name",
   "expansions.slug",
+  "expansions.first_release_date",
+  "expansions.cover.image_id",
+  "expansions.total_rating",
+  "expansions.aggregated_rating",
   "similar_games.name",
   "similar_games.slug",
   "similar_games.cover.image_id",
@@ -637,10 +661,10 @@ interface IgdbGame {
     company?: IgdbCompany;
   }[];
   parent_game?: IgdbNamed;
-  remakes?: IgdbNamed[];
-  remasters?: IgdbNamed[];
-  ports?: IgdbNamed[];
-  standalone_expansions?: IgdbNamed[];
+  remakes?: IgdbGame[];
+  remasters?: IgdbGame[];
+  ports?: IgdbGame[];
+  standalone_expansions?: IgdbGame[];
   alternative_names?: { name?: string }[];
   language_supports?: { language?: { name?: string } }[];
   multiplayer_modes?: {
@@ -653,8 +677,8 @@ interface IgdbGame {
     onlinemax?: number;
     offlinemax?: number;
   }[];
-  dlcs?: IgdbNamed[];
-  expansions?: IgdbNamed[];
+  dlcs?: IgdbGame[];
+  expansions?: IgdbGame[];
   similar_games?: IgdbGame[];
   websites?: { url?: string }[];
   age_ratings?: {
@@ -1006,6 +1030,14 @@ function mapSummary(game: IgdbGame): GameSummary {
   };
 }
 
+/** Nested game relations only request summary fields, which is exactly enough
+ * for a stable poster card without issuing one request per DLC. */
+function mapRelatedGames(games: IgdbGame[] | undefined): GameSummary[] {
+  return (games ?? [])
+    .filter((game) => Boolean(game?.id && game?.name && game?.slug) && game.status !== CANCELLED)
+    .map(mapSummary);
+}
+
 function mapDetail(game: IgdbGame): GameDetail {
   const summary = mapSummary(game);
 
@@ -1109,12 +1141,12 @@ function mapDetail(game: IgdbGame): GameDetail {
     // Filled by `detail()`, which fetches the cast separately — characters are
     // their own IGDB endpoint rather than an expandable field on a game.
     characters: [],
-    expansions: [...toRefs(game.dlcs), ...toRefs(game.expansions)],
+    expansions: [...mapRelatedGames(game.dlcs), ...mapRelatedGames(game.expansions)],
     editions: [
-      ...toRefs(game.remakes),
-      ...toRefs(game.remasters),
-      ...toRefs(game.ports),
-      ...toRefs(game.standalone_expansions),
+      ...mapRelatedGames(game.remakes),
+      ...mapRelatedGames(game.remasters),
+      ...mapRelatedGames(game.ports),
+      ...mapRelatedGames(game.standalone_expansions),
     ],
     parentGame: game.parent_game
       ? {

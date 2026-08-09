@@ -28,8 +28,8 @@ export function EmptyState({
   icon?: ReactNode;
   title: string;
   body?: string;
-  action?: { href: string; label: string };
-  secondaryAction?: { href: string; label: string };
+  action?: { href?: string; onClick?: () => void; label: string };
+  secondaryAction?: { href?: string; onClick?: () => void; label: string };
   tone?: "empty" | "unavailable";
   className?: string;
 }) {
@@ -57,12 +57,17 @@ export function EmptyState({
       {(action || secondaryAction) && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           {action && (
-            <Button href={action.href} size="sm">
+            <Button href={action.href} onClick={action.onClick} size="sm">
               {action.label}
             </Button>
           )}
           {secondaryAction && (
-            <Button href={secondaryAction.href} variant="secondary" size="sm">
+            <Button
+              href={secondaryAction.href}
+              onClick={secondaryAction.onClick}
+              variant="secondary"
+              size="sm"
+            >
               {secondaryAction.label}
             </Button>
           )}
