@@ -18,7 +18,7 @@ import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/game
 import { filterDeals } from "../src/lib/games/deals";
 import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/price-history";
 import type { DealListing, GameSummary } from "../src/lib/games/types";
-import { canonicalEntryHref, dealNotification, releaseNotifications } from "../src/lib/notifications/model";
+import { canonicalEntryHref, dealNotification, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
@@ -326,6 +326,10 @@ check(
   dealNotification(notificationEntry(), 124, { current: "$5.00", original: "$10.00", discountPercent: 50, isFree: false }, "United States", 1).id,
   "deal:124:50:$5.00",
 );
+check("overnight quiet hours include midnight", isQuietHours(Date.parse("2026-08-09T00:30:00Z"), "UTC", "22:00", "08:00"), true);
+check("overnight quiet hours end cleanly", isQuietHours(Date.parse("2026-08-09T08:00:00Z"), "UTC", "22:00", "08:00"), false);
+check("daytime quiet window works", isQuietHours(Date.parse("2026-08-09T13:00:00Z"), "UTC", "12:00", "14:00"), true);
+check("invalid timezone fails open", isQuietHours(Date.now(), "Not/AZone", "22:00", "08:00"), false);
 
 console.log("\nUniversal discovery routing");
 const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({

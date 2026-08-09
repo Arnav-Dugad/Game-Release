@@ -40,7 +40,7 @@ let cachedApp: FirebaseApp | null = null;
 let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;
 
-function getFirebaseApp(): FirebaseApp | null {
+export function getFirebaseApp(): FirebaseApp | null {
   if (typeof window === "undefined" || !firebaseEnabled) return null;
   if (cachedApp) return cachedApp;
   try {

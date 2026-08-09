@@ -101,12 +101,29 @@ Every variable is optional — the site builds and runs with none of them set.
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Accounts | |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Accounts | |
 | `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | — | Unused; Analytics is not wired up |
+| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | Browser push | Firebase Cloud Messaging web-push certificate |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Scheduled notifications | Complete service-account JSON; use this or the three split variables |
+| `FIREBASE_PROJECT_ID` | Scheduled notifications | Service-account project id |
+| `FIREBASE_CLIENT_EMAIL` | Scheduled notifications | Service-account client email |
+| `FIREBASE_PRIVATE_KEY` | Scheduled notifications | Service-account private key; escaped newlines are supported |
+| `CRON_SECRET` | Scheduled notifications | Long random secret also used automatically by Vercel Cron |
+| `RESEND_API_KEY` | Email notifications | Optional; device push works without it |
+| `NOTIFICATION_FROM_EMAIL` | Email notifications | Verified sender, e.g. `LUDEX <alerts@example.com>` |
 
 Set each for **Production, Preview and Development** unless you want them to
 differ per environment.
 
 If you add Firebase after the first deploy, remember step 6 above — add the Vercel
 domain to Firebase's authorised domains or Google sign-in will be rejected.
+
+### Scheduled notification delivery
+
+`vercel.json` runs the protected dispatcher twice daily. To activate delivery,
+configure Firebase Admin and `CRON_SECRET`; add the VAPID key for device push
+and Resend variables for email. Users opt into each channel from Settings and
+can choose a minimum discount plus local quiet hours. The dispatcher is
+idempotent, records delivery receipts privately, and ignores direct requests
+that do not carry the cron secret.
 
 ---
 

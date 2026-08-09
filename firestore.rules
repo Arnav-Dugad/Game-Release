@@ -23,10 +23,10 @@ service cloud.firestore {
     }
 
     // --- Profiles ---------------------------------------------------------
-    // Readable by anyone (review authors are shown by name), writable only by
-    // the account holder. `uid` is immutable so a profile can't be re-pointed.
+    // Private to the account holder. Reviews carry their own public author
+    // snapshot, so exposing the profile document would only leak account data.
     match /users/{uid} {
-      allow read: if true;
+      allow read: if isOwner(uid);
       allow create: if isOwner(uid) && request.resource.data.uid == uid;
       allow update: if isOwner(uid) && request.resource.data.uid == resource.data.uid;
       allow delete: if isOwner(uid);
@@ -43,6 +43,18 @@ service cloud.firestore {
       // so there is no reason for it to be world-readable.
       match /settings/{document} {
         allow read, write: if isOwner(uid);
+      }
+
+      // --- Outbound notifications ---------------------------------------
+      // Installation identifiers and delivery receipts are written only by
+      // authenticated server routes using the Admin SDK. They must never be
+      // writable from an untrusted browser, even by the owning account.
+      match /pushSubscriptions/{subscriptionId} {
+        allow read, write: if false;
+      }
+
+      match /notificationDeliveries/{deliveryId} {
+        allow read, write: if false;
       }
     }
 

@@ -129,6 +129,15 @@ export interface UserPreferences {
   notificationReadIds?: string[];
   notificationDeals?: boolean;
   notificationReleases?: boolean;
+  /** Scheduled outbound delivery channels. Both are opt-in. */
+  notificationPushEnabled?: boolean;
+  notificationEmailEnabled?: boolean;
+  /** Do not deliver a deal below this percentage. */
+  notificationMinimumDiscount?: number;
+  /** Local quiet window in 24-hour HH:mm form and its IANA timezone. */
+  notificationQuietStart?: string;
+  notificationQuietEnd?: string;
+  notificationTimezone?: string;
   updatedAt?: number;
 }
 

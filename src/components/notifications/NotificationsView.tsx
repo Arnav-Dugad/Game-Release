@@ -9,6 +9,7 @@ import { Container } from "@/components/ui/SectionHeading";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { useNotifications } from "@/lib/notifications/NotificationsProvider";
 import { cn } from "@/lib/utils/cn";
+import { DeliveryHistory } from "./DeliveryHistory";
 
 type Filter = "all" | "unread" | "deals" | "releases";
 
@@ -77,11 +78,13 @@ export function NotificationsView() {
         )}
       </section>
 
+      <DeliveryHistory />
+
       <Reveal className="mt-10 overflow-hidden rounded-3xl border border-brand/20 bg-[radial-gradient(circle_at_0%_0%,rgba(124,92,255,0.16),transparent_44%),rgba(16,16,32,0.55)] p-5 sm:p-7">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div className="flex gap-4">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-mint/20 bg-mint/10 text-mint"><Radio size={18} /></span>
-            <div><h2 className="font-display text-lg font-bold">In-app delivery is active</h2><p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">Release and deal signals refresh whenever you visit. Email and device push will use this same inbox once scheduled delivery infrastructure is connected.</p></div>
+            <div><h2 className="font-display text-lg font-bold">Your delivery control room</h2><p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">The inbox is always available. Enable scheduled device push or email, choose a meaningful discount threshold, and protect your quiet hours in Settings.</p></div>
           </div>
           <Button href="/settings#notifications" variant="secondary" size="sm">Notification settings</Button>
         </div>
