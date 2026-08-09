@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { SearchHitVisual, SearchKindIcon } from "@/components/search/SearchHitVisual";
-import { useDebouncedValue, useLockBodyScroll } from "@/hooks";
+import { useDebouncedValue, useDialogFocus, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 import {
   SEARCH_KIND_LABELS,
@@ -70,6 +70,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   });
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const debounced = useDebouncedValue(query, 280);
   const term = debounced.trim();
@@ -83,12 +84,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   const activeIndex = results.length > 0 ? Math.min(cursor, results.length - 1) : 0;
 
   useLockBodyScroll(open);
-
-  useEffect(() => {
-    if (!open) return;
-    const id = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [open]);
+  useDialogFocus(open, panelRef, inputRef);
 
   useEffect(() => {
     if (open) return;
@@ -167,6 +163,8 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
           />
 
           <motion.div
+            ref={panelRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Search all of LUDEX"

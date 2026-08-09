@@ -11,8 +11,8 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
-import { useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
+import { useRef, type ReactNode } from "react";
+import { useDialogFocus, useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 
 interface SheetProps {
@@ -40,14 +40,7 @@ export function Sheet({
 
   useLockBodyScroll(open);
   useEscapeKey(onClose, open);
-
-  // Move focus into the dialog so keyboard and screen-reader users land inside
-  // it rather than continuing from wherever the trigger was.
-  useEffect(() => {
-    if (!open) return;
-    const id = requestAnimationFrame(() => panelRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [open]);
+  useDialogFocus(open, panelRef);
 
   return (
     <AnimatePresence>

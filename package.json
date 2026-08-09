@@ -6,8 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check:types": "tsc --noEmit",
     "lint": "eslint",
     "check:data": "node scripts/run-provider-checks.mjs",
+    "quality:static": "npm run check:types && npm run lint && npm run check:data",
+    "quality:runtime": "node scripts/quality-audit.mjs",
+    "test:e2e": "playwright test",
+    "audit:security": "npm audit --audit-level=high",
     "icons": "node scripts/generate-brand-icons.mjs"
   },
   "dependencies": {
@@ -20,6 +25,8 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

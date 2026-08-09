@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[contenteditable='true']",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
 /**
  * Subscribes to a media query.
  *
@@ -159,6 +169,64 @@ export function useEscapeKey(handler: () => void, active = true): void {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [handler, active]);
+}
+
+/**
+ * Gives modal surfaces a complete keyboard lifecycle: focus enters the panel,
+ * Tab stays inside it, and the control that opened it receives focus again on
+ * close. Keeping this shared prevents each overlay drifting into a subtly
+ * different (and often incomplete) implementation.
+ */
+export function useDialogFocus(
+  active: boolean,
+  panelRef: React.RefObject<HTMLElement | null>,
+  initialFocusRef?: React.RefObject<HTMLElement | null>,
+): void {
+  useEffect(() => {
+    if (!active) return;
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusable = () => Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+    ).filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true");
+
+    const frame = requestAnimationFrame(() => {
+      const target = initialFocusRef?.current ?? focusable()[0] ?? panelRef.current;
+      target?.focus();
+    });
+
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const candidates = focusable();
+      if (candidates.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = candidates[0];
+      const last = candidates[candidates.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && (current === first || !panel.contains(current))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (current === last || !panel.contains(current))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", trapTab);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", trapTab);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [active, initialFocusRef, panelRef]);
 }
 
 /**

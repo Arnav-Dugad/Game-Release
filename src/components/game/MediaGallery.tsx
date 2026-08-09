@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, Play, X } from "lucide-react";
 import { TrailerPlayer } from "./TrailerPlayer";
 import { sizedImage } from "@/lib/games/image";
-import { useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
+import { useDialogFocus, useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 import type { Trailer } from "@/lib/games/types";
 
@@ -51,13 +51,10 @@ export function MediaGallery({
   const railRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
-  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
-  const close = useCallback(() => {
-    setOpenAt(null);
-    requestAnimationFrame(() => openerRef.current?.focus());
-  }, []);
+  const close = useCallback(() => setOpenAt(null), []);
   const step = useCallback(
     (delta: number) =>
       setOpenAt((current) =>
@@ -68,6 +65,7 @@ export function MediaGallery({
 
   useEscapeKey(close, openAt !== null);
   useLockBodyScroll(openAt !== null);
+  useDialogFocus(openAt !== null, dialogRef);
 
   useEffect(() => {
     if (openAt === null) return;
@@ -122,10 +120,7 @@ export function MediaGallery({
               <button
                 key={`${item.kind}-${index}`}
                 type="button"
-                onClick={(event) => {
-                  openerRef.current = event.currentTarget;
-                  setOpenAt(index);
-                }}
+                onClick={() => setOpenAt(index)}
                 aria-label={`View ${captionOf(item, index)}, image ${index + 1} of ${items.length}`}
                 className={cn(
                   "group/tile relative min-h-0 overflow-hidden rounded-xl border border-line bg-panel text-left transition-[border-color,transform,box-shadow] duration-500 fine:hover:-translate-y-0.5 fine:hover:border-line-strong fine:hover:shadow-[0_24px_60px_-28px_rgba(124,92,255,0.65)] sm:rounded-2xl",
@@ -173,10 +168,7 @@ export function MediaGallery({
             <div key={`${item.kind}-${i}`} className={tileWidth}>
               <button
                 type="button"
-                onClick={(event) => {
-                  openerRef.current = event.currentTarget;
-                  setOpenAt(i);
-                }}
+                onClick={() => setOpenAt(i)}
                 aria-label={
                   item.kind === "trailer"
                     ? `Play ${item.trailer.name}`
@@ -225,7 +217,7 @@ export function MediaGallery({
 
       <AnimatePresence>
         {active && (
-          <div role="dialog" aria-modal="true" aria-label={`${gameName} media viewer`} className="fixed inset-0 z-[400] flex items-center justify-center">
+          <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${gameName} media viewer`} className="fixed inset-0 z-[400] flex items-center justify-center outline-none">
             <motion.div
               className="absolute inset-0 bg-black/93 backdrop-blur-sm"
               initial={{ opacity: 0 }}

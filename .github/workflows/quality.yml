@@ -1,0 +1,63 @@
+name: Quality fortress
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3137
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type, lint, and provider contracts
+        run: npm run quality:static
+
+      - name: Block high and critical dependency advisories
+        run: npm run audit:security
+
+      - name: Production build
+        run: npm run build
+
+      - name: Production route, link, asset, and API audit
+        run: |
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 -p 3137 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          npm run quality:runtime
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser, accessibility, and responsive regression suite
+        run: npm run test:e2e
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

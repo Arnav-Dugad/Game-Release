@@ -211,9 +211,16 @@ serves every card on a page, rather than one listener per card. Toggles are
 optimistic and roll back on failure.
 
 **Accessibility.** Skip link, focus-visible rings, `aria-live` toasts, keyboard-driven
-palette and lightbox, 44px minimum touch targets, pinch-zoom never disabled, and
-`prefers-reduced-motion` honoured both globally and per-component (components swap
-to a static presentation rather than running the same animation instantly).
+palette and lightbox, trapped/restored dialog focus, 44px minimum touch targets,
+pinch-zoom never disabled, and `prefers-reduced-motion` honoured both globally and
+per-component (components swap to a static presentation rather than running the
+same animation instantly).
+
+**Quality fortress.** Every push and pull request runs type, lint, provider-contract,
+production-build, Chromium, responsive, keyboard, image, canonical-link and Axe
+accessibility checks. Failed browser runs preserve their trace, screenshot and video
+for diagnosis. The dependency gate blocks high and critical advisories without
+silently forcing unsafe major-version downgrades.
 
 ---
 
@@ -223,14 +230,23 @@ to a static presentation rather than running the same animation instantly).
 npm run dev         # development server
 npm run build       # production build
 npm run start       # serve the production build
+npm run check:types # TypeScript without emitting files
 npm run lint        # eslint
 npm run check:data  # self-checks for date parsing, slug round-trips, platform mapping
+npm run quality:static  # types + lint + provider/domain contracts
+npm run quality:runtime # audit a production server at http://127.0.0.1:3137
+npm run test:e2e        # 24 Chromium, responsive, keyboard and Axe checks
+npm run audit:security  # fail on high or critical dependency advisories
 ```
 
 `check:data` exercises the pure logic in the data layer — Steam's human-readable
 date parsing, provider slug round-trips, platform vocabulary normalisation and
 IGDB image resizing. These decide what date a user is shown and which provider
 owns a URL, so they are pinned down rather than assumed.
+
+For the runtime audit, build and start LUDEX on port `3137` first. Set
+`QUALITY_BASE_URL` to target another deployment, and `QUALITY_REQUIRE_PROVIDER=1`
+when IGDB and storefront connectivity must be live rather than explicitly degraded.
 
 ---
 

@@ -10,10 +10,10 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { sizedImage } from "@/lib/games/image";
-import { useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
+import { useDialogFocus, useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
 import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
 
@@ -25,6 +25,7 @@ export function ScreenshotGallery({
   gameName: string;
 }) {
   const [openAt, setOpenAt] = useState<number | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const shots = screenshots.filter(Boolean);
 
@@ -39,6 +40,7 @@ export function ScreenshotGallery({
 
   useEscapeKey(close, openAt !== null);
   useLockBodyScroll(openAt !== null);
+  useDialogFocus(openAt !== null, dialogRef);
 
   useEffect(() => {
     if (openAt === null) return;
@@ -93,7 +95,7 @@ export function ScreenshotGallery({
 
       <AnimatePresence>
         {openAt !== null && (
-          <div className="fixed inset-0 z-[400] flex items-center justify-center">
+          <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${gameName} screenshot viewer`} className="fixed inset-0 z-[400] flex items-center justify-center outline-none">
             <motion.div
               className="absolute inset-0 bg-black/93 backdrop-blur-sm"
               initial={{ opacity: 0 }}
