@@ -29,7 +29,7 @@ const NAV = [
   { href: "/steam", label: "Steam" },
   { href: "/genres", label: "Genres" },
   { href: "/studios", label: "Studios" },
-  { href: "/franchises", label: "Series" },
+  { href: "/series", label: "Series" },
 ];
 
 export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {

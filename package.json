@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:data": "tsx scripts/check-providers.ts",
+    "check:data": "node scripts/run-provider-checks.mjs",
     "icons": "node scripts/generate-brand-icons.mjs"
   },
   "dependencies": {

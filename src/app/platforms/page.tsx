@@ -9,7 +9,7 @@ import { Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { getPlatforms, isDegraded } from "@/lib/games/source";
 import { hueFromString } from "@/lib/utils/format";
 
-export const revalidate = 604800;
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Game platforms",

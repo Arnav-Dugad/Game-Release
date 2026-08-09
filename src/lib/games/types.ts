@@ -209,7 +209,9 @@ export interface GameDetail extends GameSummary {
   gameModes: Ref[];
   playerPerspectives: Ref[];
   engines: LogoRef[];
-  /** Franchises and collections merged — both answer "what series is this?". */
+  /** Canonical release series from IGDB Collections. */
+  series: Ref[];
+  /** Wider fictional/product franchises; intentionally separate from series. */
   franchises: Ref[];
   /** Free-form IGDB keywords, useful for discovery beyond formal genres. */
   keywords: Ref[];
@@ -224,10 +226,18 @@ export interface GameDetail extends GameSummary {
   releases: ReleaseEvent[];
   /** Named cast, when IGDB has character records for the title. */
   characters: CharacterRef[];
-  /** DLC and expansions, expanded so detail pages can present real poster art. */
+  /** Downloadable content that depends on the base game. */
+  dlcs: GameSummary[];
+  /** Non-standalone expansions that depend on the base game. */
   expansions: GameSummary[];
-  /** Remakes, remasters, ports and standalone expansions of this title. */
+  /** Expansions that are sold and played as their own games. */
+  standaloneExpansions: GameSummary[];
+  /** Alternate editions/versions of the same game. */
   editions: GameSummary[];
+  bundles: GameSummary[];
+  remakes: GameSummary[];
+  remasters: GameSummary[];
+  ports: GameSummary[];
   /** The base game, when this record is itself a DLC or expansion. */
   parentGame: Ref | null;
   /** Provider-curated similar titles, already expanded. */

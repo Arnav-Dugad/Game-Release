@@ -13,10 +13,10 @@ export function EntityGameExplorer({
   kind,
 }: {
   games: GameSummary[];
-  kind: "company" | "character" | "franchise";
+  kind: "company" | "character" | "series";
 }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<EntitySort>(kind === "franchise" ? "newest" : "featured");
+  const [sort, setSort] = useState<EntitySort>(kind === "series" ? "newest" : "featured");
   const normalised = query.trim().toLocaleLowerCase();
 
   const filtered = useMemo(() => {

@@ -7,12 +7,70 @@ import { releaseLabel } from "@/lib/utils/format";
 import type { GameDetail, GameSummary } from "@/lib/games/types";
 
 export function GameCollectionShowcase({ game }: { game: GameDetail }) {
-  const relatedEntries = dedupeGames([...game.expansions, ...game.editions]);
-  if (game.franchises.length === 0 && relatedEntries.length === 0 && !game.parentGame) return null;
+  const groups = [
+    {
+      eyebrow: "Add-ons",
+      title: "Downloadable content",
+      description: "Optional content made to extend the base game.",
+      label: "DLC",
+      games: dedupeGames(game.dlcs),
+    },
+    {
+      eyebrow: "Add-ons",
+      title: "Expansions",
+      description: "Substantial new content that still requires the base game.",
+      label: "Expansion",
+      games: dedupeGames(game.expansions),
+    },
+    {
+      eyebrow: "Standalone",
+      title: "Standalone expansions",
+      description: "Expansion-sized experiences you can play without owning the base game.",
+      label: "Standalone",
+      games: dedupeGames(game.standaloneExpansions),
+    },
+    {
+      eyebrow: "Versions",
+      title: "Editions",
+      description: "Alternate releases of the same game, kept separate from downloadable content.",
+      label: "Edition",
+      games: dedupeGames(game.editions),
+    },
+    {
+      eyebrow: "Collections",
+      title: "Bundles",
+      description: "Store packages that include this title alongside other content.",
+      label: "Bundle",
+      games: dedupeGames(game.bundles),
+    },
+    {
+      eyebrow: "Reimagined",
+      title: "Remakes",
+      description: "New productions that rebuild the original experience.",
+      label: "Remake",
+      games: dedupeGames(game.remakes),
+    },
+    {
+      eyebrow: "Reissued",
+      title: "Remasters",
+      description: "Modernised releases built from the original game.",
+      label: "Remaster",
+      games: dedupeGames(game.remasters),
+    },
+    {
+      eyebrow: "Platforms",
+      title: "Ports",
+      description: "Versions adapted for another platform or hardware generation.",
+      label: "Port",
+      games: dedupeGames(game.ports),
+    },
+  ].filter((group) => group.games.length > 0);
+
+  if (game.series.length === 0 && groups.length === 0 && !game.parentGame) return null;
 
   return (
     <section id="collection" className="space-y-8">
-      {game.franchises.length > 0 && (
+      {game.series.length > 0 && (
         <Reveal>
           <div className="relative isolate overflow-hidden rounded-3xl border border-brand/25 bg-[linear-gradient(135deg,rgba(124,92,255,0.18),rgba(16,16,32,0.88)_48%,rgba(34,211,238,0.08))] p-6 sm:p-8">
             <div aria-hidden className="absolute -right-16 -top-20 -z-10 h-56 w-56 rounded-full bg-brand/20 blur-3xl" />
@@ -27,7 +85,7 @@ export function GameCollectionShowcase({ game }: { game: GameDetail }) {
                   Continue the journey
                 </p>
                 <h2 className="mt-2 text-2xl font-bold sm:text-3xl">
-                  Explore the {game.franchises[0].name} universe
+                  Explore the {game.series[0].name} series
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-muted sm:text-[15px]">
                   Open the dedicated series page to browse every connected game, search the full catalogue, and follow the release history.
@@ -35,17 +93,17 @@ export function GameCollectionShowcase({ game }: { game: GameDetail }) {
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-2">
-                {game.franchises.map((franchise, index) => (
+                {game.series.map((series, index) => (
                   <Link
-                    key={franchise.id}
-                    href={`/franchise/${franchise.slug}`}
+                    key={series.id}
+                    href={`/series/${series.slug}`}
                     className={
                       index === 0
                         ? "group inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-bold text-[#090910] transition-transform hover:-translate-y-0.5"
                         : "group inline-flex min-h-12 items-center gap-2 rounded-full border border-line-strong bg-white/[0.05] px-5 py-3 text-sm font-semibold text-text transition-colors hover:bg-white/[0.09]"
                     }
                   >
-                    {index === 0 ? "View complete series" : franchise.name}
+                    {index === 0 ? "View complete series" : series.name}
                     <ArrowUpRight size={15} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   </Link>
                 ))}
@@ -55,48 +113,72 @@ export function GameCollectionShowcase({ game }: { game: GameDetail }) {
         </Reveal>
       )}
 
-      {(relatedEntries.length > 0 || game.parentGame) && (
+      {game.parentGame && (
         <div>
           <Reveal className="mb-5 flex items-end justify-between gap-4">
             <div>
               <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-soft">
                 <Sparkles size={13} />
-                More to play
+                Relationship
               </p>
-              <h2 className="text-2xl font-bold sm:text-3xl">
-                {relatedEntries.length > 0 ? "DLC, expansions & editions" : "Part of a larger game"}
-              </h2>
+              <h2 className="text-2xl font-bold sm:text-3xl">Part of a larger game</h2>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-                Full-size poster art makes every add-on easy to recognise before you open it.
+                This release depends on or extends the base title below.
               </p>
             </div>
-            <span className="hidden rounded-full border border-line bg-white/[0.03] px-3 py-1.5 text-xs text-faint sm:inline-flex">
-              {relatedEntries.length + (game.parentGame ? 1 : 0)} connected
-            </span>
           </Reveal>
 
           <Stagger className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" gap={0.04} onMount>
-            {game.parentGame && (
-              <StaggerItem>
-                <ReferencePoster
-                  name={game.parentGame.name}
-                  slug={game.parentGame.slug}
-                  label="Base game"
-                />
-              </StaggerItem>
-            )}
-            {relatedEntries.map((entry) => (
-              <StaggerItem key={entry.id}>
-                <RelatedPoster
-                  game={entry}
-                  label={game.expansions.some((expansion) => expansion.id === entry.id) ? "DLC / Expansion" : "Edition"}
-                />
-              </StaggerItem>
-            ))}
+            <StaggerItem>
+              <ReferencePoster name={game.parentGame.name} slug={game.parentGame.slug} label="Base game" />
+            </StaggerItem>
           </Stagger>
         </div>
       )}
+
+      {groups.map((group) => (
+        <RelatedGroup key={`${group.eyebrow}-${group.title}`} {...group} />
+      ))}
     </section>
+  );
+}
+
+function RelatedGroup({
+  eyebrow,
+  title,
+  description,
+  label,
+  games,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  label: string;
+  games: GameSummary[];
+}) {
+  return (
+    <div>
+      <Reveal className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-soft">
+            <Sparkles size={13} />
+            {eyebrow}
+          </p>
+          <h2 className="text-2xl font-bold sm:text-3xl">{title}</h2>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">{description}</p>
+        </div>
+        <span className="hidden rounded-full border border-line bg-white/[0.03] px-3 py-1.5 text-xs text-faint sm:inline-flex">
+          {games.length} {games.length === 1 ? "release" : "releases"}
+        </span>
+      </Reveal>
+      <Stagger className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" gap={0.04} onMount>
+        {games.map((entry) => (
+          <StaggerItem key={entry.id}>
+            <RelatedPoster game={entry} label={label} />
+          </StaggerItem>
+        ))}
+      </Stagger>
+    </div>
   );
 }
 

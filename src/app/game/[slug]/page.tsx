@@ -50,7 +50,7 @@ import { Collapsible } from "@/components/ui/Collapsible";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
-import { getGame, getRelated, popularSlugs, isDegraded } from "@/lib/games/source";
+import { getGame, getRelated, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import { PriceCard } from "@/components/game/PriceCard";
 import { GameCollectionShowcase } from "@/components/game/GameCollectionShowcase";
@@ -64,19 +64,11 @@ import {
 import { cn } from "@/lib/utils/cn";
 import type { GameDetail } from "@/lib/games/types";
 
-export const revalidate = 86400;
-/** Unknown slugs are rendered on demand and cached, rather than 404'd. */
-export const dynamicParams = true;
+// The IGDB query is cached independently. Rendering the shell on demand avoids
+// publishing a day-long Steam fallback when IGDB is unreachable during build.
+export const revalidate = 0;
 
 type Params = Promise<{ slug: string }>;
-
-/**
- * Pre-renders whatever's currently trending, top rated and upcoming at build
- * time; everything else is rendered on first request and cached by ISR.
- */
-export async function generateStaticParams() {
-  return (await popularSlugs()).map((slug) => ({ slug }));
-}
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
@@ -322,12 +314,12 @@ function GameHero({ game }: { game: GameDetail }) {
               <ArrowLeft size={13} />
               Browse
             </Link>
-            {game.franchises[0] && (
+            {game.series[0] && (
               <Link
-                href={`/franchise/${game.franchises[0].slug}`}
+                href={`/series/${game.series[0].slug}`}
                 className="rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-brand/40 hover:text-brand-soft"
               >
-                {game.franchises[0].name} series
+                {game.series[0].name} series
               </Link>
             )}
           </div>
@@ -466,8 +458,16 @@ function GameHero({ game }: { game: GameDetail }) {
           >
             {game.description && <QuickLink href="#overview">Overview</QuickLink>}
             {game.trailers.length > 0 && <QuickLink href="#trailers">Trailers</QuickLink>}
-            {(game.franchises.length > 0 || game.expansions.length > 0 || game.editions.length > 0) && (
-              <QuickLink href="#collection">Series & DLC</QuickLink>
+            {(game.series.length > 0 ||
+              game.dlcs.length > 0 ||
+              game.expansions.length > 0 ||
+              game.standaloneExpansions.length > 0 ||
+              game.editions.length > 0 ||
+              game.bundles.length > 0 ||
+              game.remakes.length > 0 ||
+              game.remasters.length > 0 ||
+              game.ports.length > 0) && (
+              <QuickLink href="#collection">Series & add-ons</QuickLink>
             )}
             {(game.screenshots.length > 0 || game.artworks.length > 0) && <QuickLink href="#media">Gallery</QuickLink>}
             <QuickLink href="#reviews">Reviews</QuickLink>
@@ -554,23 +554,23 @@ function GameSidebar({ game }: { game: GameDetail }) {
           },
         ]
       : []),
-    ...(game.franchises.length
+    ...(game.series.length
       ? [
           {
-            label: game.franchises.length > 1 ? "Series" : "Part of",
+            label: game.series.length > 1 ? "Series" : "Part of",
             // Linked, because "what else is in this series?" is the most
             // common next question a series line provokes.
             value: (
               <span className="flex flex-wrap gap-x-1.5">
-                {game.franchises.map((franchise, i) => (
-                  <span key={franchise.id}>
+                {game.series.map((series, i) => (
+                  <span key={series.id}>
                     <Link
-                      href={`/franchise/${franchise.slug}`}
+                      href={`/series/${series.slug}`}
                       className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-brand-soft"
                     >
-                      {franchise.name}
+                      {series.name}
                     </Link>
-                    {i < game.franchises.length - 1 && ","}
+                    {i < game.series.length - 1 && ","}
                   </span>
                 ))}
               </span>

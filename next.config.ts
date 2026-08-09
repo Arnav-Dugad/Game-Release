@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  redirects() {
+    return [
+      { source: "/franchises", destination: "/series", permanent: true },
+      { source: "/franchise/:slug", destination: "/series/:slug", permanent: true },
+    ];
+  },
   images: {
     // One entry per media host the data providers can hand back. next/image
     // refuses any origin not listed here, so a missing entry shows up as a
@@ -30,21 +36,16 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react", "motion"],
+    // This is the build-wide worker cap. The per-process limiter below cannot
+    // protect one IGDB account when many independent workers run at once.
+    cpus: 1,
 
-    /*
-     * Build the pages in one worker.
-     *
-     * IGDB's free tier allows roughly four requests a second, and the client's
-     * rate limiter is per-process. Next spawns a worker per CPU by default —
-     * nineteen on this machine — so each one enforced its own limit and the
-     * build still burst far past the ceiling. Every 429 then degraded a page to
-     * Steam data, which is precisely what gets baked into the prerendered HTML
-     * and served to readers.
-     *
-     * Requiring more pages than the site has before a second worker starts
-     * keeps generation serial, so the limiter governs the whole build. Builds
-     * take longer; the pages are actually correct.
-     */
+    // Keep generation conservative. The IGDB limiter is process-local, so
+    // serial work inside each worker prevents that worker creating a burst.
+    staticGenerationMaxConcurrency: 1,
+
+    // Avoid splitting this small route set into extra static-generation
+    // workers, each of which would otherwise have an independent limiter.
     staticGenerationMinPagesPerWorker: 1000,
     // A page that still trips the limit gets another chance rather than
     // silently shipping fallback data.

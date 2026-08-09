@@ -25,7 +25,9 @@ import {
 import { hueFromString } from "@/lib/utils/format";
 
 /** Revalidate hourly — release data changes on the order of days, not minutes. */
-export const revalidate = 3600;
+// Render from cached provider data at request time so an upstream outage is
+// never baked into the homepage HTML during deployment.
+export const revalidate = 0;
 
 export default async function HomePage() {
   // One await point: these queries are independent and must not waterfall.

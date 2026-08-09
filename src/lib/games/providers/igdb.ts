@@ -203,6 +203,21 @@ export class IgdbHttpError extends Error {
   }
 }
 
+export type IgdbTransportFailure = "timeout" | "network" | "invalid-response";
+
+/** A request that never produced a usable HTTP response. */
+export class IgdbTransportError extends Error {
+  constructor(
+    readonly endpoint: string,
+    readonly failure: IgdbTransportFailure,
+    readonly attempts: number,
+    readonly detail: string,
+  ) {
+    super(`[igdb] ${endpoint} ${failure} after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${detail}`);
+    this.name = "IgdbTransportError";
+  }
+}
+
 /*
  * Rate limiting.
  *
@@ -255,12 +270,19 @@ async function withRateLimit<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** How long to wait before retrying a 429, honouring Retry-After when sent. */
-function retryDelayMs(res: Response, attempt: number): number {
-  const header = Number(res.headers.get("retry-after"));
-  if (Number.isFinite(header) && header > 0) return Math.min(header * 1000, 4000);
-  // Otherwise back off geometrically from the spacing interval.
-  return Math.min(MIN_SPACING_MS * 2 ** attempt, 4000);
+/** How long to wait before retrying, honouring either Retry-After format. */
+function retryDelayMs(res: Response | null, attempt: number): number {
+  const retryAfter = res?.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 5000);
+
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date) && date > Date.now()) return Math.min(date - Date.now(), 5000);
+  }
+
+  const base = Math.min(MIN_SPACING_MS * 2 ** attempt, 4000);
+  return base + Math.floor(Math.random() * Math.min(180, base / 3));
 }
 
 const MAX_ATTEMPTS = 3;
@@ -286,26 +308,61 @@ async function rawQuery<T>(endpoint: string, body: string): Promise<T> {
     });
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = await withRateLimit(async () => {
-      let response = await run(await getToken());
-      // A revoked or expired token reads as 401; force a fresh one and retry.
-      if (response.status === 401) {
-        response = await run(await getToken(true));
+    try {
+      const res = await withRateLimit(async () => {
+        let response = await run(await getToken());
+        // A revoked or expired token reads as 401; force a fresh one and retry.
+        if (response.status === 401) {
+          response = await run(await getToken(true));
+        }
+        return response;
+      });
+
+      if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS - 1) {
+        await sleep(retryDelayMs(res, attempt));
+        continue;
       }
-      return response;
-    });
 
-    if (res.status === 429 && attempt < MAX_ATTEMPTS - 1) {
-      await sleep(retryDelayMs(res, attempt));
-      continue;
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new IgdbHttpError(res.status, endpoint, detail);
+      }
+
+      try {
+        return (await res.json()) as T;
+      } catch (err) {
+        throw new IgdbTransportError(
+          endpoint,
+          "invalid-response",
+          attempt + 1,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    } catch (err) {
+      if (err instanceof IgdbHttpError) throw err;
+      if (err instanceof IgdbTransportError) {
+        if (err.failure === "invalid-response" && attempt < MAX_ATTEMPTS - 1) {
+          await sleep(retryDelayMs(null, attempt));
+          continue;
+        }
+        throw err;
+      }
+
+      const failure: IgdbTransportFailure =
+        err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")
+          ? "timeout"
+          : "network";
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleep(retryDelayMs(null, attempt));
+        continue;
+      }
+      throw new IgdbTransportError(
+        endpoint,
+        failure,
+        attempt + 1,
+        err instanceof Error ? err.message : String(err),
+      );
     }
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new IgdbHttpError(res.status, endpoint, detail);
-    }
-
-    return (await res.json()) as T;
   }
 
   throw new IgdbHttpError(429, endpoint, "rate limited after retries");
@@ -375,10 +432,10 @@ let schemaPromise: Promise<{
 function schema() {
   if (!schemaPromise) {
     schemaPromise = (async () => {
-      const [release, ageRating, descriptors] = await Promise.all([
-        // `region` and the platform name ride along with the date so the detail
-        // page can show a real per-region release table rather than one date.
-        negotiate("release_dates", [
+      // Run these tiny cold-start probes in sequence so schema detection does
+      // not consume most of the per-second request budget before the real page
+      // query starts.
+      const release = await negotiate("release_dates", [
           [
             "release_dates.date_format",
             "release_dates.date",
@@ -396,21 +453,20 @@ function schema() {
           ["release_dates.date_format", "release_dates.date", "release_dates.human"],
           ["release_dates.category", "release_dates.date", "release_dates.human"],
           [],
-        ]),
-        negotiate("age_ratings", [
+        ]);
+      const ageRating = await negotiate("age_ratings", [
           ["age_ratings.rating_category", "age_ratings.organization"],
           ["age_ratings.category", "age_ratings.rating"],
           [],
-        ]),
-        // Content descriptors are a separate probe: they were renamed
-        // independently of the rating fields, so pinning them to the same
-        // candidate list would lose the ratings whenever the descriptors moved.
-        negotiate("age_rating_descriptions", [
+        ]);
+      // Content descriptors are a separate probe: they were renamed
+      // independently of the rating fields, so pinning them to the same
+      // candidate list would lose the ratings whenever the descriptors moved.
+      const descriptors = await negotiate("age_rating_descriptions", [
           ["age_ratings.rating_content_descriptions.description"],
           ["age_ratings.content_descriptions.description"],
           [],
-        ]),
-      ]);
+        ]);
       return { release, ageRating, descriptors };
     })().catch((err) => {
       // Never cache a rejected probe — a transient outage would otherwise
@@ -493,6 +549,7 @@ const CORE_DETAIL = [
   "franchises.slug",
   "collections.name",
   "collections.slug",
+  "collections.games",
   // Platform marks and hardware metadata, so a platform row can show real
   // logos and say what generation of hardware it is.
   "platforms.platform_logo.image_id",
@@ -508,6 +565,8 @@ const CORE_DETAIL = [
   "involved_companies.company.websites.url",
   "parent_game.name",
   "parent_game.slug",
+  "version_parent.name",
+  "version_parent.slug",
   "remakes.name",
   "remakes.slug",
   "remakes.first_release_date",
@@ -554,6 +613,12 @@ const CORE_DETAIL = [
   "expansions.cover.image_id",
   "expansions.total_rating",
   "expansions.aggregated_rating",
+  "bundles.name",
+  "bundles.slug",
+  "bundles.first_release_date",
+  "bundles.cover.image_id",
+  "bundles.total_rating",
+  "bundles.aggregated_rating",
   "similar_games.name",
   "similar_games.slug",
   "similar_games.cover.image_id",
@@ -595,6 +660,7 @@ interface IgdbNamed {
   id: number;
   name: string;
   slug?: string;
+  games?: number[];
 }
 
 interface IgdbReleaseDate {
@@ -661,6 +727,7 @@ interface IgdbGame {
     company?: IgdbCompany;
   }[];
   parent_game?: IgdbNamed;
+  version_parent?: IgdbNamed;
   remakes?: IgdbGame[];
   remasters?: IgdbGame[];
   ports?: IgdbGame[];
@@ -679,6 +746,7 @@ interface IgdbGame {
   }[];
   dlcs?: IgdbGame[];
   expansions?: IgdbGame[];
+  bundles?: IgdbGame[];
   similar_games?: IgdbGame[];
   websites?: { url?: string }[];
   age_ratings?: {
@@ -705,6 +773,11 @@ interface IgdbGame {
    * through the normal mapping path.
    */
   popScore?: number;
+}
+
+interface IgdbGameVersion {
+  game?: number | { id?: number };
+  games?: Array<number | { id?: number }>;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1122,7 +1195,10 @@ function mapDetail(game: IgdbGame): GameDetail {
       name: engine.name,
       logo: igdbImage(engine.logo?.image_id, "logo_med"),
     })),
-    franchises: [...toRefs(game.franchises), ...toRefs(game.collections)],
+    series: toRefs(
+      (game.collections ?? []).filter((collection) => (collection.games?.length ?? 0) >= 2),
+    ),
+    franchises: toRefs(game.franchises),
     keywords: toRefs(game.keywords).slice(0, 24),
     ageRatings: mapAgeRatings(game),
     languages: [
@@ -1141,18 +1217,22 @@ function mapDetail(game: IgdbGame): GameDetail {
     // Filled by `detail()`, which fetches the cast separately — characters are
     // their own IGDB endpoint rather than an expandable field on a game.
     characters: [],
-    expansions: [...mapRelatedGames(game.dlcs), ...mapRelatedGames(game.expansions)],
-    editions: [
-      ...mapRelatedGames(game.remakes),
-      ...mapRelatedGames(game.remasters),
-      ...mapRelatedGames(game.ports),
-      ...mapRelatedGames(game.standalone_expansions),
-    ],
-    parentGame: game.parent_game
+    dlcs: mapRelatedGames(game.dlcs),
+    expansions: mapRelatedGames(game.expansions),
+    standaloneExpansions: mapRelatedGames(game.standalone_expansions),
+    // Filled from the dedicated game_versions endpoint in detail().
+    editions: [],
+    bundles: mapRelatedGames(game.bundles),
+    remakes: mapRelatedGames(game.remakes),
+    remasters: mapRelatedGames(game.remasters),
+    ports: mapRelatedGames(game.ports),
+    parentGame: game.parent_game || game.version_parent
       ? {
-          id: game.parent_game.id,
-          slug: game.parent_game.slug ?? String(game.parent_game.id),
-          name: game.parent_game.name,
+          id: (game.parent_game ?? game.version_parent)!.id,
+          slug:
+            (game.parent_game ?? game.version_parent)!.slug ??
+            String((game.parent_game ?? game.version_parent)!.id),
+          name: (game.parent_game ?? game.version_parent)!.name,
         }
       : null,
     similar: (game.similar_games ?? [])
@@ -1378,6 +1458,29 @@ async function listGames(parts: Omit<QueryParts, "fields">, revalidate: number) 
     apicalypse({ ...parts, fields: await summaryFields() }),
   );
   return usable(rows).map(mapSummary);
+}
+
+/** True alternate editions from IGDB's dedicated version relationship. */
+async function fetchEditions(gameId: number): Promise<GameSummary[]> {
+  const query = queryFor(TTL.detail);
+  const rows = await query<IgdbGameVersion[]>(
+    "game_versions",
+    apicalypse({
+      fields: "game,games",
+      where: `(game = ${gameId} | games = (${gameId}))`,
+      limit: 50,
+    }),
+  );
+  const ids = [
+    ...new Set(
+      rows
+        .flatMap((row) => row.games ?? [])
+        .map((entry) => (typeof entry === "number" ? entry : entry.id))
+        .filter((id): id is number => typeof id === "number" && id !== gameId),
+    ),
+  ];
+  if (ids.length === 0) return [];
+  return listGames({ where: `id = (${ids.join(",")})`, limit: Math.min(ids.length, 50) }, TTL.detail);
 }
 
 async function countGames(where: string, revalidate: number): Promise<number> {
@@ -1859,7 +1962,7 @@ export const igdbProvider: GameProvider = {
 
       // Cast and popularity live on their own endpoints. Both are enrichment,
       // so a failure in either leaves the page intact rather than losing it.
-      const [characters, popScores] = await Promise.all([
+      const [characters, popScores, editions] = await Promise.all([
         fetchCharacters(detail.id).catch((err) => {
           warn("characters", err);
           return [];
@@ -1868,9 +1971,18 @@ export const igdbProvider: GameProvider = {
         // shorter lifetime than the page drags the whole route's revalidate
         // down with it, which silently cut game pages from daily to 6-hourly.
         fetchPopScores([detail.id], TTL.detail),
+        fetchEditions(detail.id).catch((err) => {
+          warn("gameVersions", err);
+          return [];
+        }),
       ]);
 
-      return { ...detail, characters, popScore: popScores.get(detail.id) ?? null };
+      return {
+        ...detail,
+        characters,
+        editions,
+        popScore: popScores.get(detail.id) ?? null,
+      };
     } catch (err) {
       warn("detail", err);
       return null;
@@ -2186,53 +2298,45 @@ export async function igdbCharacter(slug: string): Promise<IgdbEntity | null> {
   }
 }
 
-/**
- * A franchise or collection, and its games.
- *
- * IGDB splits these into two endpoints that answer the same question — a
- * "franchise" and a "collection" (series) frequently both exist for the same
- * name — so both are tried before giving up.
- */
-export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
+/** A canonical game series. IGDB documents Collections as its Series model. */
+export async function igdbSeries(slug: string): Promise<IgdbEntity | null> {
   if (!igdbConfigured()) return null;
   const safe = slug.replace(/"/g, "");
 
-  for (const endpoint of ["franchises", "collections"] as const) {
-    try {
-      const query = queryFor(TTL.detail);
-      const rows = await query<(IgdbNamed & { games?: number[] })[]>(
-        endpoint,
-        apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
-      );
+  try {
+    const query = queryFor(TTL.detail);
+    const rows = await query<(IgdbNamed & { games?: number[] })[]>(
+      "collections",
+      apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
+    );
 
-      const entity = rows[0];
-      if (!entity) continue;
+    const entity = rows[0];
+    if (!entity) return null;
 
-      const gameIds = (entity.games ?? []).slice(0, 60);
-      const games =
-        gameIds.length > 0
-          ? await listGames(
-              { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 48 },
-              TTL.detail,
-            )
-          : [];
+    const gameIds = (entity.games ?? []).slice(0, 60);
+    const games =
+      gameIds.length > 0
+        ? await listGames(
+            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 60 },
+            TTL.detail,
+          )
+        : [];
 
-      if (games.length === 0) continue;
+    if (games.length < 2) return null;
 
-      return {
-        id: entity.id,
-        slug: entity.slug ?? slug,
-        name: entity.name,
-        description: null,
-        image: games[0]?.image ?? null,
-        detail: null,
-        games,
-      };
-    } catch (err) {
-      warn(endpoint, err);
-    }
+    return {
+      id: entity.id,
+      slug: entity.slug ?? slug,
+      name: entity.name,
+      description: null,
+      image: games[0]?.image ?? null,
+      detail: null,
+      games,
+    };
+  } catch (err) {
+    warn("collections", err);
+    return null;
   }
-  return null;
 }
 
 /**
@@ -2275,30 +2379,30 @@ export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
 }
 
 /** Series with enough entries to be worth browsing as a series. */
-export async function igdbTopFranchises(limit = 60): Promise<Ref[] | null> {
+export async function igdbTopSeries(limit = 60): Promise<Ref[] | null> {
   if (!igdbConfigured()) return null;
   try {
     const query = queryFor(TTL.taxonomy);
     const rows = await query<(IgdbNamed & { games?: number[] })[]>(
-      "franchises",
+      "collections",
       apicalypse({ fields: "name,slug,games", where: "games != null", limit: 500 }),
     );
 
     return rows
-      .map((franchise) => ({
-        id: franchise.id,
-        slug: franchise.slug ?? String(franchise.id),
-        name: franchise.name,
-        count: franchise.games?.length ?? 0,
+      .map((series) => ({
+        id: series.id,
+        slug: series.slug ?? String(series.id),
+        name: series.name,
+        count: series.games?.length ?? 0,
       }))
       // A "series" of one is just a game; two is the floor for the word to mean
       // anything.
-      .filter((franchise) => franchise.count >= 2)
+      .filter((series) => series.count >= 2)
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map(({ id, slug, name }) => ({ id, slug, name }));
   } catch (err) {
-    warn("topFranchises", err);
+    warn("topSeries", err);
     return null;
   }
 }
@@ -2419,12 +2523,28 @@ export async function igdbDiagnostics(): Promise<IgdbDiagnostics> {
       };
     }
   } catch (err) {
+    const hint =
+      err instanceof IgdbTransportError
+        ? err.failure === "timeout"
+          ? "Authentication works, but IGDB did not answer before the timeout. Check outbound connectivity and retry shortly."
+          : err.failure === "network"
+            ? "Authentication works, but this server cannot reach api.igdb.com. Check DNS, firewall, and hosting-provider egress."
+            : "IGDB returned a response that was not valid JSON. Retry shortly; if it persists, inspect the upstream response."
+        : err instanceof IgdbHttpError
+          ? err.status === 429
+            ? "IGDB is rate-limiting this deployment. Retry shortly; requests are automatically throttled and retried."
+            : err.status >= 500
+              ? "IGDB is returning a server error. The client will retry automatically."
+              : err.status === 400
+                ? "IGDB rejected the test query. This points to an API contract change rather than an authentication problem."
+                : "IGDB rejected the query. Inspect the status and response before changing credentials."
+          : "Authentication works but queries are failing. Check the reported transport error and hosting logs.";
     return {
       ...base,
       configured: true,
       authenticated: true,
       problem: err instanceof Error ? err.message : String(err),
-      hint: "Authentication works but queries are failing — likely a rate limit or an API change.",
+      hint,
     };
   }
 

@@ -17,7 +17,7 @@ export function EntityPage({
   eyebrow,
 }: {
   entity: IgdbEntity | null;
-  kind: "company" | "character" | "franchise";
+  kind: "company" | "character" | "series";
   eyebrow: string;
 }) {
   if (!entity) notFound();
@@ -28,13 +28,13 @@ export function EntityPage({
     .sort((a, b) => a.released!.localeCompare(b.released!));
   const firstYear = datedGames.at(0)?.released?.slice(0, 4) ?? null;
   const latestYear = datedGames.at(-1)?.released?.slice(0, 4) ?? null;
-  const directoryHref = kind === "company" ? "/studios" : kind === "franchise" ? "/franchises" : "/browse";
-  const directoryLabel = kind === "company" ? "All studios" : kind === "franchise" ? "All series" : "Browse games";
+  const directoryHref = kind === "company" ? "/studios" : kind === "series" ? "/series" : "/browse";
+  const directoryLabel = kind === "company" ? "All studios" : kind === "series" ? "All series" : "Browse games";
 
   return (
     <>
       <header className="noise relative isolate overflow-hidden border-b border-line">
-        {kind === "franchise" && entity.image && (
+        {kind === "series" && entity.image && (
           <div className="absolute inset-0 -z-20">
             <Image src={entity.image} alt="" fill priority sizes="100vw" className="scale-110 object-cover opacity-35 blur-[2px]" />
           </div>
@@ -54,9 +54,9 @@ export function EntityPage({
             </Link>
           </Reveal>
 
-          <div className={cn("grid items-end gap-8", kind === "franchise" && "lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-14")}>
+          <div className={cn("grid items-end gap-8", kind === "series" && "lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-14")}>
             <div className="flex min-w-0 flex-col gap-7 sm:flex-row sm:items-end sm:gap-8">
-              {hasMark && kind !== "franchise" && (
+              {hasMark && kind !== "series" && (
                 <Reveal
                   direction="right"
                   className={cn(
@@ -101,7 +101,7 @@ export function EntityPage({
               </div>
             </div>
 
-            {kind === "franchise" && <SeriesPosterStack games={entity.games} />}
+            {kind === "series" && <SeriesPosterStack games={entity.games} />}
           </div>
 
           {entity.description && (
@@ -124,10 +124,10 @@ export function EntityPage({
       <Container className="py-10 lg:py-16">
         <div className="mb-7">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-soft">
-            {kind === "franchise" ? "Complete collection" : kind === "company" ? "Studio catalogue" : "Gameography"}
+            {kind === "series" ? "Complete collection" : kind === "company" ? "Studio catalogue" : "Gameography"}
           </p>
           <h2 className="text-2xl font-bold sm:text-3xl">
-            {kind === "character" ? "Appears in" : kind === "franchise" ? `Explore ${entity.name}` : "Games"}
+            {kind === "character" ? "Appears in" : kind === "series" ? `Explore ${entity.name}` : "Games"}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
             Search the collection or arrange it by release date to find exactly what you want.

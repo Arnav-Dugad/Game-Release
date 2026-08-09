@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils/cn";
  * but on an unpredictable schedule, and a stale "most played right now" is the
  * one thing this page cannot afford.
  */
-export const revalidate = 3600;
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Steam charts",

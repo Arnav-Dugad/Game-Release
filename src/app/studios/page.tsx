@@ -6,8 +6,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { EntityDirectory } from "@/components/game/EntityDirectory";
 import { igdbTopStudios } from "@/lib/games/providers/igdb";
 
-/** Studio rosters barely move; a week is plenty. */
-export const revalidate = 604800;
+// The provider result is cached for a week; the shell stays dynamic so a
+// failed build-time request cannot publish an empty directory for a week.
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Game studios",

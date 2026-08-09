@@ -1,8 +1,10 @@
 import type { MetadataRoute } from "next";
 import { popularSlugs } from "@/lib/games/source";
-import { igdbTopFranchises, igdbTopStudios } from "@/lib/games/providers/igdb";
+import { igdbTopSeries, igdbTopStudios } from "@/lib/games/providers/igdb";
 
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+export const revalidate = 0;
 
 /**
  * Static routes plus a sample of currently popular game pages. Enumerating
@@ -22,7 +24,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/platforms`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${BASE}/steam`, lastModified: now, changeFrequency: "daily", priority: 0.7 },
     { url: `${BASE}/studios`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${BASE}/franchises`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${BASE}/series`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
   ];
 
   /*
@@ -38,10 +40,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
    * All three run together, and any that fails contributes nothing rather than
    * failing the sitemap: a partial sitemap is far better than a 500.
    */
-  const [slugs, studios, franchises] = await Promise.all([
+  const [slugs, studios, series] = await Promise.all([
     popularSlugs(200).catch(() => [] as string[]),
     igdbTopStudios(120).catch(() => null),
-    igdbTopFranchises(120).catch(() => null),
+    igdbTopSeries(120).catch(() => null),
   ]);
 
   const gameRoutes: MetadataRoute.Sitemap = slugs.map((slug) => ({
@@ -58,12 +60,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  const franchiseRoutes: MetadataRoute.Sitemap = (franchises ?? []).map((franchise) => ({
-    url: `${BASE}/franchise/${franchise.slug}`,
+  const seriesRoutes: MetadataRoute.Sitemap = (series ?? []).map((entry) => ({
+    url: `${BASE}/series/${entry.slug}`,
     lastModified: now,
     changeFrequency: "monthly",
     priority: 0.5,
   }));
 
-  return [...staticRoutes, ...gameRoutes, ...studioRoutes, ...franchiseRoutes];
+  return [...staticRoutes, ...gameRoutes, ...studioRoutes, ...seriesRoutes];
 }

@@ -16,7 +16,7 @@ export function EntityDirectory({
   kind,
 }: {
   items: (Ref | LogoRef)[];
-  kind: "studio" | "franchise";
+  kind: "studio" | "series";
 }) {
   const [query, setQuery] = useState("");
   const normalised = query.trim().toLocaleLowerCase();
@@ -85,7 +85,7 @@ export function EntityDirectory({
               {isStudio ? (
                 <StudioCard studio={item as DirectoryItem} priority={index < 12} />
               ) : (
-                <FranchiseCard franchise={item} index={index} />
+                <SeriesCard series={item} index={index} />
               )}
             </StaggerItem>
           ))}
@@ -124,12 +124,12 @@ function StudioCard({ studio, priority }: { studio: DirectoryItem; priority: boo
   );
 }
 
-function FranchiseCard({ franchise, index }: { franchise: Ref; index: number }) {
-  const hue = hueFromString(franchise.slug);
+function SeriesCard({ series, index }: { series: Ref; index: number }) {
+  const hue = hueFromString(series.slug);
 
   return (
     <Link
-      href={`/franchise/${franchise.slug}`}
+      href={`/series/${series.slug}`}
       className="group relative flex h-32 items-end overflow-hidden rounded-2xl border border-line p-4 transition-all duration-500 fine:hover:-translate-y-1 fine:hover:border-line-strong fine:hover:shadow-[0_25px_60px_-32px_rgba(124,92,255,0.8)]"
       style={{
         background: `linear-gradient(140deg, hsl(${hue} 58% 21%), hsl(${(hue + 45) % 360} 52% 8%))`,
@@ -143,14 +143,14 @@ function FranchiseCard({ franchise, index }: { franchise: Ref; index: number }) 
         }}
       />
       <span aria-hidden className="absolute -right-2 -top-6 font-display text-8xl font-black text-white/[0.055]">
-        {franchise.name.charAt(0)}
+        {series.name.charAt(0)}
       </span>
       <span className="relative">
         <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50">
           Series {String(index + 1).padStart(2, "0")}
         </span>
         <span className="line-clamp-2 font-display text-[15px] font-bold leading-tight text-white transition-colors group-hover:text-white">
-          {franchise.name}
+          {series.name}
         </span>
       </span>
     </Link>
