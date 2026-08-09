@@ -9,6 +9,7 @@
  */
 
 import Image from "next/image";
+import Link from "next/link";
 import { Building2, CalendarDays, Cpu, Globe2, ShieldAlert, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PlatformIcons } from "./PlatformIcons";
@@ -82,12 +83,14 @@ export function CompanyGrid({ companies }: { companies: CompanyRef[] }) {
             ) : (
               <Initial name={company.name} />
             )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{company.name}</p>
+            <Link href={`/studio/${company.slug}`} className="min-w-0 flex-1 group/company">
+              <p className="truncate text-sm font-semibold transition-colors group-hover/company:text-brand-soft">
+                {company.name}
+              </p>
               <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.1em] text-faint">
                 {rolesOf(company)}
               </p>
-            </div>
+            </Link>
             {company.website && (
               <a
                 href={company.website}
@@ -187,7 +190,10 @@ export function CharacterRail({ characters }: { characters: CharacterRef[] }) {
     <ul className="snap-rail gap-3 pb-2 sm:gap-4">
       {characters.map((character) => (
         <li key={character.id} className="w-[132px] sm:w-[148px]">
-          <div className="group overflow-hidden rounded-2xl border border-line bg-panel/40 transition-colors hover:border-line-strong">
+          <Link
+            href={`/character/${character.slug}`}
+            className="group block overflow-hidden rounded-2xl border border-line bg-panel/40 transition-colors hover:border-line-strong"
+          >
             <div className="relative aspect-[3/4] w-full overflow-hidden bg-panel-2">
               {character.image ? (
                 <Image
@@ -204,14 +210,16 @@ export function CharacterRail({ characters }: { characters: CharacterRef[] }) {
               )}
             </div>
             <div className="p-2.5">
-              <p className="truncate text-[13px] font-semibold leading-tight">{character.name}</p>
+              <p className="truncate text-[13px] font-semibold leading-tight transition-colors group-hover:text-brand-soft">
+                {character.name}
+              </p>
               {(character.species || character.gender) && (
                 <p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.1em] text-faint">
                   {[character.species, character.gender].filter(Boolean).join(" · ")}
                 </p>
               )}
             </div>
-          </div>
+          </Link>
         </li>
       ))}
     </ul>

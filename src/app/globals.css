@@ -101,9 +101,21 @@
 
   html {
     -webkit-text-size-adjust: 100%;
-    scroll-behavior: smooth;
-    /* Anchor targets clear the sticky desktop header. */
+    /* Anchor targets clear the fixed header. */
     scroll-padding-top: 6rem;
+  }
+
+  /*
+    Smooth scrolling is opt-in per element, never global on `html`.
+
+    A global `scroll-behavior: smooth` also applies to the scroll reset the
+    router performs on navigation, which turns an instant jump into an
+    animation the next route can interrupt — so opening a new page while
+    scrolled deep into the previous one left you partway down a page you had
+    never scrolled. Anchor links that genuinely want easing ask for it.
+  */
+  .scroll-smooth-y {
+    scroll-behavior: smooth;
   }
 
   body {

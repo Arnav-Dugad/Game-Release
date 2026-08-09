@@ -33,7 +33,7 @@ import { ArrowRight, Info, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { BackdropTrailer } from "@/components/game/BackdropTrailer";
 import { GameCover } from "@/components/game/GameCover";
 import { PlatformIcons } from "@/components/game/PlatformIcons";
-import { WatchButton } from "@/components/game/WatchButton";
+import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
@@ -42,10 +42,26 @@ import { cn } from "@/lib/utils/cn";
 import { releaseLabelLong, relativeReleaseLabel, truncate } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
-/** How long each slide holds before advancing. */
-const SLIDE_MS = 15_000;
+/**
+ * How long a slide holds, by what it actually has to show.
+ *
+ * A slide running a trailer earns real screen time — cutting away four seconds
+ * into a trailer is worse than not playing one. A slide that only has artwork
+ * has nothing further to reveal, so it moves on quickly. The trailer clock
+ * starts when playback is *confirmed*, not when the slide appears, so a slow
+ * embed doesn't eat its own airtime.
+ */
+const TRAILER_SLIDE_MS = 15_000;
+const ARTWORK_SLIDE_MS = 7_000;
 /** Beat before the trailer replaces the still. */
 const TRAILER_DELAY_MS = 1800;
+/**
+ * How long the full metadata block stays before collapsing to just the title.
+ *
+ * The Netflix move: lead with everything someone needs to decide, then get out
+ * of the artwork's way once they've had time to read it.
+ */
+const INFO_HOLD_MS = 4200;
 
 export function CinematicHero({ games }: { games: GameSummary[] }) {
   const featured = games.filter((game) => game.image || game.heroTrailer).slice(0, 6);
@@ -59,6 +75,10 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
    * implicitly — no state has to be written to undo the previous slide.
    */
   const [trailerReadyFor, setTrailerReadyFor] = useState<number | null>(null);
+  /** True only once the embed reports it is genuinely playing. */
+  const [trailerPlaying, setTrailerPlaying] = useState(false);
+  /** Collapses the metadata to just the title, Netflix-style. */
+  const [infoCollapsed, setInfoCollapsed] = useState(false);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trailerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,17 +93,45 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
 
   const goTo = useCallback((next: number) => setIndex(next), []);
 
-  // Advance the carousel.
+  /*
+   * Advance the carousel.
+   *
+   * Depending on `trailerPlaying` restarts this timer the moment playback is
+   * confirmed, which is exactly what's wanted: the slide gets its full trailer
+   * airtime measured from when the video actually started, and an artwork-only
+   * slide — including one whose trailer turned out to be age-restricted —
+   * quietly falls back to the shorter hold.
+   */
+  const slideMs = trailerPlaying ? TRAILER_SLIDE_MS : ARTWORK_SLIDE_MS;
+
   useEffect(() => {
     if (paused || featured.length <= 1) return;
     advanceTimer.current = setTimeout(
       () => setIndex((i) => (i + 1) % featured.length),
-      SLIDE_MS,
+      slideMs,
     );
     return () => {
       if (advanceTimer.current) clearTimeout(advanceTimer.current);
     };
-  }, [index, paused, featured.length]);
+  }, [index, paused, featured.length, slideMs]);
+
+  // Collapse the metadata after a beat, and restore it whenever the slide
+  // changes so every game gets its own full introduction.
+  useEffect(() => {
+    if (paused) return;
+    const frame = requestAnimationFrame(() => setInfoCollapsed(false));
+    const id = setTimeout(() => setInfoCollapsed(true), INFO_HOLD_MS);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(id);
+    };
+  }, [index, paused]);
+
+  // Playback is per-slide; a new slide starts unproven.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setTrailerPlaying(false));
+    return () => cancelAnimationFrame(frame);
+  }, [index]);
 
   // Bring the trailer in a beat after the art.
   useEffect(() => {
@@ -123,7 +171,9 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
             exit={{ opacity: 0 }}
             transition={{
               opacity: { duration: 1.1, ease: [0.16, 1, 0.3, 1] },
-              scale: { duration: SLIDE_MS / 1000, ease: "linear" },
+              // Matches the slide's actual hold so the Ken Burns drift
+              // finishes exactly as the slide changes.
+              scale: { duration: slideMs / 1000, ease: "linear" },
             }}
           >
             <GameCover
@@ -146,6 +196,7 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
           trailer={showTrailer ? trailer : null}
           muted={muted}
           delayMs={0}
+          onPlayingChange={setTrailerPlaying}
         />
 
         {/*
@@ -171,40 +222,76 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
               exit={{ opacity: 0, y: -14 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge tone="brand">{relativeReleaseLabel(active)}</Badge>
-                {active.genres.slice(0, 2).map((genre) => (
-                  <Badge key={genre.id}>{genre.name}</Badge>
-                ))}
-              </div>
+              {/*
+                Everything except the title and the actions collapses away once
+                the reader has had time to take it in. Height is animated as
+                well as opacity so the title settles downward into the space
+                rather than leaving a hole — the movement is what makes it read
+                as intentional rather than as content failing to load.
+              */}
+              <motion.div
+                initial={false}
+                animate={{
+                  opacity: infoCollapsed ? 0 : 1,
+                  height: infoCollapsed ? 0 : "auto",
+                  marginBottom: infoCollapsed ? 0 : 16,
+                }}
+                transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+                aria-hidden={infoCollapsed}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="brand">{relativeReleaseLabel(active)}</Badge>
+                  {active.genres.slice(0, 2).map((genre) => (
+                    <Badge key={genre.id}>{genre.name}</Badge>
+                  ))}
+                </div>
+              </motion.div>
 
-              <h1 className="font-display text-[clamp(2.2rem,7.5vw,5rem)] font-black leading-[0.94] tracking-[-0.045em] drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+              {/* The title stays, and grows slightly as the rest clears out. */}
+              <motion.h1
+                initial={false}
+                animate={{ scale: infoCollapsed ? 1.04 : 1 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                className="origin-left font-display text-[clamp(2.2rem,7.5vw,5rem)] font-black leading-[0.94] tracking-[-0.045em] drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
+              >
                 {active.name}
-              </h1>
+              </motion.h1>
 
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
-                <span>{releaseLabelLong(active)}</span>
-                <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
-                <PlatformIcons platforms={active.parentPlatforms} size={15} max={5} tinted />
-                {active.metacritic !== null && (
-                  <>
-                    <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
-                    <span className="font-semibold text-mint">{active.metacritic}</span>
-                  </>
+              <motion.div
+                initial={false}
+                animate={{
+                  opacity: infoCollapsed ? 0 : 1,
+                  height: infoCollapsed ? 0 : "auto",
+                }}
+                transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+                aria-hidden={infoCollapsed}
+              >
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
+                  <span>{releaseLabelLong(active)}</span>
+                  <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
+                  <PlatformIcons platforms={active.parentPlatforms} size={15} max={5} tinted />
+                  {active.metacritic !== null && (
+                    <>
+                      <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
+                      <span className="font-semibold text-mint">{active.metacritic}</span>
+                    </>
+                  )}
+                </div>
+
+                {active.genres.length > 0 && (
+                  <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted sm:text-base">
+                    {truncate(active.genres.map((g) => g.name).join(" · "), 120)}
+                  </p>
                 )}
-              </div>
-
-              {active.genres.length > 0 && (
-                <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted sm:text-base">
-                  {truncate(active.genres.map((g) => g.name).join(" · "), 120)}
-                </p>
-              )}
+              </motion.div>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <Button href={`/game/${active.slug}`} size="lg" iconRight={<ArrowRight size={17} />}>
                   View details
                 </Button>
-                <WatchButton game={active} variant="full" />
+                <OwnershipPicker game={active} />
               </div>
             </motion.div>
           </AnimatePresence>
@@ -244,7 +331,7 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
                     className="absolute inset-x-0 bottom-0 h-[3px] origin-left bg-brand"
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
-                    transition={{ duration: SLIDE_MS / 1000, ease: "linear" }}
+                    transition={{ duration: slideMs / 1000, ease: "linear" }}
                   />
                 )}
               </button>

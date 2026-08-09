@@ -38,16 +38,16 @@ interface SearchHit {
 /** Stable identity for the "no results" case. */
 const EMPTY_RESULTS: SearchHit[] = [];
 
-/**
- * Where a hit navigates.
- *
- * Only games have their own page. Characters and studios resolve to a filtered
- * search, which is honest — it shows what the site can actually tell you about
- * them rather than a stub page.
- */
+/** Every hit kind now has a real page of its own. */
 function hrefForHit(hit: SearchHit): string {
-  if (hit.kind === "game") return `/game/${hit.slug}`;
-  return `/browse?search=${encodeURIComponent(hit.name)}`;
+  switch (hit.kind) {
+    case "character":
+      return `/character/${hit.slug}`;
+    case "company":
+      return `/studio/${hit.slug}`;
+    default:
+      return `/game/${hit.slug}`;
+  }
 }
 
 const GROUP_LABELS: Record<SearchHit["kind"], string> = {

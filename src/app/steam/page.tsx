@@ -76,7 +76,7 @@ export default async function SteamPage() {
                             {i + 1}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <GameCard game={game} shape="wide" showWatch={false} />
+                            <GameCard game={game} shape="wide" showOwnership={false} />
                           </div>
                         </div>
                       </Spotlight>

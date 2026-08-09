@@ -24,9 +24,12 @@ import type { GameSummary } from "@/lib/games/types";
 export function OwnershipPicker({
   game,
   className,
+  /** `icon` is the compact control for game cards; `full` is the page button. */
+  variant = "full",
 }: {
   game: GameSummary;
   className?: string;
+  variant?: "full" | "icon";
 }) {
   const { user, enabled } = useAuth();
   const { isWatched, ownershipOf, setOwnership, toggle } = useWatchlist();
@@ -68,6 +71,11 @@ export function OwnershipPicker({
     setPending(null);
   };
 
+  const label =
+    owned.length > 0
+      ? `Owned on ${owned.length} ${owned.length === 1 ? "store" : "stores"}`
+      : "Mark as owned";
+
   return (
     <div className={cn("relative", className)}>
       <button
@@ -76,16 +84,22 @@ export function OwnershipPicker({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={variant === "icon" ? label : undefined}
+        title={variant === "icon" ? label : undefined}
         className={cn(
-          "inline-flex min-h-12 items-center gap-2 rounded-full border px-5 text-sm font-semibold transition-all duration-300 active:scale-[0.97]",
+          "inline-flex items-center gap-2 border font-semibold transition-all duration-300 active:scale-[0.97]",
+          // A 36px target on cards, 44px+ on touch where it's the primary tap.
+          variant === "icon"
+            ? "h-9 w-9 justify-center rounded-full coarse:h-11 coarse:w-11"
+            : "min-h-12 rounded-full px-5 text-sm",
           owned.length > 0
             ? "border-mint/45 bg-mint/15 text-white"
-            : "border-line-strong bg-white/[0.05] text-text fine:hover:bg-white/10",
+            : "border-line-strong bg-black/40 text-text backdrop-blur-sm fine:hover:bg-white/10",
         )}
       >
-        <Library size={17} />
-        {owned.length > 0 ? `Owned on ${owned.length}` : "I own this"}
-        {owned.length > 0 && (
+        <Library size={variant === "icon" ? 15 : 17} />
+        {variant === "full" && (owned.length > 0 ? `Owned on ${owned.length}` : "I own this")}
+        {variant === "full" && owned.length > 0 && (
           <span className="flex items-center -space-x-1">
             {owned.slice(0, 3).map((slug) => {
               const platform = OWNERSHIP_PLATFORMS.find((p) => p.slug === slug);

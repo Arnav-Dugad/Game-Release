@@ -1,0 +1,109 @@
+"use client";
+
+/**
+ * Poster density control for the personal collection pages.
+ *
+ * A library is browsed by *recognising* covers, not by reading titles, so the
+ * right size genuinely differs by person and by collection size — twelve games
+ * want big art, four hundred want a dense grid. Rather than guess, this is a
+ * preference, persisted per device so it survives a reload.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { LayoutGrid, Rows3, StretchHorizontal } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+
+export type PosterSize = "list" | "compact" | "large";
+
+const OPTIONS: { value: PosterSize; label: string; icon: typeof Rows3 }[] = [
+  { value: "list", label: "List", icon: Rows3 },
+  { value: "compact", label: "Compact posters", icon: LayoutGrid },
+  { value: "large", label: "Large posters", icon: StretchHorizontal },
+];
+
+/** Reads and persists the choice for one page, keyed so pages differ freely. */
+export function usePosterSize(storageKey: string, fallback: PosterSize = "compact") {
+  const [size, setSizeState] = useState<PosterSize>(fallback);
+
+  useEffect(() => {
+    // Deferred a frame so nothing is written during the effect itself.
+    const frame = requestAnimationFrame(() => {
+      try {
+        const stored = window.localStorage.getItem(storageKey);
+        if (stored === "list" || stored === "compact" || stored === "large") {
+          setSizeState(stored);
+        }
+      } catch {
+        /* storage disabled — the default is fine */
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [storageKey]);
+
+  const setSize = useCallback(
+    (next: PosterSize) => {
+      setSizeState(next);
+      try {
+        window.localStorage.setItem(storageKey, next);
+      } catch {
+        /* in-memory state still updates */
+      }
+    },
+    [storageKey],
+  );
+
+  return { size, setSize };
+}
+
+/** Grid classes for a chosen density. */
+export function posterGridClass(size: PosterSize): string {
+  switch (size) {
+    case "list":
+      return "grid-cols-1";
+    case "large":
+      return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
+    default:
+      return "grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7";
+  }
+}
+
+export function PosterSizeToggle({
+  size,
+  onChange,
+  className,
+}: {
+  size: PosterSize;
+  onChange: (size: PosterSize) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Poster size"
+      className={cn(
+        "flex items-center gap-1 rounded-full border border-line bg-white/[0.04] p-1",
+        className,
+      )}
+    >
+      {OPTIONS.map((option) => {
+        const Icon = option.icon;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-label={option.label}
+            aria-pressed={size === option.value}
+            title={option.label}
+            className={cn(
+              "grid h-8 w-8 place-items-center rounded-full transition-colors",
+              size === option.value ? "bg-white/10 text-text" : "text-faint hover:text-text",
+            )}
+          >
+            <Icon size={15} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}

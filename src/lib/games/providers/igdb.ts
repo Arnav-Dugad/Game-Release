@@ -2031,6 +2031,170 @@ export async function igdbSteamCharts(perChart = 12): Promise<SteamChart[] | nul
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Entity pages
+ * ------------------------------------------------------------------------ */
+
+export interface IgdbEntity {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  image: string | null;
+  /** Country code for companies, species for characters — a one-line fact. */
+  detail: string | null;
+  games: GameSummary[];
+}
+
+/**
+ * A studio and everything IGDB credits it with.
+ *
+ * `involved_companies` is the join table between games and companies, so the
+ * game ids come from there rather than from the company record itself.
+ */
+export async function igdbCompany(slug: string): Promise<IgdbEntity | null> {
+  if (!igdbConfigured()) return null;
+  try {
+    const query = queryFor(TTL.detail);
+    const rows = await query<
+      (IgdbCompany & { description?: string; country?: number; developed?: number[]; published?: number[] })[]
+    >(
+      "companies",
+      apicalypse({
+        fields: "name,slug,description,logo.image_id,country,developed,published",
+        where: `slug = "${slug.replace(/"/g, "")}"`,
+        limit: 1,
+      }),
+    );
+
+    const company = rows[0];
+    if (!company) return null;
+
+    // Developed first, then published — a studio's own work leads.
+    const gameIds = [...new Set([...(company.developed ?? []), ...(company.published ?? [])])].slice(
+      0,
+      60,
+    );
+
+    const games =
+      gameIds.length > 0
+        ? await listGames(
+            { where: `id = (${gameIds.join(",")})`, sort: "total_rating_count desc", limit: 48 },
+            TTL.detail,
+          )
+        : [];
+
+    return {
+      id: company.id,
+      slug: company.slug ?? slug,
+      name: company.name,
+      description: company.description?.trim() || null,
+      image: igdbImage(company.logo?.image_id, "logo_med"),
+      detail: null,
+      games,
+    };
+  } catch (err) {
+    warn("company", err);
+    return null;
+  }
+}
+
+/** A character and the games they appear in. */
+export async function igdbCharacter(slug: string): Promise<IgdbEntity | null> {
+  if (!igdbConfigured()) return null;
+  try {
+    const query = queryFor(TTL.detail);
+    const rows = await query<(IgdbCharacter & { games?: number[] })[]>(
+      "characters",
+      apicalypse({
+        fields: "name,slug,description,mug_shot.image_id,species,gender,games",
+        where: `slug = "${slug.replace(/"/g, "")}"`,
+        limit: 1,
+      }),
+    );
+
+    const character = rows[0];
+    if (!character) return null;
+
+    const gameIds = (character.games ?? []).slice(0, 48);
+    const games =
+      gameIds.length > 0
+        ? await listGames(
+            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 48 },
+            TTL.detail,
+          )
+        : [];
+
+    return {
+      id: character.id,
+      slug: character.slug ?? slug,
+      name: character.name,
+      description: character.description?.trim() || null,
+      image: igdbImage(character.mug_shot?.image_id, "1080p"),
+      detail:
+        [
+          typeof character.species === "number" ? CHARACTER_SPECIES[character.species] : null,
+          typeof character.gender === "number" ? CHARACTER_GENDERS[character.gender] : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || null,
+      games,
+    };
+  } catch (err) {
+    warn("character", err);
+    return null;
+  }
+}
+
+/**
+ * A franchise or collection, and its games.
+ *
+ * IGDB splits these into two endpoints that answer the same question — a
+ * "franchise" and a "collection" (series) frequently both exist for the same
+ * name — so both are tried before giving up.
+ */
+export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
+  if (!igdbConfigured()) return null;
+  const safe = slug.replace(/"/g, "");
+
+  for (const endpoint of ["franchises", "collections"] as const) {
+    try {
+      const query = queryFor(TTL.detail);
+      const rows = await query<(IgdbNamed & { games?: number[] })[]>(
+        endpoint,
+        apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
+      );
+
+      const entity = rows[0];
+      if (!entity) continue;
+
+      const gameIds = (entity.games ?? []).slice(0, 60);
+      const games =
+        gameIds.length > 0
+          ? await listGames(
+              { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 48 },
+              TTL.detail,
+            )
+          : [];
+
+      if (games.length === 0) continue;
+
+      return {
+        id: entity.id,
+        slug: entity.slug ?? slug,
+        name: entity.name,
+        description: null,
+        image: games[0]?.image ?? null,
+        detail: null,
+        games,
+      };
+    } catch (err) {
+      warn(endpoint, err);
+    }
+  }
+  return null;
+}
+
 /** Themes power the recommendation engine's taste profile. */
 export async function igdbThemes(): Promise<Ref[] | null> {
   if (!igdbConfigured()) return null;

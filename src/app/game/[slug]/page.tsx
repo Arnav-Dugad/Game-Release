@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Building2,
@@ -37,7 +38,7 @@ import { MediaGallery } from "@/components/game/MediaGallery";
 import { CommunityLinks, StoreLinks } from "@/components/game/StoreLinks";
 import { ReviewSection } from "@/components/game/ReviewSection";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
-import { WatchButton } from "@/components/game/WatchButton";
+import { StatusPicker } from "@/components/game/StatusPicker";
 import { ScorePill, ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -430,7 +431,11 @@ function GameHero({ game }: { game: GameDetail }) {
         {/* Actions span the full width rather than sharing the narrow title
             column, which on a phone left no room for two buttons side by side. */}
         <Reveal delay={0.24} className="mt-7 flex flex-wrap items-center gap-3">
-          <WatchButton game={game} variant="full" />
+          {/* Where you are with this game, and where you own it — the two
+              things worth recording, side by side. The segmented control also
+              starts tracking the game, so no separate watchlist button is
+              needed here. */}
+          <StatusPicker game={game} />
           <OwnershipPicker game={game} />
           {game.website && (
             <Button
@@ -512,7 +517,23 @@ function GameSidebar({ game }: { game: GameDetail }) {
       ? [
           {
             label: game.franchises.length > 1 ? "Series" : "Part of",
-            value: game.franchises.map((f) => f.name).join(", "),
+            // Linked, because "what else is in this series?" is the most
+            // common next question a series line provokes.
+            value: (
+              <span className="flex flex-wrap gap-x-1.5">
+                {game.franchises.map((franchise, i) => (
+                  <span key={franchise.id}>
+                    <Link
+                      href={`/franchise/${franchise.slug}`}
+                      className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-brand-soft"
+                    >
+                      {franchise.name}
+                    </Link>
+                    {i < game.franchises.length - 1 && ","}
+                  </span>
+                ))}
+              </span>
+            ),
             icon: <Layers size={14} />,
           },
         ]

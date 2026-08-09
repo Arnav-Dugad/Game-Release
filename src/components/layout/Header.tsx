@@ -14,6 +14,7 @@
 
 import { motion } from "motion/react";
 import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import { Logo } from "./Logo";
@@ -32,21 +33,29 @@ const NAV = [
 
 export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
   const pathname = usePathname();
-  const { direction, scrolled } = useScrollDirection();
+  const { scrolled } = useScrollDirection();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <motion.header
+    /*
+      Pinned at all times.
+
+      This used to slide away on scroll-down to reclaim vertical space. In
+      practice that trades a permanently available navigation and search for a
+      little height, and it means the one control people reach for mid-page —
+      search — is never where they left it. The bar only gains its glass
+      background once the page has scrolled, so a hero still sits behind a fully
+      transparent header.
+    */
+    <header
       className={cn(
         "fixed inset-x-0 top-0 z-[150] transition-[background-color,border-color,backdrop-filter] duration-500",
         scrolled
           ? "border-b border-line bg-bg/70 backdrop-blur-xl backdrop-saturate-150"
           : "border-b border-transparent bg-transparent",
       )}
-      animate={{ y: direction === "down" && scrolled ? "-100%" : "0%" }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="mx-auto flex h-16 w-full max-w-[1400px] items-center gap-4 px-4 lg:h-[72px] lg:px-6 xl:px-10">
         <Logo />
@@ -102,6 +111,6 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
           <UserMenu />
         </div>
       </div>
-    </motion.header>
+    </header>
   );
 }

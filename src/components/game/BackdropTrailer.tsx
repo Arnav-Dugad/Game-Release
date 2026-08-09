@@ -90,11 +90,17 @@ export function BackdropTrailer({
   muted = true,
   delayMs = DEFAULT_DELAY_MS,
   className,
+  onPlayingChange,
 }: {
   trailer: Trailer | null;
   muted?: boolean;
   delayMs?: number;
   className?: string;
+  /**
+   * Fires when playback is confirmed or lost. The carousel uses this to hold a
+   * slide longer once a trailer is genuinely running, rather than guessing.
+   */
+  onPlayingChange?: (playing: boolean) => void;
 }) {
   const richMotion = useRichMotion();
   const [mounted, setMounted] = useState(false);
@@ -120,6 +126,12 @@ export function BackdropTrailer({
     const frame = requestAnimationFrame(() => setConfirmed(false));
     return () => cancelAnimationFrame(frame);
   }, [youtubeId, videoUrl]);
+
+  // Reported as an effect rather than from the message handler so the parent
+  // hears every transition, including the reset above.
+  useEffect(() => {
+    onPlayingChange?.(confirmed);
+  }, [confirmed, onPlayingChange]);
 
   /* --- The postMessage conversation with YouTube's player ---------------- */
   useEffect(() => {

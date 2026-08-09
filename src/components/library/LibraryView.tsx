@@ -16,21 +16,19 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import {
-  ArrowUpDown,
-  LayoutGrid,
-  Library,
-  List,
-  PackageOpen,
-  Search,
-  X,
-} from "lucide-react";
+import { ArrowUpDown, Library, PackageOpen, Search, X } from "lucide-react";
 import { BrandIcon } from "@/components/brand/BrandIcon";
 import { GameCover } from "@/components/game/GameCover";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Badge";
 import { Reveal } from "@/components/motion/Reveal";
+import {
+  PosterSizeToggle,
+  posterGridClass,
+  usePosterSize,
+} from "@/components/ui/PosterSizeToggle";
+import { PosterTile } from "@/components/game/PosterTile";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { OWNERSHIP_PLATFORMS, ownershipPlatform } from "@/lib/games/stores-catalog";
@@ -61,7 +59,7 @@ export function LibraryView() {
   const [status, setStatus] = useState<WatchStatus | "all">("all");
   const [sort, setSort] = useState<SortKey>("added");
   const [query, setQuery] = useState("");
-  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const { size: posterSize, setSize: setPosterSize } = usePosterSize("ludex:library-size");
 
   /** Only games the reader has actually marked as owned somewhere. */
   const owned = useMemo(
@@ -215,28 +213,7 @@ export function LibraryView() {
             </span>
           </div>
 
-          {/* Layout toggle is desktop-only; a phone has room for one sensible
-              density and choosing between them there is busywork. */}
-          <div className="hidden items-center gap-1 rounded-full border border-line bg-white/[0.04] p-1 fine:flex">
-            {([
-              ["grid", LayoutGrid],
-              ["list", List],
-            ] as const).map(([value, Icon]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setLayout(value)}
-                aria-label={`${value} view`}
-                aria-pressed={layout === value}
-                className={cn(
-                  "grid h-8 w-8 place-items-center rounded-full transition-colors",
-                  layout === value ? "bg-white/10 text-text" : "text-faint hover:text-text",
-                )}
-              >
-                <Icon size={15} />
-              </button>
-            ))}
-          </div>
+          <PosterSizeToggle size={posterSize} onChange={setPosterSize} />
         </div>
 
         <div>
@@ -297,16 +274,21 @@ export function LibraryView() {
           </button>
         </div>
       ) : (
-        <ul
-          className={cn(
-            "grid gap-3",
-            layout === "grid" ? "sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1",
-          )}
-        >
+        <ul className={cn("grid gap-3", posterGridClass(posterSize))}>
           {visible.map((entry, index) => (
             <li key={entry.gameId}>
-              <Reveal delay={Math.min(index, 8) * 0.03} blur={false} amount={0.05}>
-                <LibraryRow entry={entry} />
+              {/* Mount-based: filtering re-mounts these while the reader is
+                  already scrolled into the results. */}
+              <Reveal delay={Math.min(index, 10) * 0.025} blur={false} onMount>
+                {posterSize === "list" ? (
+                  <LibraryRow entry={entry} />
+                ) : (
+                  <PosterTile
+                    entry={entry}
+                    size={posterSize === "large" ? "large" : "compact"}
+                    badge={STATUS_LABELS[entry.status]}
+                  />
+                )}
               </Reveal>
             </li>
           ))}

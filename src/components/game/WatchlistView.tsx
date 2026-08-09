@@ -12,16 +12,23 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { BookmarkX, Trash2 } from "lucide-react";
+import { ArrowUpDown, BookmarkX, Library, Search, Trash2, X } from "lucide-react";
 import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
 import { PlatformPicker } from "./PlatformPicker";
+import { PosterTile } from "./PosterTile";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { GameCardSkeleton } from "@/components/ui/Skeleton";
+import { Reveal } from "@/components/motion/Reveal";
+import {
+  PosterSizeToggle,
+  posterGridClass,
+  usePosterSize,
+} from "@/components/ui/PosterSizeToggle";
 import { cn } from "@/lib/utils/cn";
 import { releaseLabel } from "@/lib/utils/format";
 import type { WatchStatus } from "@/lib/firebase/db";
@@ -39,10 +46,26 @@ const STATUS_LABEL: Record<WatchStatus, string> = {
   played: "Played",
 };
 
+type WatchSort = "upcoming" | "added" | "name" | "score";
+
+const SORTS: { value: WatchSort; label: string }[] = [
+  { value: "upcoming", label: "Releasing soonest" },
+  { value: "added", label: "Recently added" },
+  { value: "name", label: "A–Z" },
+  { value: "score", label: "Highest rated" },
+];
+
 export function WatchlistView() {
   const { entries, loading, setStatus, remove } = useWatchlist();
   const { toast } = useToast();
   const [filter, setFilter] = useState<WatchStatus | "all">("all");
+  const [sort, setSort] = useState<WatchSort>("upcoming");
+  const [query, setQuery] = useState("");
+  const [ownedOnly, setOwnedOnly] = useState(false);
+  const { size: posterSize, setSize: setPosterSize } = usePosterSize(
+    "ludex:watchlist-size",
+    "list",
+  );
 
   const counts = useMemo(() => {
     const base: Record<string, number> = { all: entries.length, want: 0, playing: 0, played: 0 };
@@ -51,21 +74,39 @@ export function WatchlistView() {
   }, [entries]);
 
   const visible = useMemo(() => {
-    const list = filter === "all" ? entries : entries.filter((e) => e.status === filter);
-    const today = new Date().toISOString().slice(0, 10);
-    return [...list].sort((a, b) => {
-      // Upcoming, soonest first; then released, newest first; undated last.
-      const rank = (released: string | null, tba: boolean) => {
-        if (tba || !released) return 2;
-        return released >= today ? 0 : 1;
-      };
-      const [ra, rb] = [rank(a.released, a.tba), rank(b.released, b.tba)];
-      if (ra !== rb) return ra - rb;
-      if (ra === 0) return (a.released ?? "").localeCompare(b.released ?? "");
-      if (ra === 1) return (b.released ?? "").localeCompare(a.released ?? "");
-      return b.addedAt - a.addedAt;
+    const term = query.trim().toLowerCase();
+    const list = entries.filter((entry) => {
+      if (filter !== "all" && entry.status !== filter) return false;
+      if (ownedOnly && (entry.ownedOn ?? []).length === 0) return false;
+      if (term && !entry.name.toLowerCase().includes(term)) return false;
+      return true;
     });
-  }, [entries, filter]);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const sorted = [...list];
+
+    switch (sort) {
+      case "added":
+        return sorted.sort((a, b) => b.addedAt - a.addedAt);
+      case "name":
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case "score":
+        return sorted.sort((a, b) => (b.metacritic ?? -1) - (a.metacritic ?? -1));
+      default:
+        return sorted.sort((a, b) => {
+          // Upcoming, soonest first; then released, newest first; undated last.
+          const rank = (released: string | null, tba: boolean) => {
+            if (tba || !released) return 2;
+            return released >= today ? 0 : 1;
+          };
+          const [ra, rb] = [rank(a.released, a.tba), rank(b.released, b.tba)];
+          if (ra !== rb) return ra - rb;
+          if (ra === 0) return (a.released ?? "").localeCompare(b.released ?? "");
+          if (ra === 1) return (b.released ?? "").localeCompare(a.released ?? "");
+          return b.addedAt - a.addedAt;
+        });
+    }
+  }, [entries, filter, sort, query, ownedOnly]);
 
   if (loading) {
     return (
@@ -102,31 +143,118 @@ export function WatchlistView() {
 
   return (
     <Container className="py-8 lg:py-12">
-      <div className="mb-6 flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        {FILTERS.map((option) => (
+      <div className="mb-6 space-y-4 rounded-2xl border border-line bg-panel/40 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your watchlist…"
+              aria-label="Search your watchlist"
+              className="min-h-11 w-full rounded-full border border-line bg-white/[0.04] pl-10 pr-9 text-sm outline-none transition-colors focus-visible:border-brand"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-faint transition-colors hover:bg-white/10 hover:text-text"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <ArrowUpDown
+              size={14}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as WatchSort)}
+              aria-label="Sort watchlist"
+              className="min-h-11 appearance-none rounded-full border border-line bg-white/[0.04] py-2 pl-9 pr-9 text-sm outline-none transition-colors hover:border-line-strong focus-visible:border-brand"
+            >
+              {SORTS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-panel text-text">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-faint"
+            >
+              ▾
+            </span>
+          </div>
+
+          <PosterSizeToggle size={posterSize} onChange={setPosterSize} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTERS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setFilter(option.value)}
+              className={cn(
+                "inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[13px] font-medium transition-colors",
+                filter === option.value
+                  ? "border-brand/50 bg-brand/20 text-white"
+                  : "border-line bg-white/[0.03] text-muted fine:hover:text-text",
+              )}
+            >
+              {option.label}
+              <span className="text-[11px] tabular-nums opacity-60">
+                {counts[option.value] ?? 0}
+              </span>
+            </button>
+          ))}
+
           <button
-            key={option.value}
             type="button"
-            onClick={() => setFilter(option.value)}
+            onClick={() => setOwnedOnly((value) => !value)}
+            aria-pressed={ownedOnly}
             className={cn(
               "inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[13px] font-medium transition-colors",
-              filter === option.value
-                ? "border-brand/50 bg-brand/20 text-white"
+              ownedOnly
+                ? "border-mint/45 bg-mint/15 text-white"
                 : "border-line bg-white/[0.03] text-muted fine:hover:text-text",
             )}
           >
-            {option.label}
-            <span className="text-[11px] tabular-nums opacity-60">
-              {counts[option.value] ?? 0}
-            </span>
+            <Library size={13} />
+            Owned only
           </button>
-        ))}
+        </div>
       </div>
 
       {visible.length === 0 ? (
         <p className="py-16 text-center text-sm text-muted">
           Nothing in this list yet.
         </p>
+      ) : posterSize !== "list" ? (
+        /* Poster grid. The inline status and platform controls only fit the
+           list layout, so the grid links straight through to the game page —
+           which is what someone scanning covers is heading for anyway. */
+        <ul className={cn("grid gap-3", posterGridClass(posterSize))}>
+          {visible.map((entry, index) => (
+            <li key={entry.gameId}>
+              <Reveal delay={Math.min(index, 10) * 0.025} blur={false} onMount>
+                <PosterTile
+                  entry={entry}
+                  size={posterSize === "large" ? "large" : "compact"}
+                  badge={STATUS_LABEL[entry.status]}
+                />
+              </Reveal>
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="space-y-2.5">
           <AnimatePresence initial={false}>

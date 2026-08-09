@@ -28,6 +28,17 @@ interface RevealProps {
   /** Fraction of the element that must be visible before it fires. */
   amount?: number;
   as?: "div" | "section" | "li" | "article" | "header" | "span";
+  /**
+   * Animate on mount instead of on scroll.
+   *
+   * Scroll-triggered reveals assume the reader arrives from above. That breaks
+   * for anything rendered *after* a navigation — a paginated list especially,
+   * where the reader is already deep in the page when the new items mount. If
+   * the observer never fires they stay at `opacity: 0` and the page looks
+   * broken rather than merely un-animated. Mount-based reveal removes that
+   * failure mode, so it is correct wherever content arrives from a click.
+   */
+  onMount?: boolean;
 }
 
 function offset(direction: RevealDirection, distance: number) {
@@ -57,6 +68,7 @@ export function Reveal({
   once = true,
   amount = 0.25,
   as = "div",
+  onMount = false,
 }: RevealProps) {
   const reduced = useReducedMotion();
   const Component = motion[as];
@@ -86,6 +98,14 @@ export function Reveal({
           },
         },
       };
+
+  if (onMount) {
+    return (
+      <Component id={id} className={className} variants={variants} initial="hidden" animate="visible">
+        {children}
+      </Component>
+    );
+  }
 
   return (
     <Component

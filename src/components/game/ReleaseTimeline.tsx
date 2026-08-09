@@ -138,7 +138,10 @@ export function ReleaseTimeline({ games }: { games: GameSummary[] }) {
           <ul className="mb-10 space-y-2.5 lg:mb-14 lg:space-y-3">
             {group.games.map((game, i) => (
               <li key={game.id}>
-                <Reveal delay={Math.min(i, 5) * 0.04} blur={false} amount={0.15}>
+                {/* Mount-based: the calendar is paginated, so rows routinely
+                    arrive while the reader is already scrolled past where a
+                    scroll trigger would fire. */}
+                <Reveal delay={Math.min(i, 5) * 0.04} blur={false} onMount>
                   <ReleaseRow game={game} />
                 </Reveal>
               </li>
