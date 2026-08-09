@@ -1564,14 +1564,22 @@ function sortClause(ordering: BrowseFilters["ordering"]): string | undefined {
       return "first_release_date desc";
     case "-rating":
       return "total_rating desc";
+    case "rating":
+      return "total_rating asc";
     case "-metacritic":
       return "aggregated_rating desc";
+    case "metacritic":
+      return "aggregated_rating asc";
     case "name":
       return "name asc";
     case "-name":
       return "name desc";
     case "-hypes":
       return "hypes desc";
+    case "hypes":
+      return "hypes asc";
+    case "-reviews":
+      return "total_rating_count desc";
     case "-added":
     default:
       return "total_rating_count desc";
@@ -1597,6 +1605,7 @@ async function buildWhere(filters: BrowseFilters): Promise<string | null> {
   if (filters.dates) {
     const [from, to] = filters.dates.split(",");
     const toUnix = (value: string) => Math.floor(Date.parse(`${value}T00:00:00Z`) / 1000);
+    if (!from || !to || !Number.isFinite(toUnix(from)) || !Number.isFinite(toUnix(to))) return null;
     clauses.push(
       `first_release_date >= ${toUnix(from)} & first_release_date <= ${toUnix(to)}`,
     );
@@ -1604,6 +1613,7 @@ async function buildWhere(filters: BrowseFilters): Promise<string | null> {
 
   if (filters.metacritic) {
     const [lo, hi] = filters.metacritic.split(",").map(Number);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo < 0 || hi > 100 || lo > hi) return null;
     clauses.push(`aggregated_rating >= ${lo} & aggregated_rating <= ${hi}`);
   }
 
@@ -1650,6 +1660,54 @@ function matchTier(candidate: string, q: string): number {
   return 5;
 }
 
+function editDistance(left: string, right: string): number {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array<number>(right.length + 1);
+  for (let i = 1; i <= left.length; i++) {
+    current[0] = i;
+    for (let j = 1; j <= right.length; j++) {
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+      if (i > 1 && j > 1 && left[i - 1] === right[j - 2] && left[i - 2] === right[j - 1]) {
+        current[j] = Math.min(current[j], previous[j - 2] + 1);
+      }
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[right.length];
+}
+
+const distanceRatio = (left: string, right: string) =>
+  editDistance(left, right) / Math.max(left.length, right.length, 1);
+
+/** Exact, acronym, and typo-aware title score. Lower is better. */
+export function fuzzyTitleScore(candidate: string, query: string): number {
+  const title = normalise(candidate);
+  const q = normalise(query);
+  if (!title || !q) return 99;
+  const tier = matchTier(title, q);
+  if (tier < 5) return tier;
+
+  const titleTokens = title.split(" ").filter(Boolean);
+  const queryTokens = q.split(" ").filter(Boolean);
+  const initials = titleTokens.map((token) => token[0]).join("");
+  const compactQuery = queryTokens.join("");
+  if (compactQuery.length >= 2 && initials === compactQuery) return 2.5;
+
+  const tokenCost = queryTokens.reduce((sum, token) => {
+    return sum + Math.min(...titleTokens.map((candidateToken) => distanceRatio(candidateToken, token)));
+  }, 0) / Math.max(queryTokens.length, 1);
+  const phraseCost = distanceRatio(titleTokens.slice(0, queryTokens.length).join(""), compactQuery);
+  const cost = Math.min(tokenCost, phraseCost);
+  return cost <= 0.45 ? 6 + cost : 99;
+}
+
 /**
  * Re-ranks IGDB search results against the query the reader actually typed.
  *
@@ -1679,7 +1737,7 @@ export function rankSearchResults(
 
   const scoreOf = (game: GameSummary): number => {
     const candidates = [game.name, ...(altNames?.get(game.id) ?? [])];
-    const best = Math.min(...candidates.map((name) => matchTier(name, q)));
+    const best = Math.min(...candidates.map((name) => fuzzyTitleScore(name, q)));
     // An edition is a worse answer than the plain title at the same tier, but
     // must not fall below a genuinely weaker match.
     const isEdition = EDITION_MARKERS.test(normalise(game.name)) && !EDITION_MARKERS.test(q);
@@ -1734,6 +1792,54 @@ async function searchPool(term: string, where: string, limit: number, revalidate
   );
 
   return { games: usableRows.map(mapSummary), altNames };
+}
+
+/** Official-IGDB candidate pool used only when strict full-text misses a typo. */
+async function typoSearchPool(term: string, where: string, limit: number, revalidate: number) {
+  const query = queryFor(revalidate);
+  const { release } = await schema();
+  const token = normalise(term).split(" ").find((part) => part.length >= 3);
+  if (!token) return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
+  // Two stable leading characters are broad enough to survive a missing or
+  // transposed third letter while still keeping the official IGDB pool bounded.
+  const prefix = token.slice(0, 2);
+  const rows = await query<IgdbGame[]>(
+    "games",
+    apicalypse({
+      fields: [...CORE_SUMMARY, ...release, "alternative_names.name"].join(","),
+      where: `${where} & name ~ *"${prefix}"*`,
+      sort: "total_rating_count desc",
+      limit: Math.min(500, Math.max(limit, 160)),
+    }),
+  );
+  const usableRows = usable(rows);
+  const altNames = new Map<number, string[]>(usableRows.map((row) => [
+    row.id,
+    (row.alternative_names ?? []).map((entry) => entry.name).filter((name): name is string => Boolean(name)),
+  ]));
+  const games = usableRows.map(mapSummary).filter((game) =>
+    Math.min(...[game.name, ...(altNames.get(game.id) ?? [])].map((name) => fuzzyTitleScore(name, term))) < 99,
+  );
+  return { games, altNames };
+}
+
+async function intelligentSearchPool(term: string, where: string, limit: number, revalidate: number) {
+  const direct = await searchPool(term, where, limit, revalidate);
+  const bestDirect = Math.min(
+    99,
+    ...direct.games.flatMap((game) =>
+      [game.name, ...(direct.altNames.get(game.id) ?? [])].map((name) => fuzzyTitleScore(name, term)),
+    ),
+  );
+  if (bestDirect <= 4 && direct.games.length >= Math.min(limit, 8)) return direct;
+
+  const fuzzy = await typoSearchPool(term, where, limit, revalidate);
+  const merged = new Map<number, GameSummary>();
+  for (const game of [...direct.games, ...fuzzy.games]) merged.set(game.id, game);
+  return {
+    games: [...merged.values()],
+    altNames: new Map([...direct.altNames, ...fuzzy.altNames]),
+  };
 }
 
 /* ---------------------------------------------------------------------------
@@ -1792,7 +1898,7 @@ export async function igdbSearchAll(
     // Keep the relevance-ranked game search as one direct request and batch
     // every name-indexed entity into one second request.
     const [gameSearch, response] = await Promise.all([
-      searchPool(safeTerm, MAIN_GAMES, gamePoolLimit, TTL.search).catch((err) => {
+      intelligentSearchPool(safeTerm, MAIN_GAMES, gamePoolLimit, TTL.search).catch((err) => {
         warn("search.games", err);
         return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
       }),
@@ -1855,13 +1961,13 @@ export async function igdbSearchAll(
         subtitle: game.genres.slice(0, 2).map((genre) => genre.name).join(" · ") || "Game",
         image: game.image,
       })),
-      ...series.map((entry): IgdbSearchHit => ({
-        kind: "series", id: entry.id, name: entry.name, slug: entry.slug ?? String(entry.id),
-        subtitle: `${entry.games?.length ?? 0} connected games`, image: null,
-      })),
-      ...franchises.map((entry): IgdbSearchHit => ({
+      ...[...franchises, ...series]
+        .filter((entry, index, all) => all.findIndex((candidate) =>
+          (candidate.slug ?? candidate.name.toLowerCase()) === (entry.slug ?? entry.name.toLowerCase()),
+        ) === index)
+        .map((entry): IgdbSearchHit => ({
         kind: "franchise", id: entry.id, name: entry.name, slug: entry.slug ?? String(entry.id),
-        subtitle: `${entry.games?.length ?? 0} franchise entries`, image: null,
+        subtitle: `${entry.games?.length ?? 0} connected games`, image: null,
       })),
       ...companies.map((company): IgdbSearchHit => ({
         kind: "company", id: company.id, name: company.name,
@@ -1915,8 +2021,8 @@ export const igdbProvider: GameProvider = {
         // and its raw ordering routinely puts editions, bundles and loosely
         // related titles above the obvious answer. Over-fetch, then re-rank
         // locally against the actual query so the exact title wins.
-        const overFetch = Math.min(200, pageSize * 4);
-        const { games: pool, altNames } = await searchPool(
+        const overFetch = Math.min(500, Math.max(pageSize * 4, page * pageSize * 2));
+        const { games: pool, altNames } = await intelligentSearchPool(
           term,
           where,
           overFetch,
@@ -1960,7 +2066,10 @@ export const igdbProvider: GameProvider = {
     try {
       const base = await buildWhere(filters);
       if (base === null) return { results: [], count: 0, hasNext: false, page };
-      const where = `${base} & first_release_date > ${nowSeconds()}`;
+      // Calendar days begin at UTC midnight. Comparing against the current
+      // second hid every game releasing *today* after 00:00 UTC.
+      const todayStart = Math.floor(Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) / 1000);
+      const where = `${base} & first_release_date >= ${todayStart}`;
       const results = await listGames(
         {
           where,
@@ -2402,46 +2511,11 @@ export async function igdbCharacter(slug: string): Promise<IgdbEntity | null> {
   }
 }
 
-/** A canonical game series. IGDB documents Collections as its Series model. */
-export async function igdbSeries(slug: string): Promise<IgdbEntity | null> {
-  if (!igdbConfigured()) return null;
-  const safe = slug.replace(/"/g, "");
-
-  try {
-    const query = queryFor(TTL.detail);
-    const rows = await query<(IgdbNamed & { games?: number[] })[]>(
-      "collections",
-      apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
-    );
-
-    const entity = rows[0];
-    if (!entity) return null;
-
-    const games = await listGamesByIds(entity.games ?? []);
-
-    if (games.length < 2) return null;
-
-    return {
-      id: entity.id,
-      slug: entity.slug ?? slug,
-      name: entity.name,
-      description: null,
-      image: games[0]?.image ?? null,
-      detail: null,
-      games,
-    };
-  } catch (err) {
-    warn("collections", err);
-    return null;
-  }
-}
-
 /**
- * A wider fictional or product universe from IGDB's Franchise model.
+ * A fictional or product universe from IGDB's Franchise model.
  *
- * Collections are release series; franchises can connect multiple series,
- * spin-offs, and adaptations. Keeping their routes separate prevents a broad
- * universe such as Cyberpunk from being mislabeled as a linear game series.
+ * IGDB Collections are used only as a fallback when a title lacks a franchise,
+ * keeping one stable public concept and route instead of competing labels.
  */
 export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
   if (!igdbConfigured()) return null;
@@ -2453,7 +2527,14 @@ export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
       "franchises",
       apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
     );
-    const entity = rows[0];
+    // A small number of games only carry IGDB's Collection relationship. The
+    // product exposes one clear concept, Franchise, so a collection is the
+    // precise fallback rather than a second competing destination.
+    const fallback = rows[0] ? [] : await query<(IgdbNamed & { games?: number[] })[]>(
+      "collections",
+      apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
+    );
+    const entity = rows[0] ?? fallback[0];
     if (!entity) return null;
 
     const games = await listGamesByIds(entity.games ?? []);
@@ -2501,13 +2582,80 @@ function directoryInput(input: IgdbDirectoryInput) {
 }
 
 async function entityCount(
-  endpoint: "companies" | "collections",
+  endpoint: "companies" | "collections" | "franchises",
   where: string,
   revalidate: number,
 ) {
   const query = queryFor(revalidate);
   const result = await query<{ count?: number }>(`${endpoint}/count`, `where ${where};`);
   return result.count ?? 0;
+}
+
+/** Paginated franchise directory with an exact count and no 72-item ceiling. */
+export async function igdbFranchiseDirectory(
+  input: IgdbDirectoryInput = {},
+): Promise<IgdbDirectoryPage | null> {
+  if (!igdbConfigured()) return null;
+  const options = directoryInput(input);
+  const where = buildDirectoryWhere("slug != null & games != null", options.query);
+  const offset = (options.page - 1) * options.pageSize;
+  const revalidate = options.query ? TTL.search : TTL.taxonomy;
+
+  try {
+    const query = queryFor(revalidate);
+    const [rows, count] = await Promise.all([
+      query<IgdbNamed[]>(
+        "franchises",
+        apicalypse({
+          fields: "name,slug,games",
+          where,
+          sort: options.order === "-name" ? "name desc" : "name asc",
+          limit: options.pageSize + 1,
+          offset,
+        }),
+      ),
+      entityCount("franchises", where, revalidate),
+    ]);
+
+    if (options.query && rows.length === 0 && count === 0) {
+      const prefix = normalise(options.query).charAt(0);
+      if (prefix) {
+        const candidates = await query<IgdbNamed[]>("franchises", apicalypse({
+          fields: "name,slug,games",
+          where: buildDirectoryWhere("slug != null & games != null", prefix),
+          sort: "name asc",
+          limit: 500,
+        }));
+        const matches = candidates
+          .filter((entry) => fuzzyTitleScore(entry.name, options.query) < 99)
+          .sort((a, b) => fuzzyTitleScore(a.name, options.query) - fuzzyTitleScore(b.name, options.query));
+        const pageRows = matches.slice(offset, offset + options.pageSize);
+        return {
+          results: pageRows.map((franchise) => ({ id: franchise.id, slug: franchise.slug ?? String(franchise.id), name: franchise.name, gameCount: franchise.games?.length ?? 0 })),
+          page: options.page,
+          pageSize: options.pageSize,
+          count: matches.length,
+          hasNext: offset + options.pageSize < matches.length,
+        };
+      }
+    }
+
+    return {
+      results: rows.slice(0, options.pageSize).map((franchise) => ({
+        id: franchise.id,
+        slug: franchise.slug ?? String(franchise.id),
+        name: franchise.name,
+        gameCount: franchise.games?.length ?? 0,
+      })),
+      page: options.page,
+      pageSize: options.pageSize,
+      count,
+      hasNext: offset + options.pageSize < count,
+    };
+  } catch (err) {
+    warn("franchiseDirectory", err);
+    return null;
+  }
 }
 
 /** Paginated studio directory across both developers and publishers. */
@@ -2537,6 +2685,29 @@ export async function igdbStudiosDirectory(
       entityCount("companies", where, revalidate),
     ]);
 
+    if (options.query && rows.length === 0 && count === 0) {
+      const prefix = normalise(options.query).charAt(0);
+      if (prefix) {
+        const candidates = await query<(IgdbCompany & { developed?: number[]; published?: number[] })[]>("companies", apicalypse({
+          fields: "name,slug,logo.image_id,developed,published",
+          where: buildDirectoryWhere(base, prefix),
+          sort: "name asc",
+          limit: 500,
+        }));
+        const matches = candidates
+          .filter((company) => fuzzyTitleScore(company.name, options.query) < 99)
+          .sort((a, b) => fuzzyTitleScore(a.name, options.query) - fuzzyTitleScore(b.name, options.query));
+        const pageRows = matches.slice(offset, offset + options.pageSize);
+        return {
+          results: pageRows.map((company) => ({ id: company.id, slug: company.slug ?? String(company.id), name: company.name, logo: igdbImage(company.logo?.image_id, "logo_med"), gameCount: new Set([...(company.developed ?? []), ...(company.published ?? [])]).size })),
+          page: options.page,
+          pageSize: options.pageSize,
+          count: matches.length,
+          hasNext: offset + options.pageSize < matches.length,
+        };
+      }
+    }
+
     return {
       results: rows.slice(0, options.pageSize).map((company) => ({
         id: company.id,
@@ -2552,53 +2723,6 @@ export async function igdbStudiosDirectory(
     };
   } catch (err) {
     warn("studiosDirectory", err);
-    return null;
-  }
-}
-
-/** Paginated canonical Series directory backed only by IGDB Collections. */
-export async function igdbSeriesDirectory(
-  input: IgdbDirectoryInput = {},
-): Promise<IgdbDirectoryPage | null> {
-  if (!igdbConfigured()) return null;
-  const options = directoryInput(input);
-  const where = buildDirectoryWhere("slug != null & games != null", options.query);
-  const offset = (options.page - 1) * options.pageSize;
-  const revalidate = options.query ? TTL.search : TTL.taxonomy;
-
-  try {
-    const query = queryFor(revalidate);
-    const rows = await query<IgdbNamed[]>(
-      "collections",
-      apicalypse({
-        fields: "name,slug,games",
-        where,
-        sort: options.order === "-name" ? "name desc" : "name asc",
-        limit: options.pageSize + 1,
-        offset,
-      }),
-    );
-    const pageRows = rows.slice(0, options.pageSize);
-
-    return {
-      results: pageRows
-        .filter((series) => (series.games?.length ?? 0) >= 2)
-        .map((series) => ({
-          id: series.id,
-          slug: series.slug ?? String(series.id),
-          name: series.name,
-          gameCount: series.games?.length ?? 0,
-        })),
-      page: options.page,
-      pageSize: options.pageSize,
-      // IGDB cannot count "array has at least two entries" server-side, so do
-      // not present a misleading total. Pagination remains complete by raw
-      // collection offset and filters one-item records only for display.
-      count: null,
-      hasNext: rows.length > options.pageSize,
-    };
-  } catch (err) {
-    warn("seriesDirectory", err);
     return null;
   }
 }
@@ -2642,31 +2766,29 @@ export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
   }
 }
 
-/** Series with enough entries to be worth browsing as a series. */
-export async function igdbTopSeries(limit = 60): Promise<Ref[] | null> {
+/** The largest connected franchises for crawler discovery. */
+export async function igdbTopFranchises(limit = 60): Promise<Ref[] | null> {
   if (!igdbConfigured()) return null;
   try {
     const query = queryFor(TTL.taxonomy);
     const rows = await query<(IgdbNamed & { games?: number[] })[]>(
-      "collections",
+      "franchises",
       apicalypse({ fields: "name,slug,games", where: "slug != null & games != null", limit: 500 }),
     );
 
     return rows
-      .map((series) => ({
-        id: series.id,
-        slug: series.slug ?? String(series.id),
-        name: series.name,
-        count: series.games?.length ?? 0,
+      .map((franchise) => ({
+        id: franchise.id,
+        slug: franchise.slug ?? String(franchise.id),
+        name: franchise.name,
+        count: franchise.games?.length ?? 0,
       }))
-      // A "series" of one is just a game; two is the floor for the word to mean
-      // anything.
-      .filter((series) => series.count >= 2)
+      .filter((franchise) => franchise.count >= 2)
       .sort((a, b) => b.count - a.count)
       .slice(0, limit)
       .map(({ id, slug, name }) => ({ id, slug, name }));
   } catch (err) {
-    warn("topSeries", err);
+    warn("topFranchises", err);
     return null;
   }
 }

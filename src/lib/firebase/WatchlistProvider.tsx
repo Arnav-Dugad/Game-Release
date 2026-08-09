@@ -22,13 +22,15 @@ import {
 } from "react";
 import { useAuth } from "./AuthProvider";
 import {
-  addToWatchlist,
+  ensureWatchlistEntry,
   removeFromWatchlist,
+  setGameFollowing,
   setOwnedOn,
+  setSubscriptionAccess,
   setWatchPlatform,
   setWatchStatus,
   subscribeWatchlist,
-  watchlistEntryFromGame,
+  type SubscriptionAccess,
   type WatchStatus,
   type WatchlistEntry,
 } from "./db";
@@ -38,15 +40,20 @@ interface WatchlistContextValue {
   entries: WatchlistEntry[];
   loading: boolean;
   isWatched: (gameId: number) => boolean;
+  isFollowed: (gameId: number) => boolean;
   statusOf: (gameId: number) => WatchStatus | null;
-  /** Returns true if the game ended up tracked, false if it was removed. */
-  toggle: (game: GameSummary) => Promise<boolean>;
+  ensure: (game: GameSummary) => Promise<void>;
+  /** Returns the new explicit follow state. */
+  toggleFollow: (game: GameSummary) => Promise<boolean>;
+  syncFollow: (game: GameSummary) => Promise<void>;
   setStatus: (gameId: number, status: WatchStatus) => Promise<void>;
   /** Records which platform the user is playing on. */
   setPlatform: (gameId: number, platform: string | null) => Promise<void>;
   /** Records where the user owns the game. */
   setOwnership: (gameId: number, ownedOn: string[]) => Promise<void>;
   ownershipOf: (gameId: number) => string[];
+  setAccess: (gameId: number, access: SubscriptionAccess[]) => Promise<void>;
+  accessOf: (gameId: number) => SubscriptionAccess[];
   remove: (gameId: number) => Promise<void>;
 }
 
@@ -56,8 +63,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [entries, setEntries] = useState<WatchlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  /** Games mid-write, so the UI can reflect intent before the snapshot lands. */
-  const [pending, setPending] = useState<Map<number, boolean>>(new Map());
+  /** Follow writes are optimistic; personal records remain server-backed. */
+  const [pendingFollowing, setPendingFollowing] = useState<Map<number, boolean>>(new Map());
 
   useEffect(() => {
     if (!user) {
@@ -65,7 +72,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // write out of the effect body.
       const frame = requestAnimationFrame(() => {
         setEntries([]);
-        setPending(new Map());
+        setPendingFollowing(new Map());
         setLoading(false);
       });
       return () => cancelAnimationFrame(frame);
@@ -74,7 +81,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       user.uid,
       (next) => {
         setEntries(next);
-        setPending(new Map());
+        setPendingFollowing(new Map());
         setLoading(false);
       },
       (err) => {
@@ -88,8 +95,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const serverIds = useMemo(() => new Set(entries.map((e) => e.gameId)), [entries]);
 
   const isWatched = useCallback(
-    (gameId: number) => pending.get(gameId) ?? serverIds.has(gameId),
-    [pending, serverIds],
+    (gameId: number) => serverIds.has(gameId),
+    [serverIds],
+  );
+
+  const isFollowed = useCallback(
+    (gameId: number) => pendingFollowing.get(gameId)
+      ?? entries.find((entry) => entry.gameId === gameId)?.following
+      ?? false,
+    [entries, pendingFollowing],
   );
 
   const statusOf = useCallback(
@@ -97,21 +111,26 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     [entries],
   );
 
-  const toggle = useCallback(
+  const ensure = useCallback(
     async (game: GameSummary) => {
-      if (!user) throw new Error("Sign in to use your watchlist.");
-      const next = !isWatched(game.id);
+      if (!user) throw new Error("Sign in to save games.");
+      if (!isWatched(game.id)) await ensureWatchlistEntry(user.uid, game);
+    },
+    [user, isWatched],
+  );
 
-      setPending((prev) => new Map(prev).set(game.id, next));
+  const toggleFollow = useCallback(
+    async (game: GameSummary) => {
+      if (!user) throw new Error("Sign in to follow games.");
+      const exists = isWatched(game.id);
+      const next = !isFollowed(game.id);
+
+      setPendingFollowing((prev) => new Map(prev).set(game.id, next));
       try {
-        if (next) {
-          await addToWatchlist(user.uid, watchlistEntryFromGame(game, "want"));
-        } else {
-          await removeFromWatchlist(user.uid, game.id);
-        }
+        await setGameFollowing(user.uid, game, next, exists);
         return next;
       } catch (err) {
-        setPending((prev) => {
+        setPendingFollowing((prev) => {
           const rolled = new Map(prev);
           rolled.delete(game.id);
           return rolled;
@@ -119,7 +138,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [user, isWatched],
+    [user, isWatched, isFollowed],
   );
 
   const setStatus = useCallback(
@@ -145,6 +164,27 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     [entries],
   );
 
+  const syncFollow = useCallback(
+    async (game: GameSummary) => {
+      if (!user) return;
+      await setGameFollowing(user.uid, game, true, true);
+    },
+    [user],
+  );
+
+  const setAccess = useCallback(
+    async (gameId: number, access: SubscriptionAccess[]) => {
+      if (!user) throw new Error("Sign in to track subscription play.");
+      await setSubscriptionAccess(user.uid, gameId, access);
+    },
+    [user],
+  );
+
+  const accessOf = useCallback(
+    (gameId: number) => entries.find((entry) => entry.gameId === gameId)?.subscriptionAccess ?? [],
+    [entries],
+  );
+
   const setPlatform = useCallback(
     async (gameId: number, platform: string | null) => {
       if (!user) throw new Error("Sign in to use your watchlist.");
@@ -156,7 +196,6 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const remove = useCallback(
     async (gameId: number) => {
       if (!user) throw new Error("Sign in to use your watchlist.");
-      setPending((prev) => new Map(prev).set(gameId, false));
       await removeFromWatchlist(user.uid, gameId);
     },
     [user],
@@ -167,15 +206,20 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       entries,
       loading,
       isWatched,
+      isFollowed,
       statusOf,
-      toggle,
+      ensure,
+      toggleFollow,
+      syncFollow,
       setStatus,
       setPlatform,
       setOwnership,
       ownershipOf,
+      setAccess,
+      accessOf,
       remove,
     }),
-    [entries, loading, isWatched, statusOf, toggle, setStatus, setPlatform, setOwnership, ownershipOf, remove],
+    [entries, loading, isWatched, isFollowed, statusOf, ensure, toggleFollow, syncFollow, setStatus, setPlatform, setOwnership, ownershipOf, setAccess, accessOf, remove],
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

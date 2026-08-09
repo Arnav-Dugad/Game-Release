@@ -27,6 +27,7 @@ import { TiltCard } from "@/components/motion/TiltCard";
 import { GameCover } from "./GameCover";
 import { OwnedBadge } from "./OwnedBadge";
 import { OwnershipPicker } from "./OwnershipPicker";
+import { WatchButton } from "./WatchButton";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { cn } from "@/lib/utils/cn";
 import { isUnreleased } from "@/lib/utils/format";
@@ -127,16 +128,13 @@ export function GameCard({
 
           "Do I own this?" is the question people are actually answering while
           scrolling a catalogue, and it is the one the site can act on later —
-          for the library, planner, and recommendations. The watchlist still
+          for the library, stats, and recommendations. Following still
           lives on the game page, where there is room to explain it.
         */}
-        {showOwnership && (
-          <OwnershipPicker
-            game={game}
-            variant="icon"
-            className="-mt-0.5 shrink-0 opacity-100 transition-opacity duration-300 fine:opacity-0 fine:group-hover/card:opacity-100 fine:group-focus-within/card:opacity-100"
-          />
-        )}
+        <div className="-mt-0.5 flex shrink-0 gap-1.5 opacity-100 transition-opacity duration-300 fine:opacity-0 fine:group-hover/card:opacity-100 fine:group-focus-within/card:opacity-100">
+          <WatchButton game={game} />
+          {showOwnership && <OwnershipPicker game={game} variant="icon" />}
+        </div>
       </div>
     </div>
   );

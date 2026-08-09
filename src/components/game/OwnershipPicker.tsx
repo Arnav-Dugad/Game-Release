@@ -32,7 +32,7 @@ export function OwnershipPicker({
   variant?: "full" | "icon";
 }) {
   const { user, enabled } = useAuth();
-  const { isWatched, ownershipOf, setOwnership, toggle } = useWatchlist();
+  const { ownershipOf, setOwnership, ensure } = useWatchlist();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -61,7 +61,7 @@ export function OwnershipPicker({
     try {
       // Ownership lives on the watchlist document, so the game has to be
       // tracked before it can hold anything.
-      if (!isWatched(game.id)) await toggle(game);
+      await ensure(game);
       await setOwnership(game.id, next);
     } catch (err) {
       setPending(null);

@@ -17,6 +17,7 @@ export function NotificationsView() {
   const { notifications, unreadCount, loading, isRead, markRead, markAllRead } = useNotifications();
   const [filter, setFilter] = useState<Filter>("all");
   const releaseCount = notifications.length;
+  const dlcCount = notifications.filter((item) => item.kind.startsWith("dlc-")).length;
   const visible = useMemo(
     () =>
       notifications.filter((item) => {
@@ -41,7 +42,7 @@ export function NotificationsView() {
     <Container className="py-8 lg:py-12">
       <Stagger className="grid gap-3 sm:grid-cols-3" onMount gap={0.05}>
         <StaggerItem><Metric icon={<BellRing size={18} />} label="Unread" value={unreadCount} tone="brand" /></StaggerItem>
-        <StaggerItem><Metric icon={<CalendarClock size={18} />} label="Release updates" value={releaseCount} tone="mint" /></StaggerItem>
+        <StaggerItem><Metric icon={<CalendarClock size={18} />} label={dlcCount ? `Release updates · ${dlcCount} DLC` : "Release updates"} value={releaseCount} tone="mint" /></StaggerItem>
         <StaggerItem><Metric icon={<CheckCheck size={18} />} label="Read" value={releaseCount - unreadCount} tone="gold" /></StaggerItem>
       </Stagger>
 
@@ -58,7 +59,7 @@ export function NotificationsView() {
           <EmptyState
             icon={filter === "all" ? <Bell size={23} /> : <CheckCheck size={23} />}
             title={notifications.length === 0 ? "Nothing needs your attention" : "You're caught up here"}
-            body={notifications.length === 0 ? "Track upcoming games to receive timely launch reminders." : "There are no notifications matching this filter."}
+            body={notifications.length === 0 ? "Follow games to receive only their release and new DLC reminders." : "There are no notifications matching this filter."}
             action={notifications.length === 0 ? { href: "/upcoming", label: "Find upcoming games" } : { onClick: () => setFilter("all"), label: "Show everything" }}
           />
         ) : (

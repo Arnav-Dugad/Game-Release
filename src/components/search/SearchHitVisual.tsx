@@ -1,7 +1,6 @@
 import {
   Building2,
   Gamepad2,
-  LibraryBig,
   Shapes,
   Sparkles,
   Tag,
@@ -14,7 +13,6 @@ import { ResilientMediaImage } from "@/components/game/ResilientMediaImage";
 
 const ICONS: Record<SearchKind, typeof Gamepad2> = {
   game: Gamepad2,
-  series: LibraryBig,
   franchise: Sparkles,
   company: Building2,
   character: User,
@@ -24,7 +22,6 @@ const ICONS: Record<SearchKind, typeof Gamepad2> = {
 
 const TONES: Record<SearchKind, string> = {
   game: "from-brand/35 to-brand/5 text-brand-soft",
-  series: "from-neon/25 to-neon/5 text-neon",
   franchise: "from-flare/25 to-flare/5 text-flare",
   company: "from-gold/25 to-gold/5 text-gold",
   character: "from-mint/25 to-mint/5 text-mint",

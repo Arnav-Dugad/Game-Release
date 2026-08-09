@@ -29,9 +29,27 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { getDb } from "./config";
-import type { GameSummary } from "@/lib/games/types";
+import type { GameDetail, GameSummary } from "@/lib/games/types";
 
 export type WatchStatus = "want" | "playing" | "played";
+
+export interface SubscriptionAccess {
+  /** Stable service slug, for example `game-pass` or `playstation-plus`. */
+  service: string;
+  /** Platform family used for this play-through. */
+  platform: string;
+}
+
+export interface FollowedRelease {
+  gameId: number;
+  slug: string;
+  name: string;
+  kind: "dlc" | "expansion";
+  released: string | null;
+  releaseWindow: string | null;
+  image: string | null;
+  imageFallback: string | null;
+}
 
 export interface WatchlistEntry {
   gameId: number;
@@ -47,6 +65,8 @@ export interface WatchlistEntry {
   releaseWindow: string | null;
   tba: boolean;
   metacritic: number | null;
+  /** Following controls release/DLC notifications; it never owns the record. */
+  following: boolean;
   /** Main-story completion time in hours when the provider knows it. */
   playtime?: number;
   status: WatchStatus;
@@ -76,6 +96,10 @@ export interface WatchlistEntry {
    * own the same game in more than one place.
    */
   ownedOn: string[];
+  /** Subscription services used to play this game, paired with the platform. */
+  subscriptionAccess: SubscriptionAccess[];
+  /** DLC/expansion snapshot used by both in-app and scheduled notifications. */
+  followedReleases: FollowedRelease[];
   /** Epoch ms. Written client-side so the list can sort before the server timestamp lands. */
   addedAt: number;
 }
@@ -133,8 +157,6 @@ export interface UserPreferences {
   /** Scheduled outbound delivery channels. Both are opt-in. */
   notificationPushEnabled?: boolean;
   notificationEmailEnabled?: boolean;
-  /** Device/account planning capacity used by the release planner. */
-  plannerWeeklyHours?: number;
   /** Local quiet window in 24-hour HH:mm form and its IANA timezone. */
   notificationQuietStart?: string;
   notificationQuietEnd?: string;
@@ -241,7 +263,35 @@ export async function saveUserPreferences(
  * Watchlist
  * ------------------------------------------------------------------------ */
 
-export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): WatchlistEntry {
+function followedReleasesFromGame(game: GameSummary): FollowedRelease[] {
+  const detail = game as Partial<Pick<GameDetail, "dlcs" | "expansions" | "standaloneExpansions">>;
+  const releases = [
+    ...(detail.dlcs ?? []).map((entry) => ({ entry, kind: "dlc" as const })),
+    ...(detail.expansions ?? []).map((entry) => ({ entry, kind: "expansion" as const })),
+    ...(detail.standaloneExpansions ?? []).map((entry) => ({ entry, kind: "expansion" as const })),
+  ];
+  const seen = new Set<number>();
+  return releases.flatMap(({ entry, kind }) => {
+    if (seen.has(entry.id)) return [];
+    seen.add(entry.id);
+    return [{
+      gameId: entry.id,
+      slug: entry.slug,
+      name: entry.name,
+      kind,
+      released: entry.released,
+      releaseWindow: entry.releaseWindow,
+      image: entry.image,
+      imageFallback: entry.imageFallback,
+    }];
+  });
+}
+
+export function watchlistEntryFromGame(
+  game: GameSummary,
+  status: WatchStatus,
+  following = false,
+): WatchlistEntry {
   const steamSlugMatch = game.slug.match(/-s(\d+)$/);
   const steamAppId =
     "steamAppId" in game && typeof game.steamAppId === "number"
@@ -260,17 +310,52 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     releaseWindow: game.releaseWindow,
     tba: game.tba,
     metacritic: game.metacritic,
+    following,
     playtime: game.playtime,
     status,
     platform: null,
     startedAt: status === "playing" ? Date.now() : null,
     finishedAt: status === "played" ? Date.now() : null,
     ownedOn: [],
+    subscriptionAccess: [],
+    followedReleases: followedReleasesFromGame(game),
     genreIds: game.genres.map((genre) => genre.id),
     genres: game.genres.map(({ id, slug, name }) => ({ id, slug, name })),
     platformSlugs: game.parentPlatforms.map((platform) => platform.slug),
     addedAt: Date.now(),
   };
+}
+
+/** Creates a personal game record without implicitly following it. */
+export async function ensureWatchlistEntry(
+  uid: string,
+  game: GameSummary,
+  status: WatchStatus = "want",
+): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, "users", uid, "watchlist", String(game.id));
+  const snap = await getDoc(ref);
+  if (!snap.exists()) await setDoc(ref, watchlistEntryFromGame(game, status, false));
+}
+
+/** Following is independent from ownership and progress, so unfollowing is lossless. */
+export async function setGameFollowing(
+  uid: string,
+  game: GameSummary,
+  following: boolean,
+  exists: boolean,
+): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, "users", uid, "watchlist", String(game.id));
+  if (!exists) {
+    await setDoc(ref, watchlistEntryFromGame(game, "want", following));
+    return;
+  }
+  const followedReleases = followedReleasesFromGame(game);
+  await updateDoc(ref, {
+    following,
+    ...(followedReleases.length > 0 ? { followedReleases } : {}),
+  });
 }
 
 export async function addToWatchlist(uid: string, entry: WatchlistEntry): Promise<void> {
@@ -320,6 +405,18 @@ export async function setOwnedOn(
   });
 }
 
+export async function setSubscriptionAccess(
+  uid: string,
+  gameId: number,
+  access: SubscriptionAccess[],
+): Promise<void> {
+  const db = requireDb();
+  const unique = new Map(access.map((item) => [`${item.service}:${item.platform}`, item]));
+  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), {
+    subscriptionAccess: [...unique.values()],
+  });
+}
+
 /** Records which platform the user is playing a tracked game on. */
 export async function setWatchPlatform(
   uid: string,
@@ -353,6 +450,9 @@ export function subscribeWatchlist(
         return {
           ...data,
           steamAppId: data.steamAppId ?? null,
+          // Legacy watchlist records represented follows. Preserve that intent
+          // while all new personal records opt in explicitly.
+          following: data.following ?? true,
           releaseWindow: data.releaseWindow ?? null,
           imageFallback: data.imageFallback ?? null,
           platform: data.platform ?? null,
@@ -361,6 +461,8 @@ export function subscribeWatchlist(
           genreIds: data.genreIds ?? [],
           genres: data.genres ?? [],
           ownedOn: data.ownedOn ?? [],
+          subscriptionAccess: data.subscriptionAccess ?? [],
+          followedReleases: data.followedReleases ?? [],
           platformSlugs: data.platformSlugs ?? [],
         };
       });

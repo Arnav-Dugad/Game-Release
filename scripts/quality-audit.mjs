@@ -11,7 +11,7 @@ const PAGE_ROUTES = [
   "/genres",
   "/platforms",
   "/studios",
-  "/series",
+  "/franchises",
   "/search?q=cyberpunk",
   DETAIL_ROUTE,
   "/login",
@@ -19,7 +19,6 @@ const PAGE_ROUTES = [
   "/notifications",
   "/library",
   "/watchlist",
-  "/planner",
   "/settings",
   "/profile",
 ];
@@ -90,7 +89,9 @@ function tagCount(html, tag) {
 }
 
 function titleOf(html) {
-  return decodeAttribute(html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() ?? "");
+  const titles = [...html.matchAll(/<title>([^<]+)<\/title>/gi)]
+    .map((match) => decodeAttribute(match[1]?.trim() ?? ""));
+  return titles.find((title) => /LUDEX/i.test(title)) ?? titles.at(-1) ?? "";
 }
 
 function badTarget(value) {
@@ -147,7 +148,7 @@ function internalTargets() {
 
   const dynamicCounts = new Map();
   return [...targets.values()].filter((target) => {
-    const kind = target.pathname.match(/^\/(game|studio|series|franchise|character)\//)?.[1];
+    const kind = target.pathname.match(/^\/(game|studio|franchise|character)\//)?.[1];
     if (!kind) return true;
     const count = dynamicCounts.get(kind) ?? 0;
     dynamicCounts.set(kind, count + 1);
@@ -223,6 +224,12 @@ async function auditApis() {
   const search = await json("/api/search?q=cyberpunk");
   const searchBody = recordOf(search.body);
   check("universal search contract", search.response.status === 200 && Array.isArray(searchBody.hits), `status ${search.response.status}`);
+  if (REQUIRE_PROVIDER) {
+    const typoSearch = await json("/api/search?q=cybrpunk");
+    const typoBody = recordOf(typoSearch.body);
+    const recovered = Array.isArray(typoBody.hits) && typoBody.hits.some((hit) => /cyberpunk/i.test(String(hit?.name ?? "")));
+    check("typo-tolerant IGDB search recovers Cyberpunk", typoSearch.response.status === 200 && recovered, JSON.stringify(typoBody));
+  }
 
   const recommendations = await json("/api/recommendations?genres=12&limit=4");
   const recommendationsBody = recordOf(recommendations.body);

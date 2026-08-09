@@ -34,6 +34,7 @@ import { BackdropTrailer } from "@/components/game/BackdropTrailer";
 import { GameCover } from "@/components/game/GameCover";
 import { PlatformIcons } from "@/components/game/PlatformIcons";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
+import { WatchButton } from "@/components/game/WatchButton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
@@ -162,11 +163,11 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
             Never miss the game worth waiting for.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-            Explore releases, build your collection, and turn your watchlist into a personal plan. Live discovery will refill automatically when the catalogue reconnects.
+            Explore releases, build your collection, and follow only the games whose launches and DLC matter to you. Live discovery will refill automatically when the catalogue reconnects.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button href="/browse" size="lg" iconRight={<ArrowRight size={17} />}>Explore the catalogue</Button>
-            <Button href="/planner" size="lg" variant="secondary">Open release planner</Button>
+            <Button href="/stats" size="lg" variant="secondary">Open personal stats</Button>
           </div>
         </Container>
       </section>
@@ -310,6 +311,7 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
                 <Button href={`/game/${active.slug}`} size="lg" iconRight={<ArrowRight size={17} />}>
                   View details
                 </Button>
+                <WatchButton game={active} variant="full" />
                 <OwnershipPicker game={active} />
               </div>
             </motion.div>

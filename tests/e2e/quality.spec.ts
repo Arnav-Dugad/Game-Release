@@ -11,7 +11,7 @@ const PUBLIC_ROUTES = [
   "/genres",
   "/platforms",
   "/studios",
-  "/series",
+  "/franchises",
   "/search?q=cyberpunk",
   DETAIL_ROUTE,
   "/login",
@@ -19,7 +19,6 @@ const PUBLIC_ROUTES = [
   "/notifications",
   "/library",
   "/watchlist",
-  "/planner",
   "/settings",
   "/profile",
 ] as const;
@@ -70,6 +69,15 @@ test("global search traps and restores keyboard focus", async ({ page }) => {
   await expect(trigger).toBeFocused();
 });
 
+test("where to play moves focus to the destination panel", async ({ page }) => {
+  await page.goto(DETAIL_ROUTE, { waitUntil: "domcontentloaded" });
+  const button = page.getByRole("button", { name: "Where to play" });
+  if (await button.count() === 0) return;
+  await button.click();
+  await expect(page.locator("#where-to-play")).toBeFocused();
+  await expect(page).toHaveURL(/#where-to-play$/);
+});
+
 test("mobile navigation remains thumb-reachable and opens search", async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -92,12 +100,6 @@ test("mobile navigation remains thumb-reachable and opens search", async ({ brow
   } finally {
     await context.close();
   }
-});
-
-test("release planner protects personal data behind an explicit account state", async ({ page }) => {
-  await page.goto("/planner", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1, name: "Release planner" })).toBeVisible();
-  await expect(page.getByText(/Accounts aren't configured yet|Sign in to continue/)).toBeVisible();
 });
 
 for (const route of ["/", "/stats", DETAIL_ROUTE, "/login"] as const) {

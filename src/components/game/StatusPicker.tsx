@@ -8,10 +8,9 @@
  * readable at a glance — which is the point on a page you land on to remember
  * what you were doing.
  *
- * Selecting any state also starts tracking the game if it isn't already, so
- * this doubles as "add to watchlist" without a second control saying so.
- * Selecting the state a game is already in clears it back to untracked, so the
- * control can undo itself.
+ * Selecting any state creates a personal record if needed. Status never owns
+ * that record: tapping it cannot erase follows, ownership, or subscription
+ * history stored alongside it.
  */
 
 import { useState } from "react";
@@ -38,7 +37,7 @@ export function StatusPicker({
   className?: string;
 }) {
   const { user, enabled } = useAuth();
-  const { isWatched, statusOf, setStatus, toggle, remove } = useWatchlist();
+  const { statusOf, setStatus, ensure } = useWatchlist();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -57,16 +56,10 @@ export function StatusPicker({
 
     setBusy(value);
     try {
-      if (current === value) {
-        // Tapping the active state is the way back out.
-        await remove(game.id);
-        toast("Removed from your list", "info");
-      } else {
-        // A game has to be tracked before it can carry a status.
-        if (!isWatched(game.id)) await toggle(game);
-        await setStatus(game.id, value);
-        toast(`Marked as ${OPTIONS.find((o) => o.value === value)?.label.toLowerCase()}`, "success");
-      }
+      if (current === value) return;
+      await ensure(game);
+      await setStatus(game.id, value);
+      toast(`Marked as ${OPTIONS.find((o) => o.value === value)?.label.toLowerCase()}`, "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save that.", "error");
     } finally {

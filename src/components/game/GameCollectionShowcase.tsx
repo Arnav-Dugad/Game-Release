@@ -175,10 +175,12 @@ export function GameCollectionShowcase({ game }: { game: GameDetail }) {
 
 function UniverseShowcase({ game }: { game: GameDetail }) {
   const backdrop = game.artworks[1] ?? game.artworks[0] ?? game.screenshots[0] ?? game.image;
-  const cards = [
-    ...game.series.map((entry) => ({ entry, kind: "Series" as const, href: `/series/${entry.slug}` })),
-    ...game.franchises.map((entry) => ({ entry, kind: "Franchise" as const, href: `/franchise/${entry.slug}` })),
-  ];
+  const franchises = game.franchises.length > 0 ? game.franchises : game.series;
+  const cards = franchises.map((entry) => ({
+    entry,
+    kind: "Franchise" as const,
+    href: `/franchise/${entry.slug}`,
+  }));
 
   return (
     <div id="universe">
@@ -186,7 +188,7 @@ function UniverseShowcase({ game }: { game: GameDetail }) {
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-soft">Beyond this game</p>
         <h2 className="text-3xl font-black sm:text-4xl">Explore the complete universe</h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-[15px]">
-          Series follow a connected release line. Franchises reach wider across spin-offs, settings, and related game families.
+          One complete franchise view connects the main releases, spin-offs, settings, and related game families.
         </p>
       </Reveal>
 
@@ -201,7 +203,7 @@ function UniverseShowcase({ game }: { game: GameDetail }) {
   );
 }
 
-function UniverseCard({ entry, kind, href, backdrop, index }: { entry: Ref; kind: "Series" | "Franchise"; href: string; backdrop: string | null; index: number }) {
+function UniverseCard({ entry, kind, href, backdrop, index }: { entry: Ref; kind: "Franchise"; href: string; backdrop: string | null; index: number }) {
   return (
     <Link
       href={href}
@@ -218,7 +220,7 @@ function UniverseCard({ entry, kind, href, backdrop, index }: { entry: Ref; kind
         </span>
         <span className="mt-3 block font-display text-2xl font-black leading-tight text-white sm:text-3xl">{entry.name}</span>
         <span className="mt-3 flex items-center gap-2 text-sm font-semibold text-white/70 transition-colors group-hover:text-white">
-          {kind === "Series" ? "View complete release line" : "Enter the franchise"}
+          Enter the franchise
           <ArrowUpRight size={15} className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1" />
         </span>
       </span>

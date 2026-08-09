@@ -72,7 +72,7 @@ export function NotificationBell() {
               <div className="flex flex-col items-center px-6 py-9 text-center">
                 <span className="grid h-12 w-12 place-items-center rounded-2xl border border-brand/20 bg-brand/10 text-brand-soft"><Sparkles size={19} /></span>
                 <h3 className="mt-4 font-display text-sm font-bold">Your releases, right on time</h3>
-                <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">Sign in to get personal reminders before the games you track arrive.</p>
+                <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">Sign in to get release and DLC reminders only for games you follow.</p>
                 {enabled && <Button href="/login?next=%2Fnotifications" size="sm" className="mt-5" onClick={() => setOpen(false)}>Sign in</Button>}
               </div>
             ) : loading ? (
@@ -83,7 +83,7 @@ export function NotificationBell() {
               <div className="px-6 py-10 text-center">
                 <Bell size={21} className="mx-auto text-faint" />
                 <h3 className="mt-3 text-sm font-semibold">Quiet for now</h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted">Track upcoming games and alerts will appear as their launches approach.</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted">Follow a game and its release or DLC alerts will appear here.</p>
               </div>
             ) : (
               <div className="max-h-[min(34rem,70vh)] space-y-1 overflow-y-auto p-2.5">

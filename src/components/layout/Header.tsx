@@ -26,12 +26,11 @@ import { cn } from "@/lib/utils/cn";
 const NAV = [
   { href: "/", label: "Home" },
   { href: "/upcoming", label: "Upcoming" },
-  { href: "/planner", label: "Planner" },
   { href: "/stats", label: "Stats" },
   { href: "/browse", label: "Browse" },
   { href: "/genres", label: "Genres" },
   { href: "/studios", label: "Studios" },
-  { href: "/series", label: "Series" },
+  { href: "/franchises", label: "Franchises" },
 ];
 
 export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {

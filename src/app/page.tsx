@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Database, Flame, Trophy } from "lucide-react";
 import { CinematicHero } from "@/components/home/CinematicHero";
-import { NetflixRow } from "@/components/home/NetflixRow";
+import { GameRail } from "@/components/game/GameRail";
 import { GameGrid } from "@/components/game/GameGrid";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
@@ -46,9 +46,9 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* IGDB-only, and only titles that actually have a trailer to play.
-          Falls back to the upcoming shelf so the page never opens on a void. */}
-      <CinematicHero games={spotlight.data.length > 0 ? spotlight.data : featured} />
+      {/* The hero is deliberately IGDB-only. It never falls back to a
+          storefront or an unrelated upcoming shelf. */}
+      <CinematicHero games={spotlight.data} />
 
       {source === "unavailable" && (
         <Container className="pt-8">
@@ -73,9 +73,7 @@ export default async function HomePage() {
             href="/upcoming"
           />
         </Container>
-        <div className="mt-7">
-          <NetflixRow games={featured} priorityCount={3} />
-        </div>
+        <Container className="mt-7"><GameRail games={featured} priorityCount={3} /></Container>
       </Section>
 
       <Section className="py-8 sm:py-11">
@@ -87,9 +85,7 @@ export default async function HomePage() {
             href="/browse?ordering=-added"
           />
         </Container>
-        <div className="mt-7">
-          <NetflixRow games={trending.data} />
-        </div>
+        <Container className="mt-7"><GameRail games={trending.data} /></Container>
       </Section>
 
       <Section>
@@ -117,9 +113,7 @@ export default async function HomePage() {
             href="/browse?ordering=-released"
           />
         </Container>
-        <div className="mt-7">
-          <NetflixRow games={newReleases.data} />
-        </div>
+        <Container className="mt-7"><GameRail games={newReleases.data} /></Container>
       </Section>
 
       <JoinCta />

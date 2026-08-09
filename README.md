@@ -135,11 +135,10 @@ that do not carry the cron secret.
 | `/upcoming` | Month-grouped release calendar with per-title countdowns |
 | `/browse` | Full database with genre/platform filters, sorting and pagination — all URL-driven |
 | `/game/[slug]` | Cinematic game dossier: live hero media, active section dock, editorial gallery, distinct DLC/expansion/edition poster shelves, franchise portals, structured metadata, requirements, reviews and related games |
-| `/genres`, `/platforms` | Category browsing |
+| `/genres`, `/platforms`, `/studios`, `/franchises` | Searchable category and relationship browsing |
 | `/login`, `/signup` | Split-screen auth with email/password and Google |
-| `/watchlist` | Tracked games with play status (want / playing / played) |
-| `/planner` | Personal release runway with collision detection, weekly capacity, backlog guidance, a next-play decision, and private `.ics` calendar export |
-| `/stats` | Private Firebase-backed collection intelligence with unique-game ownership, progress, platform, genre, timeline and review insights |
+| `/watchlist` | Followed games and play status (want / playing / played), with Firebase-backed ownership and subscription access |
+| `/stats` | Private collection intelligence with unique-game ownership, follow, subscription, progress, platform, genre, release-era, timeline and review insights |
 | `/profile` | Identity, stats, review history, settings |
 
 Every game page also generates its own social card at

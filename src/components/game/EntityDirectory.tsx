@@ -33,7 +33,7 @@ export function EntityDirectory({
   hasNext,
 }: {
   items: DirectoryRef[];
-  kind: "studio" | "series";
+  kind: "studio" | "franchise";
   query: string;
   order: "name" | "-name";
   page: number;
@@ -45,8 +45,8 @@ export function EntityDirectory({
   const [draft, setDraft] = useState(query);
   const [isPending, startTransition] = useTransition();
   const isStudio = kind === "studio";
-  const basePath = isStudio ? "/studios" : "/series";
-  const label = isStudio ? "studio" : "series";
+  const basePath = isStudio ? "/studios" : "/franchises";
+  const label = isStudio ? "studio" : "franchise";
   const first = (page - 1) * pageSize + 1;
   const last = first + items.length - 1;
 
@@ -86,13 +86,13 @@ export function EntityDirectory({
               size={17}
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-faint"
             />
-            <span className="sr-only">Search {isStudio ? "studios" : "series"}</span>
+            <span className="sr-only">Search {isStudio ? "studios" : "franchises"}</span>
             <input
               type="search"
               name="q"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={isStudio ? "Search every studio…" : "Search every series…"}
+              placeholder={isStudio ? "Search every studio…" : "Search every franchise…"}
               className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
             />
             {draft && (
@@ -133,7 +133,7 @@ export function EntityDirectory({
             {count !== null ? (
               <>
                 Showing <span className="font-semibold tabular-nums text-text">{items.length > 0 ? `${first}–${last}` : "0"}</span> of{" "}
-                <span className="font-semibold tabular-nums text-text">{count.toLocaleString()}</span> {count === 1 ? label : isStudio ? "studios" : "series"}
+                <span className="font-semibold tabular-nums text-text">{count.toLocaleString()}</span> {count === 1 ? label : isStudio ? "studios" : "franchises"}
               </>
             ) : (
               <>
@@ -151,7 +151,7 @@ export function EntityDirectory({
       {items.length === 0 ? (
         <EmptyState
           icon={isStudio ? <Building2 size={24} /> : <Layers size={24} />}
-          title={`No ${isStudio ? "studios" : "series"} found`}
+          title={`No ${isStudio ? "studios" : "franchises"} found`}
           body={query ? `Nothing matches “${query}”. Try a shorter name or different spelling.` : "There are no entries on this page."}
           action={
             query
@@ -176,7 +176,7 @@ export function EntityDirectory({
               {isStudio ? (
                 <StudioCard studio={item} priority={index < 12} />
               ) : (
-                <SeriesCard series={item} index={index} />
+                <FranchiseCard franchise={item} index={index} />
               )}
             </StaggerItem>
           ))}
@@ -184,7 +184,7 @@ export function EntityDirectory({
       )}
 
       <nav
-        aria-label={`${isStudio ? "Studio" : "Series"} directory pages`}
+        aria-label={`${isStudio ? "Studio" : "Franchise"} directory pages`}
         className="flex items-center justify-between gap-3 border-t border-line pt-5"
       >
         {page > 1 ? (
@@ -261,12 +261,12 @@ function StudioCard({ studio, priority }: { studio: DirectoryRef; priority: bool
   );
 }
 
-function SeriesCard({ series, index }: { series: DirectoryRef; index: number }) {
-  const hue = hueFromString(series.slug);
+function FranchiseCard({ franchise, index }: { franchise: DirectoryRef; index: number }) {
+  const hue = hueFromString(franchise.slug);
 
   return (
     <Link
-      href={`/series/${series.slug}`}
+      href={`/franchise/${franchise.slug}`}
       className="group relative flex h-32 items-end overflow-hidden rounded-2xl border border-line p-4 transition-all duration-500 fine:hover:-translate-y-1 fine:hover:border-line-strong fine:hover:shadow-[0_25px_60px_-32px_rgba(124,92,255,0.8)]"
       style={{
         background: `linear-gradient(140deg, hsl(${hue} 58% 21%), hsl(${(hue + 45) % 360} 52% 8%))`,
@@ -280,17 +280,17 @@ function SeriesCard({ series, index }: { series: DirectoryRef; index: number }) 
         }}
       />
       <span aria-hidden className="absolute -right-2 -top-6 font-display text-8xl font-black text-white/[0.055]">
-        {series.name.charAt(0)}
+        {franchise.name.charAt(0)}
       </span>
       <span className="relative">
         <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50">
-          Series {String(index + 1).padStart(2, "0")}
+          Franchise {String(index + 1).padStart(2, "0")}
         </span>
         <span className="line-clamp-2 font-display text-[15px] font-bold leading-tight text-white transition-colors group-hover:text-white">
-          {series.name}
+          {franchise.name}
         </span>
         <span className="mt-2 block text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-          {series.gameCount.toLocaleString()} {series.gameCount === 1 ? "game" : "games"}
+          {franchise.gameCount.toLocaleString()} {franchise.gameCount === 1 ? "game" : "games"}
         </span>
       </span>
     </Link>

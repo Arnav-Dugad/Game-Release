@@ -1,6 +1,5 @@
 export type SearchKind =
   | "game"
-  | "series"
   | "franchise"
   | "company"
   | "character"
@@ -18,7 +17,6 @@ export interface SearchHit {
 
 export const SEARCH_KIND_LABELS: Record<SearchKind, string> = {
   game: "Games",
-  series: "Series",
   franchise: "Franchises",
   company: "Studios",
   character: "Characters",
@@ -28,7 +26,6 @@ export const SEARCH_KIND_LABELS: Record<SearchKind, string> = {
 
 export const SEARCH_KIND_ORDER: SearchKind[] = [
   "game",
-  "series",
   "franchise",
   "company",
   "character",
@@ -38,8 +35,6 @@ export const SEARCH_KIND_ORDER: SearchKind[] = [
 
 export function hrefForSearchHit(hit: SearchHit): string {
   switch (hit.kind) {
-    case "series":
-      return `/series/${hit.slug}`;
     case "franchise":
       return `/franchise/${hit.slug}`;
     case "company":

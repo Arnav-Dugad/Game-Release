@@ -9,7 +9,7 @@ import { searchGames } from "@/lib/games/source";
  * component and must not hold them. Responses are cached briefly at the edge:
  * repeated keystrokes across users hit the same popular prefixes constantly.
  *
- * One relevance-ranked game request plus one IGDB Multi-Query covers series,
+ * One relevance-ranked game request plus one IGDB Multi-Query covers
  * franchises, studios, characters, genres and platforms. Without IGDB it
  * falls back to the provider chain's game search, which is all Steam can offer.
  */

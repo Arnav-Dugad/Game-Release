@@ -6,18 +6,18 @@ import { GameGrid } from "./GameGrid";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { GameSummary } from "@/lib/games/types";
 
-type EntitySort = "featured" | "newest" | "oldest" | "name";
+type EntitySort = "featured" | "newest" | "oldest" | "name" | "critic" | "audience" | "anticipated";
 
 export function EntityGameExplorer({
   games,
   kind,
 }: {
   games: GameSummary[];
-  kind: "company" | "character" | "series" | "franchise";
+  kind: "company" | "character" | "franchise";
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<EntitySort>(
-    kind === "series" || kind === "franchise" ? "newest" : "featured",
+    kind === "franchise" ? "newest" : "featured",
   );
   const [visibleCount, setVisibleCount] = useState(60);
   const normalised = query.trim().toLocaleLowerCase();
@@ -34,6 +34,9 @@ export function EntityGameExplorer({
     if (sort === "oldest") {
       return matches.sort((a, b) => (a.released ?? "9999").localeCompare(b.released ?? "9999"));
     }
+    if (sort === "critic") return matches.sort((a, b) => (b.metacritic ?? -1) - (a.metacritic ?? -1));
+    if (sort === "audience") return matches.sort((a, b) => b.ratingsCount - a.ratingsCount);
+    if (sort === "anticipated") return matches.sort((a, b) => b.added - a.added);
     return matches;
   }, [games, normalised, sort]);
   const visible = filtered.slice(0, visibleCount);
@@ -51,9 +54,7 @@ export function EntityGameExplorer({
             placeholder={
               kind === "company"
                 ? "Search this studio’s games…"
-                : kind === "franchise"
-                  ? "Search this franchise…"
-                  : "Search this series…"
+                : "Search this franchise…"
             }
             className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
           />
@@ -80,6 +81,9 @@ export function EntityGameExplorer({
             <option value="featured">Featured</option>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
+            <option value="critic">Best critic score</option>
+            <option value="audience">Largest audience</option>
+            <option value="anticipated">Most popular</option>
             <option value="name">A–Z</option>
           </select>
           <span aria-hidden className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-faint">▾</span>

@@ -14,7 +14,7 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { ArrowUpDown, Check, Loader2, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, CalendarDays, Check, Gauge, Loader2, SlidersHorizontal, X } from "lucide-react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Chip } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils/cn";
@@ -27,10 +27,14 @@ export interface SortOption {
 
 export const BROWSE_SORTS: SortOption[] = [
   { value: "-added", label: "Most popular" },
+  { value: "-reviews", label: "Most discussed" },
   { value: "-released", label: "Newest first" },
   { value: "released", label: "Oldest first" },
-  { value: "-metacritic", label: "Highest rated" },
+  { value: "-metacritic", label: "Best critic score" },
+  { value: "metacritic", label: "Lowest critic score" },
   { value: "-rating", label: "Best user score" },
+  { value: "rating", label: "Lowest user score" },
+  { value: "-hypes", label: "Most anticipated" },
   { value: "name", label: "A–Z" },
   { value: "-name", label: "Z–A" },
 ];
@@ -40,9 +44,25 @@ export const UPCOMING_SORTS: SortOption[] = [
   { value: "released", label: "Soonest first" },
   { value: "-released", label: "Furthest out" },
   { value: "-hypes", label: "Most anticipated" },
+  { value: "-reviews", label: "Largest audience" },
   { value: "-metacritic", label: "Highest rated" },
   { value: "name", label: "A–Z" },
   { value: "-name", label: "Z–A" },
+];
+
+const SCORE_PRESETS = [
+  { value: "90,100", label: "90+ essential" },
+  { value: "80,100", label: "80+ acclaimed" },
+  { value: "70,100", label: "70+ recommended" },
+];
+
+const YEAR = new Date().getUTCFullYear();
+const DATE_PRESETS = [
+  { value: `${YEAR}-01-01,${YEAR}-12-31`, label: `${YEAR} releases` },
+  { value: "2020-01-01,2025-12-31", label: "2020–2025" },
+  { value: "2010-01-01,2019-12-31", label: "2010s" },
+  { value: "2000-01-01,2009-12-31", label: "2000s" },
+  { value: "1970-01-01,1999-12-31", label: "Classics" },
 ];
 
 interface BrowseControlsProps {
@@ -54,6 +74,7 @@ interface BrowseControlsProps {
   defaultSort?: SortKey;
   /** Noun used in the result count, e.g. "release". */
   noun?: string;
+  showDatePresets?: boolean;
 }
 
 export function BrowseControls({
@@ -63,6 +84,7 @@ export function BrowseControls({
   sorts = BROWSE_SORTS,
   defaultSort = "-added",
   noun = "game",
+  showDatePresets = true,
 }: BrowseControlsProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -80,8 +102,10 @@ export function BrowseControls({
   );
   const activeSort = (params.get("ordering") as SortKey | null) ?? defaultSort;
   const search = params.get("search") ?? "";
+  const score = params.get("metacritic") ?? "";
+  const dates = showDatePresets ? params.get("dates") ?? "" : "";
 
-  const filterCount = activeGenres.size + activePlatforms.size + (search ? 1 : 0);
+  const filterCount = activeGenres.size + activePlatforms.size + (search ? 1 : 0) + (score ? 1 : 0) + (dates ? 1 : 0);
 
   const push = useCallback(
     (next: URLSearchParams) => {
@@ -121,6 +145,16 @@ export function BrowseControls({
     [params, push, defaultSort],
   );
 
+  const setSingle = useCallback(
+    (key: "metacritic" | "dates", value: string) => {
+      const next = new URLSearchParams(params.toString());
+      if (next.get(key) === value) next.delete(key);
+      else next.set(key, value);
+      push(next);
+    },
+    [params, push],
+  );
+
   const clearAll = useCallback(() => {
     const next = new URLSearchParams();
     // A search term is the user's own words — never silently discard it.
@@ -136,6 +170,10 @@ export function BrowseControls({
         active={activeGenres}
         onToggle={(slug) => toggleMulti("genres", slug)}
       />
+      <div className="grid gap-6 border-t border-line pt-6 lg:grid-cols-2">
+        <PresetGroup title="Critic threshold" icon={<Gauge size={14} />} items={SCORE_PRESETS} active={score} onChoose={(value) => setSingle("metacritic", value)} />
+        {showDatePresets && <PresetGroup title="Release era" icon={<CalendarDays size={14} />} items={DATE_PRESETS} active={dates} onChoose={(value) => setSingle("dates", value)} />}
+      </div>
       <FilterGroup
         title="Platforms"
         items={platforms}
@@ -206,6 +244,8 @@ export function BrowseControls({
               onRemove={() => toggleMulti("platforms", slug)}
             />
           ))}
+          {score && <ActivePill label={SCORE_PRESETS.find((item) => item.value === score)?.label ?? `Score ${score}`} onRemove={() => setSingle("metacritic", score)} />}
+          {dates && <ActivePill label={DATE_PRESETS.find((item) => item.value === dates)?.label ?? "Release window"} onRemove={() => setSingle("dates", dates)} />}
           <button
             type="button"
             onClick={clearAll}
@@ -276,6 +316,44 @@ function FilterGroup({
             {item.name}
             {active.has(item.slug) && <Check size={12} />}
           </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PresetGroup({
+  title,
+  icon,
+  items,
+  active,
+  onChoose,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  items: Array<{ value: string; label: string }>;
+  active: string;
+  onChoose: (value: string) => void;
+}) {
+  return (
+    <div>
+      <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">{icon}{title}</h3>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChoose(item.value)}
+            aria-pressed={active === item.value}
+            className={cn(
+              "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors",
+              active === item.value
+                ? "border-brand/45 bg-brand/15 text-white"
+                : "border-line bg-white/[0.025] text-muted hover:border-line-strong hover:text-text",
+            )}
+          >
+            {item.label}{active === item.value && <Check size={11} />}
+          </button>
         ))}
       </div>
     </div>

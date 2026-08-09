@@ -89,6 +89,10 @@ export function groupByMonth(games: GameSummary[]): MonthGroup[] {
   return ordered;
 }
 
+function groupId(key: string) {
+  return `month-${key.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}`;
+}
+
 export function ReleaseTimeline({ games }: { games: GameSummary[] }) {
   const groups = groupByMonth(games);
 
@@ -102,6 +106,13 @@ export function ReleaseTimeline({ games }: { games: GameSummary[] }) {
 
   return (
     <div className="relative">
+      {groups.length > 1 && (
+        <nav aria-label="Jump to release month" className="mask-fade-x mb-8 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+          {groups.map((group, index) => (
+            <a key={group.key} href={`#${groupId(group.key)}`} className={cn("shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition-colors", index === 0 ? "border-brand/40 bg-brand/12 text-white" : "border-line bg-white/[0.03] text-muted hover:border-line-strong hover:text-text")}>{group.label}<span className="ml-2 text-faint tabular-nums">{group.games.length}</span></a>
+          ))}
+        </nav>
+      )}
       {/* Timeline rule — desktop only. */}
       <span
         aria-hidden
@@ -109,7 +120,7 @@ export function ReleaseTimeline({ games }: { games: GameSummary[] }) {
       />
 
       {groups.map((group) => (
-        <section key={group.key} className="relative lg:pl-12">
+        <section id={groupId(group.key)} key={group.key} className="relative scroll-mt-28 lg:pl-12">
           {/*
             The backdrop is kept at every breakpoint: rows scroll underneath
             this header, so without it the month label and the first row's

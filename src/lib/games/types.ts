@@ -262,8 +262,12 @@ export type SortKey =
   | "-released"
   | "-added"
   | "-rating"
+  | "rating"
   | "-metacritic"
+  | "metacritic"
   | "-hypes"
+  | "hypes"
+  | "-reviews"
   | "name"
   | "-name";
 

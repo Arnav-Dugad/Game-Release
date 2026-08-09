@@ -1,6 +1,12 @@
 import type { WatchlistEntry } from "@/lib/firebase/db";
 
-export type NotificationKind = "release-today" | "release-soon" | "released";
+export type NotificationKind =
+  | "release-today"
+  | "release-soon"
+  | "released"
+  | "dlc-today"
+  | "dlc-soon"
+  | "dlc-released";
 
 export interface AppNotification {
   id: string;
@@ -59,7 +65,7 @@ export function canonicalEntryHref(entry: Pick<WatchlistEntry, "slug" | "name">)
     : `/game/${entry.slug}`;
 }
 
-/** Deterministic release alerts derived from the signed-in reader's watchlist. */
+/** Deterministic release and add-on alerts for explicitly followed games. */
 export function releaseNotifications(
   entries: WatchlistEntry[],
   now = Date.now(),
@@ -69,47 +75,76 @@ export function releaseNotifications(
   const out: AppNotification[] = [];
 
   for (const entry of entries) {
-    if (!entry.released) continue;
-    const releaseAt = Date.parse(`${entry.released}T00:00:00Z`);
-    if (!Number.isFinite(releaseAt)) continue;
-    const days = Math.round((releaseAt - todayAt) / DAY);
+    // `undefined` is a legacy watchlist record from before follows were split
+    // out. It represented the same intent, so only an explicit false opts out.
+    if (entry.following === false) continue;
+    if (entry.released) {
+      const releaseAt = Date.parse(`${entry.released}T00:00:00Z`);
+      const days = Math.round((releaseAt - todayAt) / DAY);
+      let notification: Pick<AppNotification, "kind" | "title" | "body" | "priority"> | null = null;
 
-    let kind: NotificationKind;
-    let title: string;
-    let body: string;
-    let priority: number;
+      if (Number.isFinite(releaseAt) && days === 0) {
+        notification = { kind: "release-today", title: `${entry.name} releases today`, body: "The wait is over. Open the game page for platforms, stores, and release details.", priority: 100 };
+      } else if (Number.isFinite(releaseAt) && days > 0 && days <= 14) {
+        notification = { kind: "release-soon", title: `${entry.name} arrives in ${days} day${days === 1 ? "" : "s"}`, body: "A game you follow is nearly here. Check its platforms and launch details.", priority: 80 - days };
+      } else if (Number.isFinite(releaseAt) && days < 0 && days >= -3) {
+        notification = { kind: "released", title: `${entry.name} is out now`, body: "This followed release landed recently. You can update its play status from your library.", priority: 60 + days };
+      }
 
-    if (days === 0) {
-      kind = "release-today";
-      title = `${entry.name} releases today`;
-      body = "The wait is over. Open the game page for platforms, stores, and release details.";
-      priority = 100;
-    } else if (days > 0 && days <= 14) {
-      kind = "release-soon";
-      title = `${entry.name} arrives in ${days} day${days === 1 ? "" : "s"}`;
-      body = "A game on your watchlist is nearly here. Check its release details before launch.";
-      priority = 80 - days;
-    } else if (days < 0 && days >= -3) {
-      kind = "released";
-      title = `${entry.name} is out now`;
-      body = "This tracked release landed recently. You can update its play status from your watchlist.";
-      priority = 60 + days;
-    } else {
-      continue;
+      if (notification) out.push({
+        id: `${notification.kind}:${entry.gameId}:${entry.released}`,
+        ...notification,
+        href: canonicalEntryHref(entry),
+        gameName: entry.name,
+        image: entry.image,
+        imageFallback: entry.imageFallback,
+        createdAt: releaseAt,
+      });
     }
 
-    out.push({
-      id: `${kind}:${entry.gameId}:${entry.released}`,
-      kind,
-      title,
-      body,
-      href: canonicalEntryHref(entry),
-      gameName: entry.name,
-      image: entry.image,
-      imageFallback: entry.imageFallback,
-      createdAt: releaseAt,
-      priority,
-    });
+    for (const related of entry.followedReleases ?? []) {
+      if (!related.released) continue;
+      const relatedAt = Date.parse(`${related.released}T00:00:00Z`);
+      if (!Number.isFinite(relatedAt)) continue;
+      const relatedDays = Math.round((relatedAt - todayAt) / DAY);
+      const label = related.kind === "dlc" ? "DLC" : "expansion";
+      let relatedKind: NotificationKind;
+      let relatedTitle: string;
+      let relatedBody: string;
+      let relatedPriority: number;
+
+      if (relatedDays === 0) {
+        relatedKind = "dlc-today";
+        relatedTitle = `${related.name} drops today`;
+        relatedBody = `New ${label} for ${entry.name} is available today.`;
+        relatedPriority = 95;
+      } else if (relatedDays > 0 && relatedDays <= 14) {
+        relatedKind = "dlc-soon";
+        relatedTitle = `${related.name} arrives in ${relatedDays} day${relatedDays === 1 ? "" : "s"}`;
+        relatedBody = `A new ${label} is approaching for ${entry.name}.`;
+        relatedPriority = 75 - relatedDays;
+      } else if (relatedDays < 0 && relatedDays >= -3) {
+        relatedKind = "dlc-released";
+        relatedTitle = `${related.name} is out now`;
+        relatedBody = `The latest ${label} for ${entry.name} just landed.`;
+        relatedPriority = 58 + relatedDays;
+      } else {
+        continue;
+      }
+
+      out.push({
+        id: `${relatedKind}:${entry.gameId}:${related.gameId}:${related.released}`,
+        kind: relatedKind,
+        title: relatedTitle,
+        body: relatedBody,
+        href: `/game/${related.slug}`,
+        gameName: entry.name,
+        image: related.image ?? entry.image,
+        imageFallback: related.imageFallback ?? entry.imageFallback,
+        createdAt: relatedAt,
+        priority: relatedPriority,
+      });
+    }
   }
 
   return out.sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);

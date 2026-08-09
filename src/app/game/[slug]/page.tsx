@@ -17,7 +17,6 @@ import {
   Layers,
   Images,
   MonitorCog,
-  ShoppingBag,
   ShieldCheck,
   Star,
   Tag,
@@ -42,7 +41,10 @@ import { MediaGallery } from "@/components/game/MediaGallery";
 import { CommunityLinks, StoreLinks } from "@/components/game/StoreLinks";
 import { ReviewSection } from "@/components/game/ReviewSection";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
+import { SubscriptionAccessPicker } from "@/components/game/SubscriptionAccessPicker";
 import { StatusPicker } from "@/components/game/StatusPicker";
+import { WatchButton } from "@/components/game/WatchButton";
+import { WhereToPlayButton } from "@/components/game/WhereToPlayButton";
 import { ScorePill, ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -268,6 +270,7 @@ export default async function GamePage({ params }: { params: Params }) {
 /* -------------------------------------------------------------------------- */
 
 function GameHero({ game }: { game: GameDetail }) {
+  const franchise = game.franchises[0] ?? game.series[0];
   const backdrop = game.artworks[0] ?? game.screenshots[0] ?? game.image;
 
   return (
@@ -307,20 +310,12 @@ function GameHero({ game }: { game: GameDetail }) {
               <ArrowLeft size={13} />
               Browse
             </Link>
-            {game.series[0] && (
+            {franchise && (
               <Link
-                href={`/series/${game.series[0].slug}`}
-                className="rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-brand/40 hover:text-brand-soft"
-              >
-                {game.series[0].name} series
-              </Link>
-            )}
-            {game.franchises[0] && (
-              <Link
-                href={`/franchise/${game.franchises[0].slug}`}
+                href={`/franchise/${franchise.slug}`}
                 className="rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-neon/35 hover:text-neon"
               >
-                {game.franchises[0].name} franchise
+                {franchise.name} franchise
               </Link>
             )}
           </div>
@@ -442,12 +437,12 @@ function GameHero({ game }: { game: GameDetail }) {
               things worth recording, side by side. The segmented control also
               starts tracking the game, so no separate watchlist button is
               needed here. */}
+          <WatchButton game={game} variant="full" />
           <StatusPicker game={game} />
           <OwnershipPicker game={game} />
+          <SubscriptionAccessPicker game={game} />
           {(game.steamAppId || game.stores.length > 0) && (
-            <Button href="#where-to-play" variant="secondary" icon={<ShoppingBag size={16} />}>
-              Where to play
-            </Button>
+            <WhereToPlayButton />
           )}
           {game.website && (
             <Button
@@ -502,6 +497,7 @@ function multiplayerSummary(modes: NonNullable<GameDetail["multiplayerModes"]>):
 }
 
 function GameSidebar({ game }: { game: GameDetail }) {
+  const franchises = game.franchises.length > 0 ? game.franchises : game.series;
   const facts: { label: string; value: React.ReactNode; icon: React.ReactNode }[] = [
     {
       label: "Released",
@@ -535,38 +531,13 @@ function GameSidebar({ game }: { game: GameDetail }) {
           },
         ]
       : []),
-    ...(game.series.length
+    ...(franchises.length
       ? [
           {
-            label: game.series.length > 1 ? "Series" : "Part of",
-            // Linked, because "what else is in this series?" is the most
-            // common next question a series line provokes.
+            label: franchises.length > 1 ? "Franchises" : "Franchise",
             value: (
               <span className="flex flex-wrap gap-x-1.5">
-                {game.series.map((series, i) => (
-                  <span key={series.id}>
-                    <Link
-                      href={`/series/${series.slug}`}
-                      className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-brand-soft"
-                    >
-                      {series.name}
-                    </Link>
-                    {i < game.series.length - 1 && ","}
-                  </span>
-                ))}
-              </span>
-            ),
-            icon: <Layers size={14} />,
-          },
-        ]
-      : []),
-    ...(game.franchises.length
-      ? [
-          {
-            label: game.franchises.length > 1 ? "Franchises" : "Franchise",
-            value: (
-              <span className="flex flex-wrap gap-x-1.5">
-                {game.franchises.map((franchise, i) => (
+                {franchises.map((franchise, i) => (
                   <span key={franchise.id}>
                     <Link
                       href={`/franchise/${franchise.slug}`}
@@ -574,7 +545,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
                     >
                       {franchise.name}
                     </Link>
-                    {i < game.franchises.length - 1 && ","}
+                    {i < franchises.length - 1 && ","}
                   </span>
                 ))}
               </span>
@@ -678,7 +649,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
   ];
 
   return (
-    <aside id="where-to-play" className="scroll-mt-32 space-y-5 lg:sticky lg:top-28 lg:self-start">
+    <aside id="where-to-play" tabIndex={-1} className="scroll-mt-28 space-y-5 outline-none lg:sticky lg:top-28 lg:self-start">
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
           {game.metacritic !== null && <ScoreRing score={game.metacritic} />}

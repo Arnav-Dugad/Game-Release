@@ -28,7 +28,7 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Search the game universe",
-  description: "Search games, series, franchises, studios, characters, genres and platforms in one place.",
+  description: "Search games, franchises, studios, characters, genres and platforms in one place.",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -83,7 +83,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
             <h1 className="mt-4 max-w-4xl font-display text-[clamp(2.5rem,7vw,5.6rem)] font-black leading-[0.95] tracking-[-0.055em]">
               Find anything in the <span className="text-gradient">game universe.</span>
             </h1>
-            <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-base">Games, studios, series, franchises, characters, genres and platforms—correctly separated and instantly connected.</p>
+            <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-base">Games, studios, franchises, characters, genres and platforms—correctly separated and instantly connected.</p>
           </Reveal>
 
           <Reveal delay={0.12} className="mt-8">

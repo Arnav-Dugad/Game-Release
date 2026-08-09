@@ -12,7 +12,7 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarClock, CalendarRange, Compass, Home, Search } from "lucide-react";
+import { BarChart3, CalendarClock, Compass, Home, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const TABS = [
@@ -21,7 +21,6 @@ const TABS = [
   { href: "__search", label: "Search", icon: Search },
   { href: "/browse", label: "Browse", icon: Compass },
   { href: "/stats", label: "Stats", icon: BarChart3 },
-  { href: "/planner", label: "Planner", icon: CalendarRange },
 ] as const;
 
 export function MobileTabBar({ onOpenSearch }: { onOpenSearch: () => void }) {

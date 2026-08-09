@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, CalendarX2 } from "lucide-react";
+import { CalendarClock, CalendarDays, CalendarX2, Sparkles } from "lucide-react";
 import { BrowseControls, UPCOMING_SORTS } from "@/components/game/BrowseControls";
 import { ReleaseTimeline } from "@/components/game/ReleaseTimeline";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -21,10 +21,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * 48 keeps the timeline long enough to feel like a real calendar without
+ * 120 keeps the timeline useful across long release windows without
  * pushing a single page past a couple of hundred DOM-heavy rows.
  */
-const PAGE_SIZE = 48;
+const PAGE_SIZE = 120;
+const WINDOWS = [
+  { value: "30", label: "Next 30 days", detail: "Immediate launches" },
+  { value: "90", label: "Next 90 days", detail: "The useful default" },
+  { value: "365", label: "Next 12 months", detail: "Long-range calendar" },
+  { value: "all", label: "All announced", detail: "Every dated release" },
+] as const;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -38,12 +44,21 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
   const platforms = first(sp.platforms);
   const ordering = (first(sp.ordering) as SortKey | undefined) ?? "released";
   const page = Math.max(1, Number(first(sp.page) ?? 1) || 1);
+  const requestedWindow = first(sp.window);
+  const timeframe = WINDOWS.some((item) => item.value === requestedWindow) ? requestedWindow! : "90";
   // Notable-only is the default. Opting *out* is the explicit choice, because
   // the unfiltered calendar is two thirds shovelware and reads as broken.
   const showAll = first(sp.all) === "1";
+  const today = new Date();
+  const from = today.toISOString().slice(0, 10);
+  const rangeDays = timeframe === "all" ? null : Number(timeframe);
+  const to = rangeDays
+    ? new Date(today.getTime() + rangeDays * 86_400_000).toISOString().slice(0, 10)
+    : null;
+  const dates = to ? `${from},${to}` : undefined;
 
   const [{ data, source }, genreList, platformList] = await Promise.all([
-    getUpcoming(PAGE_SIZE, page, { genres, platforms, ordering, notableOnly: !showAll }),
+    getUpcoming(PAGE_SIZE, page, { genres, platforms, dates, ordering, notableOnly: !showAll }),
     getGenres(),
     getPlatforms(),
   ]);
@@ -56,12 +71,12 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
     <>
       <PageHeader
         eyebrow="Release calendar"
-        title="What's coming next"
-        description="Every announced release ahead, grouped by month and counting down to launch."
+        title="A release calendar you can actually use"
+        description="Correct UTC dates, clear launch windows, month navigation, and the controls to focus on what you can play next."
       >
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="brand" icon={<CalendarClock size={12} />}>
-            {data.count.toLocaleString("en-US")} {filtered ? "matching" : "tracked"}
+            {data.count.toLocaleString("en-US")} {filtered ? "matching" : "scheduled"}
           </Badge>
           {dated > 0 && <Badge tone="neon">{dated} dated on this page</Badge>}
           {/*
@@ -70,7 +85,7 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
             way back.
           */}
           <Link
-            href={showAll ? "/upcoming" : "/upcoming?all=1"}
+            href={upcomingHref({ genres, platforms, ordering, timeframe, showAll: !showAll })}
             className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white/[0.04] px-3 py-1 text-[12px] text-muted transition-colors hover:border-line-strong hover:text-text"
           >
             {showAll ? "Show anticipated only" : "Include every announced game"}
@@ -85,6 +100,13 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
           </div>
         )}
 
+        <nav aria-label="Release horizon" className="mb-6 grid gap-2 rounded-3xl border border-line bg-panel/45 p-2 sm:grid-cols-2 lg:grid-cols-4">
+          {WINDOWS.map((item) => {
+            const active = timeframe === item.value;
+            return <Link key={item.value} href={upcomingHref({ genres, platforms, ordering, timeframe: item.value, showAll })} aria-current={active ? "page" : undefined} className={active ? "rounded-2xl border border-brand/35 bg-brand/15 p-4 text-white shadow-[0_18px_45px_-28px_rgba(124,92,255,0.9)]" : "rounded-2xl border border-transparent p-4 text-muted transition-colors hover:border-line hover:bg-white/[0.035] hover:text-text"}><span className="flex items-center gap-2 text-sm font-bold">{active ? <Sparkles size={14} className="text-brand-soft" /> : <CalendarDays size={14} className="text-faint" />}{item.label}</span><span className="mt-1.5 block pl-[22px] text-[11px] text-faint">{item.detail}</span></Link>;
+          })}
+        </nav>
+
         <BrowseControls
           genres={genreList.data}
           platforms={platformList.data}
@@ -92,6 +114,7 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
           sorts={UPCOMING_SORTS}
           defaultSort="released"
           noun="release"
+          showDatePresets={false}
         />
 
         <div className="mt-9">
@@ -110,6 +133,7 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
                   platforms,
                   ordering: ordering === "released" ? undefined : ordering,
                   all: showAll ? "1" : undefined,
+                  window: timeframe === "90" ? undefined : timeframe,
                 }}
               />
             </>
@@ -122,6 +146,29 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
       </Container>
     </>
   );
+}
+
+function upcomingHref({
+  genres,
+  platforms,
+  ordering,
+  timeframe,
+  showAll,
+}: {
+  genres?: string;
+  platforms?: string;
+  ordering?: SortKey;
+  timeframe: string;
+  showAll: boolean;
+}) {
+  const params = new URLSearchParams();
+  if (genres) params.set("genres", genres);
+  if (platforms) params.set("platforms", platforms);
+  if (ordering && ordering !== "released") params.set("ordering", ordering);
+  if (timeframe !== "90") params.set("window", timeframe);
+  if (showAll) params.set("all", "1");
+  const query = params.toString();
+  return query ? `/upcoming?${query}` : "/upcoming";
 }
 
 function EmptyCalendar({ filtered, showAll }: { filtered: boolean; showAll: boolean }) {

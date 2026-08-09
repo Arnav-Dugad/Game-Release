@@ -18,7 +18,6 @@ import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/game
 import { canonicalEntryHref, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
-import { buildPlannerIcs, buildPlannerSnapshot } from "../src/lib/games/planner";
 import { buildLibraryStats } from "../src/lib/games/stats";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
@@ -270,6 +269,9 @@ const notificationEntry = (overrides: Partial<WatchlistEntry> = {}): WatchlistEn
   ownedOn: [],
   addedAt: 0,
   ...overrides,
+  following: overrides.following ?? true,
+  subscriptionAccess: overrides.subscriptionAccess ?? [],
+  followedReleases: overrides.followedReleases ?? [],
 });
 check(
   "release inside fourteen days alerts",
@@ -280,6 +282,19 @@ check(
   "distant release stays quiet",
   releaseNotifications([notificationEntry({ released: "2026-09-15" })], Date.parse("2026-08-09T12:00:00Z")),
   [],
+);
+check(
+  "explicitly unfollowed games never alert",
+  releaseNotifications([notificationEntry({ following: false })], Date.parse("2026-08-09T12:00:00Z")),
+  [],
+);
+check(
+  "a followed game's DLC alerts independently of the base release",
+  releaseNotifications([notificationEntry({
+    released: "2020-01-01",
+    followedReleases: [{ gameId: 88, slug: "signal-dlc", name: "Signal DLC", kind: "dlc", released: "2026-08-10", releaseWindow: null, image: null, imageFallback: null }],
+  })], Date.parse("2026-08-09T12:00:00Z"))[0]?.kind,
+  "dlc-soon",
 );
 check(
   "Steam fallback entry routes to IGDB search",
@@ -315,25 +330,6 @@ check("duplicate records merge by game id", libraryStats.uniqueGames, 2);
 check("multi-platform ownership counts once", libraryStats.ownedGames, 2);
 check("platform copies remain a separate metric", libraryStats.platformCopies, 4);
 
-console.log("\nPersonal release planner");
-const plannerEntries = [
-  notificationEntry({ gameId: 11, name: "Alpha", released: "2026-08-11", playtime: 8, addedAt: 1 }),
-  notificationEntry({ gameId: 12, name: "Bravo", released: "2026-08-13", playtime: 9, addedAt: 2 }),
-  notificationEntry({ gameId: 13, name: "Window", released: null, releaseWindow: "Q4 2026", addedAt: 3 }),
-  notificationEntry({ gameId: 14, name: "In progress", status: "playing", released: "2026-01-01", playtime: 20, startedAt: 50, addedAt: 4 }),
-];
-const planner = buildPlannerSnapshot(plannerEntries, 12, dashboardNow);
-check("same-week releases become one collision", planner.conflicts[0]?.entries.map((entry) => entry.gameId), [11, 12]);
-check("work beyond the weekly budget becomes crunch", [planner.conflicts[0]?.hours, planner.conflicts[0]?.severity], [17, "crunch"]);
-check("release windows never enter the dated runway", [planner.upcoming.length, planner.releaseWindows[0]?.gameId], [2, 13]);
-check("currently playing wins the next-play decision", planner.nextPlay?.gameId, 14);
-check("backlog clearance respects weekly capacity", [planner.backlogHours, planner.weeksToClear], [20, 2]);
-const calendar = buildPlannerIcs(plannerEntries, "https://ludex.example", dashboardNow);
-check("calendar exports only future exact dates", (calendar.match(/BEGIN:VEVENT/g) ?? []).length, 2);
-check("calendar events are date-only and one day long", calendar.includes("DTSTART;VALUE=DATE:20260811\r\nDTEND;VALUE=DATE:20260812"), true);
-check("calendar omits uncertain release windows", calendar.includes("Window releases"), false);
-check("invalid dates cannot poison the runway", buildPlannerSnapshot([notificationEntry({ released: "2026-02-30" })], Number.NaN, dashboardNow).upcoming, []);
-
 console.log("\nUniversal discovery routing");
 const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({
   kind,
@@ -343,20 +339,17 @@ const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({
   subtitle: null,
   image: null,
 });
-check("series has its own route", hrefForSearchHit(searchHit("series", "cyberpunk")), "/series/cyberpunk");
 check("franchise has its own route", hrefForSearchHit(searchHit("franchise", "cyberpunk")), "/franchise/cyberpunk");
 check("genre routes to a genre filter", hrefForSearchHit(searchHit("genre", "role-playing-rpg")), "/browse?genres=role-playing-rpg");
 check("exact platform routes to a platform filter", hrefForSearchHit(searchHit("platform", "ps5")), "/browse?platforms=ps5");
 const groupedSearch = groupSearchHits([
-  searchHit("series", "cyberpunk"),
   searchHit("franchise", "cyberpunk"),
   searchHit("genre", "cyberpunk"),
 ]);
-check("same-name entity types remain separate", [
-  groupedSearch.get("series")?.length,
+check("genres never masquerade as franchises", [
   groupedSearch.get("franchise")?.length,
   groupedSearch.get("genre")?.length,
-], [1, 1, 1]);
+], [1, 1]);
 
 console.log("\nHTML handling");
 check(

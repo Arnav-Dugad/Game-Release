@@ -18,7 +18,7 @@ export function EntityPage({
   eyebrow,
 }: {
   entity: IgdbEntity | null;
-  kind: "company" | "character" | "series" | "franchise";
+  kind: "company" | "character" | "franchise";
   eyebrow: string;
 }) {
   if (!entity) notFound();
@@ -29,9 +29,9 @@ export function EntityPage({
     .sort((a, b) => a.released!.localeCompare(b.released!));
   const firstYear = datedGames.at(0)?.released?.slice(0, 4) ?? null;
   const latestYear = datedGames.at(-1)?.released?.slice(0, 4) ?? null;
-  const directoryHref = kind === "company" ? "/studios" : kind === "series" ? "/series" : "/browse";
-  const directoryLabel = kind === "company" ? "All studios" : kind === "series" ? "All series" : "Browse games";
-  const collectionPage = kind === "series" || kind === "franchise";
+  const directoryHref = kind === "company" ? "/studios" : kind === "franchise" ? "/franchises" : "/browse";
+  const directoryLabel = kind === "company" ? "All studios" : kind === "franchise" ? "All franchises" : "Browse games";
+  const collectionPage = kind === "franchise";
 
   return (
     <>
@@ -104,7 +104,7 @@ export function EntityPage({
               </div>
             </div>
 
-            {collectionPage && <SeriesPosterStack games={entity.games} />}
+            {collectionPage && <FranchisePosterStack games={entity.games} />}
           </div>
 
           {entity.description && (
@@ -169,7 +169,7 @@ function EntityStat({
   );
 }
 
-function SeriesPosterStack({ games }: { games: IgdbEntity["games"] }) {
+function FranchisePosterStack({ games }: { games: IgdbEntity["games"] }) {
   const posters = games.filter((game) => game.image).slice(0, 3);
   if (posters.length === 0) return null;
 

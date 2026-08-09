@@ -485,6 +485,12 @@ function sortSummaries(games: GameSummary[], ordering: BrowseFilters["ordering"]
       return out.sort((a, b) => (time(b) || -Infinity) - (time(a) || -Infinity));
     case "-metacritic":
       return out.sort((a, b) => (b.metacritic ?? 0) - (a.metacritic ?? 0));
+    case "metacritic":
+      return out.sort((a, b) => (a.metacritic ?? 0) - (b.metacritic ?? 0));
+    case "-rating":
+      return out.sort((a, b) => b.rating - a.rating);
+    case "rating":
+      return out.sort((a, b) => a.rating - b.rating);
     case "name":
       return out.sort((a, b) => a.name.localeCompare(b.name));
     default:

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Gamepad2, Rocket } from "lucide-react";
+import { CalendarClock, Gamepad2, Puzzle, Rocket } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
 import type { AppNotification, NotificationKind } from "@/lib/notifications/model";
 import { cn } from "@/lib/utils/cn";
@@ -10,6 +10,9 @@ const KIND_META: Record<NotificationKind, { label: string; icon: typeof Rocket; 
   "release-today": { label: "Releases today", icon: Rocket, tone: "text-gold bg-gold/10 border-gold/20" },
   "release-soon": { label: "Coming soon", icon: CalendarClock, tone: "text-brand-soft bg-brand/10 border-brand/20" },
   released: { label: "Out now", icon: Gamepad2, tone: "text-neon bg-neon/10 border-neon/20" },
+  "dlc-today": { label: "DLC today", icon: Puzzle, tone: "text-gold bg-gold/10 border-gold/20" },
+  "dlc-soon": { label: "DLC incoming", icon: Puzzle, tone: "text-brand-soft bg-brand/10 border-brand/20" },
+  "dlc-released": { label: "New add-on", icon: Puzzle, tone: "text-neon bg-neon/10 border-neon/20" },
 };
 
 export function NotificationItem({

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
+import { WatchButton } from "@/components/game/WatchButton";
 import { SearchHitVisual, SearchKindIcon } from "@/components/search/SearchHitVisual";
 import { useDebouncedValue, useDialogFocus, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
@@ -58,7 +59,7 @@ const QUICK_LINKS = [
   { label: "Personal stats", detail: "Your library, beautifully measured", href: "/stats" },
   { label: "Top rated", detail: "Critics’ highest scores", href: "/browse?ordering=-metacritic" },
   { label: "Studios", detail: "Developers and publishers", href: "/studios" },
-  { label: "Series", detail: "Connected release lines", href: "/series" },
+  { label: "Franchises", detail: "Complete connected universes", href: "/franchises" },
   { label: "Every genre", detail: "Find your next obsession", href: "/genres" },
 ];
 
@@ -186,7 +187,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                   ref={inputRef}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search games, series, studios, characters…"
+                  placeholder="Search games, franchises, studios, characters…"
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
@@ -233,7 +234,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                                     href={hrefForSearchHit(hit)}
                                     onClick={onClose}
                                     onPointerEnter={() => setCursor(index)}
-                                    className={cn("flex items-center gap-3 rounded-2xl p-2 pr-12 transition-[background-color,transform]", index === activeIndex ? "bg-white/[0.09]" : "hover:bg-white/[0.05]")}
+                                    className={cn("flex items-center gap-3 rounded-2xl p-2 pr-24 transition-[background-color,transform]", index === activeIndex ? "bg-white/[0.09]" : "hover:bg-white/[0.05]")}
                                   >
                                     <SearchHitVisual hit={hit} />
                                     <span className="min-w-0 flex-1">
@@ -242,7 +243,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                                     </span>
                                     {index === activeIndex && <CornerDownLeft size={14} className="hidden shrink-0 text-faint fine:block" />}
                                   </Link>
-                                  {hit.kind === "game" && <OwnershipPicker game={hitAsGame(hit)} variant="icon" className="absolute right-2 top-1/2 -translate-y-1/2" />}
+                                  {hit.kind === "game" && <span className="absolute right-2 top-1/2 flex -translate-y-1/2 gap-1"><WatchButton game={hitAsGame(hit)} /><OwnershipPicker game={hitAsGame(hit)} variant="icon" /></span>}
                                 </li>
                               );
                             })}
@@ -254,7 +255,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
 
                   <aside className="hidden p-5 lg:block">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-brand-soft">Discovery map</p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted">Results stay separated by what they are, so a genre can never masquerade as a series.</p>
+                    <p className="mt-2 text-sm leading-relaxed text-muted">Results stay separated by what they are, so a genre can never masquerade as a franchise.</p>
                     <div className="mt-5 space-y-2">
                       {SEARCH_KIND_ORDER.map((kind) => {
                         const count = groups.get(kind)?.length ?? 0;

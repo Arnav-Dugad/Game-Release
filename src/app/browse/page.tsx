@@ -32,11 +32,13 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
   const search = first(sp.search);
   const genres = first(sp.genres);
   const platforms = first(sp.platforms);
+  const dates = first(sp.dates);
+  const metacritic = first(sp.metacritic);
   const ordering = first(sp.ordering) as SortKey | undefined;
   const page = Math.max(1, Number(first(sp.page) ?? 1) || 1);
 
   const [{ data, source }, genreList, platformList] = await Promise.all([
-    browseGames({ search, genres, platforms, ordering, page, pageSize: PAGE_SIZE }),
+    browseGames({ search, genres, platforms, dates, metacritic, ordering, page, pageSize: PAGE_SIZE }),
     getGenres(),
     getPlatforms(),
   ]);
@@ -79,7 +81,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
                 hasNext={data.hasNext}
                 totalPages={totalPages}
                 basePath="/browse"
-                params={{ search, genres, platforms, ordering }}
+                params={{ search, genres, platforms, dates, metacritic, ordering }}
               />
             </>
           )}

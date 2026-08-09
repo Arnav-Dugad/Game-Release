@@ -4,14 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  BellRing,
   BookOpenCheck,
+  Cloud,
   Clock3,
+  Copy,
   Gamepad2,
   Layers3,
   LibraryBig,
   Sparkles,
   Star,
   Trophy,
+  Zap,
 } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
@@ -86,10 +90,25 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
         <Metric icon={<Gamepad2 size={18} />} label="Playing now" value={stats.playing} tone="neon" />
       </Stagger>
 
+      <Stagger className="grid grid-cols-2 gap-3 lg:grid-cols-4" onMount gap={0.04}>
+        <Metric icon={<BellRing size={18} />} label="Games followed" value={stats.followedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} upcoming` : "Release + DLC alerts"} tone="brand" />
+        <Metric icon={<Cloud size={18} />} label="Via subscription" value={stats.subscriptionGames} note={stats.subscriptionAccesses > stats.subscriptionGames ? `${stats.subscriptionAccesses} service/platform records` : undefined} tone="neon" />
+        <Metric icon={<Copy size={18} />} label="Extra copies" value={stats.extraCopies} note="Never inflate game count" tone="gold" />
+        <Metric icon={<Zap size={18} />} label="Completed in 90 days" value={stats.completedLast90Days} note={stats.collectionAgeDays ? `${stats.collectionAgeDays} days of history` : undefined} tone="mint" />
+      </Stagger>
+
+      <Reveal className="grid gap-3 rounded-[1.75rem] border border-line bg-[linear-gradient(135deg,rgba(124,92,255,0.08),rgba(34,211,238,0.035))] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
+        <Insight label="Playable access" value={`${stats.accessibleGames}/${stats.uniqueGames}`} detail="Owned or reached through a subscription" />
+        <Insight label="Owned backlog" value={stats.unplayedOwned} detail="Owned games not marked completed" />
+        <Insight label="85+ critic picks" value={stats.highScorers} detail="Highly scored games in your orbit" />
+        <Insight label="Known backlog" value={stats.backlogHours ? `${stats.backlogHours}h` : "—"} detail="Estimated time across unfinished records" />
+      </Reveal>
+
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
         <Reveal className="glass rounded-[1.75rem] p-5 sm:p-7">
-          <PanelHeading icon={<BarChart3 size={17} />} eyebrow="Six-month signal" title="Collection momentum" />
-          <div className="mt-8 flex h-56 items-end gap-3 sm:gap-5" role="img" aria-label="Games added and completed over the last six months">
+          <PanelHeading icon={<BarChart3 size={17} />} eyebrow="Twelve-month signal" title="Collection momentum" />
+          <div className="mt-8 overflow-x-auto pb-2 no-scrollbar">
+          <div className="flex h-56 min-w-[680px] items-end gap-3" role="img" aria-label="Games added and completed over the last twelve months">
             {stats.timeline.map((month) => (
               <div key={month.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
                 <div className="flex h-44 w-full items-end justify-center gap-1.5">
@@ -99,6 +118,7 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">{month.label}</span>
               </div>
             ))}
+          </div>
           </div>
           <div className="mt-4 flex gap-5 border-t border-line pt-4 text-[11px] text-muted"><Legend tone="bg-brand" label="Added" /><Legend tone="bg-mint" label="Completed" /></div>
         </Reveal>
@@ -120,6 +140,13 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <RankPanel title="Where your collection lives" eyebrow="Ownership platforms" items={stats.platforms} empty="Mark where you own games to unlock this view." />
         <RankPanel title="The shape of your taste" eyebrow="Top genres" items={stats.genres} empty="Genre intelligence will appear as you track IGDB games." />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <RankPanel title="Services that carried your play" eyebrow="Subscription history" items={stats.subscriptions} empty="Record Game Pass, PlayStation Plus, or another service on a game page." />
+        <RankPanel title="Where you actually played" eyebrow="Play platforms" items={stats.playedPlatforms} empty="Set a play platform or add a subscription access record." />
+        <RankPanel title="Your release-era fingerprint" eyebrow="Games by decade" items={stats.decades} empty="Release dates will build your era profile." />
+        <RankPanel title="Quality distribution" eyebrow="Critic score bands" items={stats.scoreBands} empty="Scored games will build your quality curve." />
       </div>
 
       <Reveal className="glass overflow-hidden rounded-[1.75rem]">
@@ -166,6 +193,10 @@ function StatusBar({ label, value, total, tone }: { label: string; value: number
 }
 
 function MiniFact({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) { return <div><span className="text-brand-soft">{icon}</span><p className="mt-2 font-display text-lg font-black tabular-nums">{value}</p><p className="mt-0.5 text-[10px] leading-tight text-faint">{label}</p></div>; }
+
+function Insight({ label, value, detail }: { label: string; value: string | number; detail: string }) {
+  return <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-faint">{label}</p><p className="mt-2 font-display text-2xl font-black tabular-nums">{value}</p><p className="mt-1 text-[11px] leading-relaxed text-muted">{detail}</p></div>;
+}
 
 function RankPanel({ title, eyebrow, items, empty }: { title: string; eyebrow: string; items: RankedStat[]; empty: string }) {
   const max = Math.max(1, ...items.map((item) => item.value));

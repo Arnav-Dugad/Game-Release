@@ -114,7 +114,7 @@ export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">Your library, release radar, progress, and taste profile—synchronized into one live briefing.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link href="/planner" className="group inline-flex w-fit items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Open planner <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></Link>
+              <Link href="/stats" className="group inline-flex w-fit items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Open your stats <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></Link>
               <Link href="/library" className="group inline-flex w-fit items-center gap-2 rounded-full border border-line bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-line-strong hover:text-text">Library <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></Link>
             </div>
           </Reveal>
