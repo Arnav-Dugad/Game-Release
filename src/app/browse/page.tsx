@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Container } from "@/components/ui/SectionHeading";
 import { Pagination } from "@/components/ui/Pagination";
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
-import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { browseGames, getGenres, getPlatforms, isDegraded } from "@/lib/games/source";
 import type { SortKey } from "@/lib/games/types";
 
@@ -70,7 +70,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
 
         <div className="mt-8">
           {data.results.length === 0 ? (
-            <EmptyResults />
+            <EmptyResults search={search} />
           ) : (
             <>
               <GameGrid games={data.results} priorityCount={5} />
@@ -89,19 +89,18 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
   );
 }
 
-function EmptyResults() {
+function EmptyResults({ search }: { search?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-line py-20 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/5">
-        <SearchX size={24} className="text-faint" />
-      </span>
-      <h2 className="mt-5 text-lg font-semibold">No games match those filters</h2>
-      <p className="mt-2 max-w-sm text-sm text-muted">
-        Try removing a filter or two, or search for a title directly.
-      </p>
-      <Button href="/browse" variant="secondary" className="mt-6">
-        Reset filters
-      </Button>
-    </div>
+    <EmptyState
+      icon={<SearchX size={24} />}
+      title={search ? `Nothing found for “${search}”` : "No games match those filters"}
+      body={
+        search
+          ? "Try a shorter term, or a differently spelled title — search also matches alternative names like “GTA V”."
+          : "Try removing a filter or two, or search for a title directly."
+      }
+      action={{ href: "/browse", label: "Reset filters" }}
+      secondaryAction={{ href: "/upcoming", label: "See what's coming" }}
+    />
   );
 }

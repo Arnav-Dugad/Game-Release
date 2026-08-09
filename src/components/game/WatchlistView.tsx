@@ -17,6 +17,7 @@ import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
 import { PlatformPicker } from "./PlatformPicker";
 import { PosterTile } from "./PosterTile";
+import { DealsRail } from "@/components/library/DealsRail";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { GameCardSkeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/motion/Reveal";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   PosterSizeToggle,
   posterGridClass,
@@ -143,6 +145,10 @@ export function WatchlistView() {
 
   return (
     <Container className="py-8 lg:py-12">
+      {/* A discount on something you're waiting for is the most actionable
+          thing this page can tell you, so it goes above the list itself. */}
+      <DealsRail />
+
       <div className="mb-6 space-y-4 rounded-2xl border border-line bg-panel/40 p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1">
@@ -235,9 +241,12 @@ export function WatchlistView() {
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-16 text-center text-sm text-muted">
-          Nothing in this list yet.
-        </p>
+        <EmptyState
+          icon={<BookmarkX size={22} />}
+          title="Nothing matches those filters"
+          body="Try a different status, clear the search, or turn off the owned-only filter."
+          action={{ href: "/browse", label: "Find more games" }}
+        />
       ) : posterSize !== "list" ? (
         /* Poster grid. The inline status and platform controls only fit the
            list layout, so the grid links straight through to the game page —

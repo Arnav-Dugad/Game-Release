@@ -115,6 +115,14 @@ export interface UserPreferences {
   region?: string;
   /** User-level motion opt-out, on top of the OS setting. */
   reduceMotion?: boolean;
+  /**
+   * Poster density on the collection pages, keyed by page.
+   *
+   * A map rather than a single value because the right density genuinely
+   * differs per page — a watchlist is usually read as a list with inline
+   * controls, a library as a wall of covers.
+   */
+  posterSizes?: Record<string, string>;
   updatedAt?: number;
 }
 

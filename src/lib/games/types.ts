@@ -272,6 +272,16 @@ export interface BrowseFilters {
   page?: number;
   pageSize?: number;
   metacritic?: string;
+  /**
+   * Drop titles nobody is following.
+   *
+   * IGDB lists every announced game, and roughly two thirds of the upcoming
+   * calendar has zero anticipation and no audience — asset-flip shovelware
+   * scheduled against placeholder dates. Chronologically it is all perfectly
+   * valid, which is exactly the problem: page after page of it looks identical
+   * and buries the releases anyone is actually waiting for.
+   */
+  notableOnly?: boolean;
 }
 
 /**

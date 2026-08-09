@@ -9,8 +9,9 @@
  * preference, persisted per device so it survives a reload.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { LayoutGrid, Rows3, StretchHorizontal } from "lucide-react";
+import { usePreferences } from "@/lib/preferences/PreferencesProvider";
 import { cn } from "@/lib/utils/cn";
 
 export type PosterSize = "list" | "compact" | "large";
@@ -21,35 +22,26 @@ const OPTIONS: { value: PosterSize; label: string; icon: typeof Rows3 }[] = [
   { value: "large", label: "Large posters", icon: StretchHorizontal },
 ];
 
-/** Reads and persists the choice for one page, keyed so pages differ freely. */
-export function usePosterSize(storageKey: string, fallback: PosterSize = "compact") {
-  const [size, setSizeState] = useState<PosterSize>(fallback);
+const isPosterSize = (value: unknown): value is PosterSize =>
+  value === "list" || value === "compact" || value === "large";
 
-  useEffect(() => {
-    // Deferred a frame so nothing is written during the effect itself.
-    const frame = requestAnimationFrame(() => {
-      try {
-        const stored = window.localStorage.getItem(storageKey);
-        if (stored === "list" || stored === "compact" || stored === "large") {
-          setSizeState(stored);
-        }
-      } catch {
-        /* storage disabled — the default is fine */
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [storageKey]);
+/**
+ * Reads and persists the choice for one page, keyed so pages differ freely.
+ *
+ * Backed by the shared preferences store rather than its own `localStorage`
+ * key, so density syncs to the account alongside currency and reduced motion —
+ * the alternative left one preference stranded on the device while its
+ * neighbours followed the reader everywhere.
+ */
+export function usePosterSize(key: string, fallback: PosterSize = "compact") {
+  const { posterSizes, setPosterSize } = usePreferences();
+
+  const stored = posterSizes[key];
+  const size: PosterSize = isPosterSize(stored) ? stored : fallback;
 
   const setSize = useCallback(
-    (next: PosterSize) => {
-      setSizeState(next);
-      try {
-        window.localStorage.setItem(storageKey, next);
-      } catch {
-        /* in-memory state still updates */
-      }
-    },
-    [storageKey],
+    (next: PosterSize) => setPosterSize(key, next),
+    [key, setPosterSize],
   );
 
   return { size, setSize };

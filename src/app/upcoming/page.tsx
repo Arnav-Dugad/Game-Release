@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CalendarClock, CalendarX2 } from "lucide-react";
 import { BrowseControls, UPCOMING_SORTS } from "@/components/game/BrowseControls";
 import { ReleaseTimeline } from "@/components/game/ReleaseTimeline";
@@ -7,7 +8,7 @@ import { Container } from "@/components/ui/SectionHeading";
 import { Pagination } from "@/components/ui/Pagination";
 import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { getGenres, getPlatforms, getUpcoming, isDegraded } from "@/lib/games/source";
 import type { SortKey } from "@/lib/games/types";
 
@@ -37,9 +38,12 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
   const platforms = first(sp.platforms);
   const ordering = (first(sp.ordering) as SortKey | undefined) ?? "released";
   const page = Math.max(1, Number(first(sp.page) ?? 1) || 1);
+  // Notable-only is the default. Opting *out* is the explicit choice, because
+  // the unfiltered calendar is two thirds shovelware and reads as broken.
+  const showAll = first(sp.all) === "1";
 
   const [{ data, source }, genreList, platformList] = await Promise.all([
-    getUpcoming(PAGE_SIZE, page, { genres, platforms, ordering }),
+    getUpcoming(PAGE_SIZE, page, { genres, platforms, ordering, notableOnly: !showAll }),
     getGenres(),
     getPlatforms(),
   ]);
@@ -60,6 +64,17 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
             {data.count.toLocaleString("en-US")} {filtered ? "matching" : "tracked"}
           </Badge>
           {dated > 0 && <Badge tone="neon">{dated} dated on this page</Badge>}
+          {/*
+            An honest escape hatch rather than a hidden filter. The default hides
+            roughly two thirds of the calendar, so it has to say so and offer the
+            way back.
+          */}
+          <Link
+            href={showAll ? "/upcoming" : "/upcoming?all=1"}
+            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white/[0.04] px-3 py-1 text-[12px] text-muted transition-colors hover:border-line-strong hover:text-text"
+          >
+            {showAll ? "Show anticipated only" : "Include every announced game"}
+          </Link>
         </div>
       </PageHeader>
 
@@ -81,7 +96,7 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
 
         <div className="mt-9">
           {data.results.length === 0 ? (
-            <EmptyCalendar filtered={filtered} />
+            <EmptyCalendar filtered={filtered} showAll={showAll} />
           ) : (
             <>
               <ReleaseTimeline games={data.results} />
@@ -90,7 +105,12 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
                 hasNext={data.hasNext}
                 totalPages={totalPages}
                 basePath="/upcoming"
-                params={{ genres, platforms, ordering: ordering === "released" ? undefined : ordering }}
+                params={{
+                  genres,
+                  platforms,
+                  ordering: ordering === "released" ? undefined : ordering,
+                  all: showAll ? "1" : undefined,
+                }}
               />
             </>
           )}
@@ -104,25 +124,29 @@ export default async function UpcomingPage({ searchParams }: { searchParams: Sea
   );
 }
 
-function EmptyCalendar({ filtered }: { filtered: boolean }) {
+function EmptyCalendar({ filtered, showAll }: { filtered: boolean; showAll: boolean }) {
+  if (filtered) {
+    return (
+      <EmptyState
+        icon={<CalendarX2 size={24} />}
+        title="Nothing upcoming matches those filters"
+        body="Try widening the genre or platform selection."
+        action={{ href: "/upcoming", label: "Clear filters" }}
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-line py-20 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/5">
-        <CalendarX2 size={24} className="text-faint" />
-      </span>
-      <h2 className="mt-5 text-lg font-semibold">
-        {filtered ? "Nothing upcoming matches those filters" : "Nothing scheduled right now"}
-      </h2>
-      <p className="mt-2 max-w-sm text-sm text-muted">
-        {filtered
-          ? "Try widening the genre or platform selection."
-          : "The calendar will fill in as studios announce dates."}
-      </p>
-      {filtered && (
-        <Button href="/upcoming" variant="secondary" className="mt-6">
-          Clear filters
-        </Button>
-      )}
-    </div>
+    <EmptyState
+      icon={<CalendarX2 size={24} />}
+      title="Nothing scheduled right now"
+      body={
+        showAll
+          ? "The calendar will fill in as studios announce dates."
+          : "Nothing with a following is dated yet. The full calendar includes every announced game, most of which nobody is tracking."
+      }
+      action={showAll ? undefined : { href: "/upcoming?all=1", label: "Include every game" }}
+      secondaryAction={{ href: "/browse", label: "Browse released games" }}
+    />
   );
 }

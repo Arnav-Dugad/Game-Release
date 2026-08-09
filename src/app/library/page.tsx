@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DealsRail } from "@/components/library/DealsRail";
 import { LibraryView } from "@/components/library/LibraryView";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Container } from "@/components/ui/SectionHeading";
@@ -19,6 +20,8 @@ export default function LibraryPage() {
         description="Everything you've marked as owned, across every storefront — filter by store or status, and sort it however you think about your collection."
       />
       <Container className="py-8 lg:py-12">
+        {/* Deals lead: a discount is time-sensitive, the collection isn't. */}
+        <DealsRail />
         <LibraryView />
       </Container>
     </>

@@ -34,6 +34,7 @@ import { getUserPreferences, saveUserPreferences } from "@/lib/firebase/db";
 export const REGION_COOKIE = "ludex_region";
 const REGION_KEY = "ludex:region";
 const MOTION_KEY = "ludex:reduce-motion";
+const POSTER_KEY = "ludex:poster-sizes";
 
 interface PreferencesValue {
   /** Steam country code, e.g. "in". Drives the currency prices are shown in. */
@@ -43,6 +44,12 @@ interface PreferencesValue {
   /** User-level motion opt-out, on top of the OS setting. */
   reduceMotion: boolean;
   setReduceMotion: (value: boolean) => void;
+  /**
+   * Poster density per collection page, mirrored to the account so it follows
+   * the reader to a new device like every other preference.
+   */
+  posterSizes: Record<string, string>;
+  setPosterSize: (key: string, size: string) => void;
   /** False until localStorage has been read, so nothing renders a wrong value. */
   ready: boolean;
 }
@@ -69,6 +76,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   // value lands on mount, below.
   const [region, setRegionState] = useState<string>(DEFAULT_STEAM_REGION);
   const [reduceMotion, setReduceMotionState] = useState(false);
+  const [posterSizes, setPosterSizesState] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
   /**
    * True once the device copy has been read. Account preferences are only
@@ -94,6 +102,15 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
           writeRegionCookie(resolved);
         }
         setReduceMotionState(window.localStorage.getItem(MOTION_KEY) === "true");
+
+        const storedSizes = window.localStorage.getItem(POSTER_KEY);
+        if (storedSizes) {
+          const parsed: unknown = JSON.parse(storedSizes);
+          // Guard the shape: a hand-edited or stale value must not poison state.
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            setPosterSizesState(parsed as Record<string, string>);
+          }
+        }
       } catch {
         /* private mode or storage disabled — defaults are fine */
       }
@@ -126,6 +143,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
           const hasLocalMotion = window.localStorage.getItem(MOTION_KEY) !== null;
           if (!hasLocalMotion && typeof prefs.reduceMotion === "boolean") {
             setReduceMotionState(prefs.reduceMotion);
+          }
+
+          const hasLocalSizes = window.localStorage.getItem(POSTER_KEY) !== null;
+          if (!hasLocalSizes && prefs.posterSizes) {
+            setPosterSizesState(prefs.posterSizes);
           }
         } catch {
           /* storage unavailable — account values simply aren't applied */
@@ -175,6 +197,23 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const setPosterSize = useCallback(
+    (key: string, size: string) => {
+      setPosterSizesState((prev) => {
+        const next = { ...prev, [key]: size };
+        try {
+          window.localStorage.setItem(POSTER_KEY, JSON.stringify(next));
+        } catch {
+          /* in-memory state still updates */
+        }
+        // Merged server-side, so writing one page's choice can't clear another's.
+        if (user) void saveUserPreferences(user.uid, { posterSizes: next }).catch(() => {});
+        return next;
+      });
+    },
+    [user],
+  );
+
   const value = useMemo<PreferencesValue>(
     () => ({
       region,
@@ -182,9 +221,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       setRegion,
       reduceMotion,
       setReduceMotion,
+      posterSizes,
+      setPosterSize,
       ready,
     }),
-    [region, setRegion, reduceMotion, setReduceMotion, ready],
+    [region, setRegion, reduceMotion, setReduceMotion, posterSizes, setPosterSize, ready],
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

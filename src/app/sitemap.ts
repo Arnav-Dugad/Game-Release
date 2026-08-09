@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { popularSlugs } from "@/lib/games/source";
+import { igdbTopFranchises, igdbTopStudios } from "@/lib/games/providers/igdb";
 
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -19,9 +20,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/browse`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/genres`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${BASE}/platforms`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${BASE}/steam`, lastModified: now, changeFrequency: "daily", priority: 0.7 },
+    { url: `${BASE}/studios`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${BASE}/franchises`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
   ];
 
-  const slugs = await popularSlugs(200);
+  /*
+   * Entity pages are included, games are sampled.
+   *
+   * Studios and series are a bounded set that changes slowly, so the directory
+   * can be enumerated honestly. Games cannot: listing every slug would mean
+   * hundreds of thousands of entries for a catalogue that changes constantly,
+   * so this lists what is trending, top rated and upcoming right now — the
+   * titles most worth a crawler's attention — rather than attempting
+   * completeness.
+   *
+   * All three run together, and any that fails contributes nothing rather than
+   * failing the sitemap: a partial sitemap is far better than a 500.
+   */
+  const [slugs, studios, franchises] = await Promise.all([
+    popularSlugs(200).catch(() => [] as string[]),
+    igdbTopStudios(120).catch(() => null),
+    igdbTopFranchises(120).catch(() => null),
+  ]);
+
   const gameRoutes: MetadataRoute.Sitemap = slugs.map((slug) => ({
     url: `${BASE}/game/${slug}`,
     lastModified: now,
@@ -29,5 +51,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...gameRoutes];
+  const studioRoutes: MetadataRoute.Sitemap = (studios ?? []).map((studio) => ({
+    url: `${BASE}/studio/${studio.slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.5,
+  }));
+
+  const franchiseRoutes: MetadataRoute.Sitemap = (franchises ?? []).map((franchise) => ({
+    url: `${BASE}/franchise/${franchise.slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.5,
+  }));
+
+  return [...staticRoutes, ...gameRoutes, ...studioRoutes, ...franchiseRoutes];
 }

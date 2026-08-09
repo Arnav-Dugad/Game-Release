@@ -1,10 +1,19 @@
-import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+"use client";
+
+import Link, { useLinkStatus } from "next/link";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 /**
  * Real anchor-based pagination — crawlable, middle-clickable and works without
- * JS. Rendered on the server so page links carry the full existing filter set.
+ * JS. Page links carry the full existing filter set.
+ *
+ * Every link reports its own pending state, which is not decoration. These
+ * destinations are dynamic and each one runs a fresh provider query, so a page
+ * change can take several seconds; without feedback the click looks ignored and
+ * people conclude pagination is broken and click again. `loading.tsx` does not
+ * cover this case — it fires for a route change, not for a search-param change
+ * within the same route — which is exactly the gap `useLinkStatus` exists for.
  */
 export function Pagination({
   page,
@@ -96,7 +105,8 @@ function PageLink({
   className?: string;
 } & React.AriaAttributes) {
   const classes = cn(
-    "inline-flex min-h-11 items-center gap-1 rounded-full border text-sm font-medium transition-colors duration-200",
+    // `relative` anchors the pending overlay to the link itself.
+    "relative inline-flex min-h-11 items-center gap-1 overflow-hidden rounded-full border text-sm font-medium transition-colors duration-200",
     active
       ? "border-brand/50 bg-brand/20 text-white"
       : "border-line bg-white/[0.03] text-muted fine:hover:border-line-strong fine:hover:text-text",
@@ -114,8 +124,29 @@ function PageLink({
 
   return (
     <Link href={href} className={classes} scroll {...rest}>
+      <PendingOverlay />
       {children}
     </Link>
+  );
+}
+
+/**
+ * Covers its link while that link's navigation is in flight.
+ *
+ * Must be a child of the `<Link>` — `useLinkStatus` reads the nearest link's
+ * state from context, so a sibling would always report idle.
+ */
+function PendingOverlay() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+
+  return (
+    <span
+      aria-hidden
+      className="absolute inset-0 grid place-items-center rounded-full bg-brand/25 backdrop-blur-[1px]"
+    >
+      <Loader2 size={14} className="animate-spin text-white" />
+    </span>
   );
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { steamPrice } from "@/lib/games/providers/steam";
+import { getGame } from "@/lib/games/source";
 import { DEFAULT_STEAM_REGION, isValidRegion } from "@/lib/games/stores-catalog";
 
 /**
@@ -17,9 +18,29 @@ import { DEFAULT_STEAM_REGION, isValidRegion } from "@/lib/games/stores-catalog"
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
-  const appId = Number(searchParams.get("appid"));
+  /*
+   * Two ways in.
+   *
+   * `appid` is the direct route, used by the game page which already knows it.
+   * `slug` exists for saved lists: a watchlist entry stores no Steam app id, so
+   * the deals view would otherwise need a schema migration before it could ask
+   * about anything. Resolving through the cached detail record costs a lookup
+   * that is almost always a cache hit.
+   */
+  let appId = Number(searchParams.get("appid"));
+
   if (!Number.isInteger(appId) || appId <= 0) {
-    return NextResponse.json({ price: null }, { status: 400 });
+    const slug = searchParams.get("slug")?.trim();
+    if (!slug) {
+      return NextResponse.json({ price: null }, { status: 400 });
+    }
+    const result = await getGame(slug).catch(() => null);
+    const resolved = result?.data.steamAppId;
+    if (!resolved) {
+      // No Steam listing is a legitimate answer, not an error.
+      return NextResponse.json({ price: null }, { status: 200 });
+    }
+    appId = resolved;
   }
 
   // Validate against the known region list rather than passing user input

@@ -16,8 +16,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Building2, CornerDownLeft, Loader2, Search, TrendingUp, User, X } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
+import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { useDebouncedValue, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
+import type { GameSummary } from "@/lib/games/types";
 
 /**
  * One search result, which may be a game, a character or a studio.
@@ -48,6 +50,39 @@ function hrefForHit(hit: SearchHit): string {
     default:
       return `/game/${hit.slug}`;
   }
+}
+
+/**
+ * Adapts a search hit to the shape `OwnershipPicker` writes from.
+ *
+ * The picker saves a watchlist entry, which needs more than a hit carries. The
+ * missing fields are genuinely unknown here rather than faked — empty arrays
+ * and nulls mean "not known at save time", and the record is filled in properly
+ * the next time the game page is opened.
+ */
+function hitAsGame(hit: SearchHit): GameSummary {
+  return {
+    id: hit.id,
+    slug: hit.slug,
+    name: hit.name,
+    released: null,
+    releaseWindow: null,
+    tba: false,
+    image: hit.image,
+    imageFallback: null,
+    rating: 0,
+    ratingsCount: 0,
+    metacritic: null,
+    platforms: [],
+    parentPlatforms: [],
+    genres: [],
+    screenshots: [],
+    esrb: null,
+    heroTrailer: null,
+    popScore: null,
+    playtime: 0,
+    added: 0,
+  };
 }
 
 const GROUP_LABELS: Record<SearchHit["kind"], string> = {
@@ -300,7 +335,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                     // result list reads as grouped rather than jumbled.
                     const newGroup = i === 0 || results[i - 1].kind !== hit.kind;
                     return (
-                      <li key={`${hit.kind}-${hit.id}`}>
+                      <li key={`${hit.kind}-${hit.id}`} className="relative">
                         {newGroup && (
                           <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
                             {GROUP_LABELS[hit.kind]}
@@ -311,7 +346,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                           onClick={onClose}
                           onPointerEnter={() => setCursor(i)}
                           className={cn(
-                            "flex items-center gap-3 rounded-xl p-2 transition-colors",
+                            "flex items-center gap-3 rounded-xl p-2 pr-12 transition-colors",
                             i === activeIndex ? "bg-white/8" : "hover:bg-white/5",
                           )}
                         >
@@ -331,6 +366,22 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                             />
                           )}
                         </Link>
+
+                        {/*
+                          Ownership, right where people already are.
+
+                          Search is how someone arrives at a game they just
+                          bought; making them open the page first to record that
+                          is a step for no reason. Sits outside the link so a
+                          click marks ownership instead of navigating.
+                        */}
+                        {hit.kind === "game" && (
+                          <OwnershipPicker
+                            game={hitAsGame(hit)}
+                            variant="icon"
+                            className="absolute right-2 top-1/2 -translate-y-1/2"
+                          />
+                        )}
                       </li>
                     );
                   })}

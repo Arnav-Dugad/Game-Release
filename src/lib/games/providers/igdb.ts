@@ -37,6 +37,7 @@ import type {
   CompanyRef,
   GameDetail,
   GameSummary,
+  LogoRef,
   MultiplayerModes,
   PlatformRef,
   Ref,
@@ -1415,6 +1416,13 @@ async function buildWhere(filters: BrowseFilters): Promise<string | null> {
     clauses.push(`aggregated_rating >= ${lo} & aggregated_rating <= ${hi}`);
   }
 
+  if (filters.notableOnly) {
+    // `hypes` counts pre-release follows, which is the only audience signal an
+    // unreleased game has. Requiring a cover as well removes the placeholder
+    // records that carry a date and nothing else.
+    clauses.push("hypes > 0 & cover != null");
+  }
+
   return clauses.join(" & ");
 }
 
@@ -2193,6 +2201,74 @@ export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
     }
   }
   return null;
+}
+
+/**
+ * The studios worth putting on an index page.
+ *
+ * Ordered by how much they have actually shipped, which is the only ranking
+ * IGDB supports here and happens to be the right one: a browsable index should
+ * open on names people recognise, not on the alphabetical accident of "1C
+ * Company". Filtered to companies with a logo so the grid reads as a wall of
+ * marks rather than a list of initials.
+ */
+export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
+  if (!igdbConfigured()) return null;
+  try {
+    const query = queryFor(TTL.taxonomy);
+    const rows = await query<(IgdbCompany & { developed?: number[] })[]>(
+      "companies",
+      apicalypse({
+        fields: "name,slug,logo.image_id,developed",
+        where: "logo != null & developed != null",
+        limit: 500,
+      }),
+    );
+
+    return rows
+      .map((company) => ({
+        id: company.id,
+        slug: company.slug ?? String(company.id),
+        name: company.name,
+        logo: igdbImage(company.logo?.image_id, "logo_med"),
+        count: company.developed?.length ?? 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit)
+      .map(({ id, slug, name, logo }) => ({ id, slug, name, logo }));
+  } catch (err) {
+    warn("topStudios", err);
+    return null;
+  }
+}
+
+/** Series with enough entries to be worth browsing as a series. */
+export async function igdbTopFranchises(limit = 60): Promise<Ref[] | null> {
+  if (!igdbConfigured()) return null;
+  try {
+    const query = queryFor(TTL.taxonomy);
+    const rows = await query<(IgdbNamed & { games?: number[] })[]>(
+      "franchises",
+      apicalypse({ fields: "name,slug,games", where: "games != null", limit: 500 }),
+    );
+
+    return rows
+      .map((franchise) => ({
+        id: franchise.id,
+        slug: franchise.slug ?? String(franchise.id),
+        name: franchise.name,
+        count: franchise.games?.length ?? 0,
+      }))
+      // A "series" of one is just a game; two is the floor for the word to mean
+      // anything.
+      .filter((franchise) => franchise.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit)
+      .map(({ id, slug, name }) => ({ id, slug, name }));
+  } catch (err) {
+    warn("topFranchises", err);
+    return null;
+  }
 }
 
 /** Themes power the recommendation engine's taste profile. */
