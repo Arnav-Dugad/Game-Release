@@ -45,7 +45,6 @@ import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container, Section, SectionHeading } from "@/components/ui/SectionHeading";
 import { DataSourceNotice, SourceAttribution } from "@/components/ui/DataSourceNotice";
-import { ExpandableText } from "@/components/ui/ExpandableText";
 import { Collapsible } from "@/components/ui/Collapsible";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
@@ -54,6 +53,7 @@ import { getGame, getRelated, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import { PriceCard } from "@/components/game/PriceCard";
 import { GameCollectionShowcase } from "@/components/game/GameCollectionShowcase";
+import { GameEditorialOverview, GamePulseStrip } from "@/components/game/GameDetailEditorial";
 import {
   compactNumber,
   isUnreleased,
@@ -120,26 +120,15 @@ export default async function GamePage({ params }: { params: Params }) {
     <>
       <GameHero game={game} />
 
-      <Container className="relative z-10 space-y-3 pb-2 pt-4">
+      <Container className="relative z-10 space-y-3 pb-2">
+        <GamePulseStrip game={game} />
         <DataSourceNotice source={source} degraded={isDegraded(source)} />
         <SourceAttribution source={source} />
       </Container>
 
       <Container className="grid gap-10 pb-8 pt-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:pb-12 lg:pt-10">
         <div className="min-w-0 space-y-14">
-          {game.description && (
-            <section id="overview">
-              <Reveal>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-soft">The overview</p>
-                <h2 className="mb-4 text-2xl font-bold sm:text-3xl">About this game</h2>
-                <ExpandableText
-                  text={game.description}
-                  className="max-w-3xl"
-                  paragraphClassName="text-[15px] leading-[1.8] text-muted sm:text-base"
-                />
-              </Reveal>
-            </section>
-          )}
+          {game.description && <GameEditorialOverview game={game} />}
 
           <GameCollectionShowcase game={game} />
 
@@ -322,6 +311,14 @@ function GameHero({ game }: { game: GameDetail }) {
                 {game.series[0].name} series
               </Link>
             )}
+            {game.franchises[0] && (
+              <Link
+                href={`/franchise/${game.franchises[0].slug}`}
+                className="rounded-full border border-white/10 bg-black/20 px-3 py-2 backdrop-blur-md transition-colors hover:border-neon/35 hover:text-neon"
+              >
+                {game.franchises[0].name} franchise
+              </Link>
+            )}
           </div>
         </Reveal>
         {/*
@@ -459,6 +456,7 @@ function GameHero({ game }: { game: GameDetail }) {
             {game.description && <QuickLink href="#overview">Overview</QuickLink>}
             {game.trailers.length > 0 && <QuickLink href="#trailers">Trailers</QuickLink>}
             {(game.series.length > 0 ||
+              game.franchises.length > 0 ||
               game.dlcs.length > 0 ||
               game.expansions.length > 0 ||
               game.standaloneExpansions.length > 0 ||
@@ -467,7 +465,7 @@ function GameHero({ game }: { game: GameDetail }) {
               game.remakes.length > 0 ||
               game.remasters.length > 0 ||
               game.ports.length > 0) && (
-              <QuickLink href="#collection">Series & add-ons</QuickLink>
+              <QuickLink href="#collection">Universe & content</QuickLink>
             )}
             {(game.screenshots.length > 0 || game.artworks.length > 0) && <QuickLink href="#media">Gallery</QuickLink>}
             <QuickLink href="#reviews">Reviews</QuickLink>
@@ -571,6 +569,29 @@ function GameSidebar({ game }: { game: GameDetail }) {
                       {series.name}
                     </Link>
                     {i < game.series.length - 1 && ","}
+                  </span>
+                ))}
+              </span>
+            ),
+            icon: <Layers size={14} />,
+          },
+        ]
+      : []),
+    ...(game.franchises.length
+      ? [
+          {
+            label: game.franchises.length > 1 ? "Franchises" : "Franchise",
+            value: (
+              <span className="flex flex-wrap gap-x-1.5">
+                {game.franchises.map((franchise, i) => (
+                  <span key={franchise.id}>
+                    <Link
+                      href={`/franchise/${franchise.slug}`}
+                      className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-neon"
+                    >
+                      {franchise.name}
+                    </Link>
+                    {i < game.franchises.length - 1 && ","}
                   </span>
                 ))}
               </span>

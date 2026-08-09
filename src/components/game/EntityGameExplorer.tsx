@@ -13,10 +13,12 @@ export function EntityGameExplorer({
   kind,
 }: {
   games: GameSummary[];
-  kind: "company" | "character" | "series";
+  kind: "company" | "character" | "series" | "franchise";
 }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<EntitySort>(kind === "series" ? "newest" : "featured");
+  const [sort, setSort] = useState<EntitySort>(
+    kind === "series" || kind === "franchise" ? "newest" : "featured",
+  );
   const normalised = query.trim().toLocaleLowerCase();
 
   const filtered = useMemo(() => {
@@ -44,7 +46,13 @@ export function EntityGameExplorer({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={kind === "company" ? "Search this studio’s games…" : "Search this series…"}
+            placeholder={
+              kind === "company"
+                ? "Search this studio’s games…"
+                : kind === "franchise"
+                  ? "Search this franchise…"
+                  : "Search this series…"
+            }
             className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
           />
           {query && (

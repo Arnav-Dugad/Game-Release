@@ -5,7 +5,6 @@ const nextConfig: NextConfig = {
   redirects() {
     return [
       { source: "/franchises", destination: "/series", permanent: true },
-      { source: "/franchise/:slug", destination: "/series/:slug", permanent: true },
     ];
   },
   images: {

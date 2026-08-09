@@ -1175,9 +1175,12 @@ function mapDetail(game: IgdbGame): GameDetail {
 
   const trailers = toTrailers(game);
 
-  const description = [game.summary?.trim(), game.storyline?.trim()]
-    .filter(Boolean)
-    .join("\n\n");
+  // Summary and storyline answer different questions and have dedicated UI.
+  // Fall back to the storyline only when IGDB has no summary, without then
+  // rendering the same prose twice on the page.
+  const summaryText = game.summary?.trim() || "";
+  const storylineText = game.storyline?.trim() || "";
+  const description = summaryText || storylineText;
 
   // Websites are classified by hostname, which is stable across API revisions
   // and also yields the Steam appid without a separate lookup.
@@ -1225,7 +1228,7 @@ function mapDetail(game: IgdbGame): GameDetail {
   return {
     ...summary,
     description,
-    storyline: game.storyline?.trim() || null,
+    storyline: summaryText && storylineText ? storylineText : null,
     steamAppId,
     price: null,
     website: officialSite,
@@ -2385,6 +2388,50 @@ export async function igdbSeries(slug: string): Promise<IgdbEntity | null> {
     };
   } catch (err) {
     warn("collections", err);
+    return null;
+  }
+}
+
+/**
+ * A wider fictional or product universe from IGDB's Franchise model.
+ *
+ * Collections are release series; franchises can connect multiple series,
+ * spin-offs, and adaptations. Keeping their routes separate prevents a broad
+ * universe such as Cyberpunk from being mislabeled as a linear game series.
+ */
+export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
+  if (!igdbConfigured()) return null;
+  const safe = slug.replace(/"/g, "");
+
+  try {
+    const query = queryFor(TTL.detail);
+    const rows = await query<(IgdbNamed & { games?: number[] })[]>(
+      "franchises",
+      apicalypse({ fields: "name,slug,games", where: `slug = "${safe}"`, limit: 1 }),
+    );
+    const entity = rows[0];
+    if (!entity) return null;
+
+    const gameIds = (entity.games ?? []).slice(0, 80);
+    const games =
+      gameIds.length > 0
+        ? await listGames(
+            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 72 },
+            TTL.detail,
+          )
+        : [];
+
+    return {
+      id: entity.id,
+      slug: entity.slug ?? slug,
+      name: entity.name,
+      description: null,
+      image: games.find((game) => game.image)?.image ?? null,
+      detail: null,
+      games,
+    };
+  } catch (err) {
+    warn("franchise", err);
     return null;
   }
 }
