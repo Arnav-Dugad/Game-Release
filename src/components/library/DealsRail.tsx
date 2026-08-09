@@ -112,6 +112,12 @@ export function DealsRail() {
         <span className="rounded-full bg-mint/15 px-2 py-0.5 text-[11px] font-semibold text-mint tabular-nums">
           {deals.length}
         </span>
+        <Link
+          href="/deals"
+          className="ml-auto text-xs font-semibold text-muted transition-colors hover:text-text"
+        >
+          Explore all deals →
+        </Link>
       </div>
 
       <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">

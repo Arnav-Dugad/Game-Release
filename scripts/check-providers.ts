@@ -15,6 +15,9 @@ import { stripHtml, slugify } from "../src/lib/utils/html";
 import { classifyUrl, storeFromUrl } from "../src/lib/games/stores";
 import { buildTasteProfile, MIN_TASTE_STRENGTH } from "../src/lib/games/taste";
 import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/games/directory";
+import { filterDeals } from "../src/lib/games/deals";
+import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/price-history";
+import type { DealListing, GameSummary } from "../src/lib/games/types";
 
 let failures = 0;
 
@@ -242,6 +245,41 @@ check(
   buildDirectoryWhere("games != null", 'Halo" | id > 0;'),
   'games != null & name ~ *"Halo id > 0"*',
 );
+
+console.log("\nDeal filtering and price evidence");
+const dealGame = (id: number, name: string, genre: string): GameSummary => ({
+  id,
+  slug: name.toLowerCase().replaceAll(" ", "-"),
+  name,
+  released: null,
+  releaseWindow: null,
+  tba: false,
+  image: null,
+  imageFallback: null,
+  rating: 0,
+  ratingsCount: 0,
+  metacritic: null,
+  platforms: [],
+  parentPlatforms: [],
+  genres: [{ id, slug: genre.toLowerCase(), name: genre }],
+  screenshots: [],
+  esrb: null,
+  popScore: null,
+  heroTrailer: null,
+  playtime: 0,
+  added: 0,
+});
+const testDeals: DealListing[] = [
+  { game: dealGame(1, "Quiet RPG", "RPG"), price: { current: "$20.00", original: "$40.00", discountPercent: 50, isFree: false }, steamAppId: 1, currentAmount: 2000, currency: "USD", storeUrl: "https://store.steampowered.com/app/1/" },
+  { game: dealGame(2, "Fast Action", "Action"), price: { current: "$5.00", original: "$20.00", discountPercent: 75, isFree: false }, steamAppId: 2, currentAmount: 500, currency: "USD", storeUrl: "https://store.steampowered.com/app/2/" },
+];
+check("discount sort is default", filterDeals(testDeals, {}).map((deal) => deal.steamAppId), [2, 1]);
+check("genre search participates", filterDeals(testDeals, { query: "rpg" }).map((deal) => deal.steamAppId), [1]);
+check("minimum discount filters", filterDeals(testDeals, { minimumDiscount: 60 }).map((deal) => deal.steamAppId), [2]);
+check("regional price parsing", parseAmount("₹3,999"), 399900);
+const point = (date: string, amount: number): PricePoint => ({ date, amount, original: null, discountPercent: 0, isFree: false, formatted: String(amount), currency: "USD" });
+check("two observations make no price claim", priceInsight([point("2026-08-02", 500), point("2026-08-01", 700)]), null);
+check("three observations can establish a low", priceInsight([point("2026-08-03", 400), point("2026-08-02", 500), point("2026-08-01", 700)])?.isAllTimeLow, true);
 
 console.log("\nHTML handling");
 check(

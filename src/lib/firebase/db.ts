@@ -35,6 +35,8 @@ export type WatchStatus = "want" | "playing" | "played";
 
 export interface WatchlistEntry {
   gameId: number;
+  /** Direct storefront id when known; older records legitimately omit it. */
+  steamAppId?: number | null;
   slug: string;
   name: string;
   image: string | null;
@@ -226,8 +228,16 @@ export async function saveUserPreferences(
  * ------------------------------------------------------------------------ */
 
 export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): WatchlistEntry {
+  const steamSlugMatch = game.slug.match(/-s(\d+)$/);
+  const steamAppId =
+    "steamAppId" in game && typeof game.steamAppId === "number"
+      ? game.steamAppId
+      : steamSlugMatch?.[1]
+        ? Number(steamSlugMatch[1])
+        : null;
   return {
     gameId: game.id,
+    steamAppId,
     slug: game.slug,
     name: game.name,
     image: game.image,
@@ -326,6 +336,7 @@ export function subscribeWatchlist(
         // `undefined` reach the UI or the recommendation profile.
         return {
           ...data,
+          steamAppId: data.steamAppId ?? null,
           releaseWindow: data.releaseWindow ?? null,
           imageFallback: data.imageFallback ?? null,
           platform: data.platform ?? null,

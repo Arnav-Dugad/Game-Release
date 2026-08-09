@@ -32,13 +32,13 @@ export async function GET(request: Request) {
   if (!Number.isInteger(appId) || appId <= 0) {
     const slug = searchParams.get("slug")?.trim();
     if (!slug) {
-      return NextResponse.json({ price: null }, { status: 400 });
+      return NextResponse.json({ price: null, appId: null }, { status: 400 });
     }
     const result = await getGame(slug).catch(() => null);
     const resolved = result?.data.steamAppId;
     if (!resolved) {
       // No Steam listing is a legitimate answer, not an error.
-      return NextResponse.json({ price: null }, { status: 200 });
+      return NextResponse.json({ price: null, appId: null }, { status: 200 });
     }
     appId = resolved;
   }
@@ -51,17 +51,17 @@ export async function GET(request: Request) {
   try {
     const price = await steamPrice(appId, region);
     return NextResponse.json(
-      { price, region },
+      { price, region, appId },
       {
         headers: {
           // Prices move slowly, and a stale one for a few minutes is far better
           // than hammering Steam on every page view.
-          "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600",
+          "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200",
         },
       },
     );
   } catch (err) {
     console.error("[api/price] failed", err);
-    return NextResponse.json({ price: null }, { status: 200 });
+    return NextResponse.json({ price: null, appId }, { status: 200 });
   }
 }

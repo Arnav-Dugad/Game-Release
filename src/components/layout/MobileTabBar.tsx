@@ -12,7 +12,7 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, CalendarClock, Compass, Home, Search } from "lucide-react";
+import { Bookmark, CalendarClock, Compass, Home, Search, Tag } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const TABS = [
@@ -20,6 +20,7 @@ const TABS = [
   { href: "/upcoming", label: "Upcoming", icon: CalendarClock },
   { href: "__search", label: "Search", icon: Search },
   { href: "/browse", label: "Browse", icon: Compass },
+  { href: "/deals", label: "Deals", icon: Tag },
   { href: "/watchlist", label: "Saved", icon: Bookmark },
 ] as const;
 

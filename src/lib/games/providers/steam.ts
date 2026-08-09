@@ -21,6 +21,7 @@
 
 import type {
   BrowseFilters,
+  DealListing,
   GameDetail,
   GameSummary,
   Page,
@@ -147,6 +148,9 @@ interface AppDetails {
   recommendations?: { total?: number };
   is_free?: boolean;
   price_overview?: {
+    final?: number;
+    initial?: number;
+    currency?: string;
     final_formatted?: string;
     initial_formatted?: string;
     discount_percent?: number;
@@ -444,7 +448,9 @@ export async function steamPrice(
   region: string = DEFAULT_STEAM_REGION,
 ): Promise<Price | null> {
   const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
-  const details = await fetchAppDetails(appid, TTL.detail, safeRegion);
+  // Price is the volatile part of a detail record. Keeping this on the search
+  // cache window prevents a sale ending this morning from lingering all day.
+  const details = await fetchAppDetails(appid, TTL.search, safeRegion);
   return details ? priceOf(details) : null;
 }
 
@@ -457,8 +463,14 @@ async function summariesFor(appids: number[], revalidate: number): Promise<GameS
     .filter((game): game is GameSummary => game !== null);
 }
 
-async function fetchFeatured(): Promise<FeaturedCategories | null> {
-  return getJson<FeaturedCategories>(`${STORE}/featuredcategories?cc=us&l=english`, TTL.list);
+async function fetchFeatured(
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<FeaturedCategories | null> {
+  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
+  return getJson<FeaturedCategories>(
+    `${STORE}/featuredcategories?cc=${encodeURIComponent(safeRegion)}&l=english`,
+    TTL.search,
+  );
 }
 
 type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases" | "specials";
@@ -471,8 +483,12 @@ type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases" | "specials";
  * rather than throwing, since a best-effort helper should never crash its
  * caller over a malformed or partially-shared payload.
  */
-async function featuredAppIds(keys: FeaturedKey[], limit: number): Promise<number[]> {
-  const featured = await fetchFeatured();
+async function featuredAppIds(
+  keys: FeaturedKey[],
+  limit: number,
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<number[]> {
+  const featured = await fetchFeatured(region);
   if (!featured || typeof featured !== "object") return [];
 
   const seen = new Set<number>();
@@ -491,6 +507,55 @@ async function featuredAppIds(keys: FeaturedKey[], limit: number): Promise<numbe
     }
   }
   return out;
+}
+
+/**
+ * Steam's regional specials shelf, expanded into real app records.
+ *
+ * The featured endpoint is the only public, supported storefront feed that
+ * represents current promotions. Appdetails then verifies every discount in
+ * the selected country, so stale shelf entries never become false deal cards.
+ */
+export async function steamDeals(
+  limit = 36,
+  region: string = DEFAULT_STEAM_REGION,
+): Promise<DealListing[]> {
+  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
+  const bounded = Math.min(60, Math.max(1, Math.floor(limit)));
+  const appids = await featuredAppIds(["specials"], Math.min(60, bounded * 2), safeRegion);
+  if (appids.length === 0) return [];
+
+  const details = await mapWithLimit(appids, CONCURRENCY, (appid) =>
+    fetchAppDetails(appid, TTL.search, safeRegion),
+  );
+
+  return details
+    .map((entry): DealListing | null => {
+      if (!entry) return null;
+      const game = mapSummary(entry);
+      const price = priceOf(entry);
+      const appid = entry.steam_appid;
+      const amount = entry.price_overview?.final;
+      if (!game || !price || !appid || price.discountPercent <= 0 || typeof amount !== "number") {
+        return null;
+      }
+      return {
+        game,
+        price,
+        steamAppId: appid,
+        currentAmount: amount,
+        currency: entry.price_overview?.currency ?? null,
+        storeUrl: `https://store.steampowered.com/app/${appid}/`,
+      };
+    })
+    .filter((deal): deal is DealListing => deal !== null)
+    .sort(
+      (a, b) =>
+        b.price.discountPercent - a.price.discountPercent ||
+        a.currentAmount - b.currentAmount ||
+        a.game.name.localeCompare(b.game.name),
+    )
+    .slice(0, bounded);
 }
 
 /* ---------------------------------------------------------------------------

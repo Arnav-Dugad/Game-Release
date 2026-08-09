@@ -135,6 +135,17 @@ export interface Price {
   isFree: boolean;
 }
 
+/** A verified storefront discount, normalised for the deals experience. */
+export interface DealListing {
+  game: GameSummary;
+  price: Price;
+  steamAppId: number;
+  /** Steam's integer minor-unit price, used for exact regional sorting. */
+  currentAmount: number;
+  currency: string | null;
+  storeUrl: string;
+}
+
 export interface GameSummary {
   id: number;
   slug: string;
