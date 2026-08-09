@@ -9,10 +9,9 @@ import { searchGames } from "@/lib/games/source";
  * component and must not hold them. Responses are cached briefly at the edge:
  * repeated keystrokes across users hit the same popular prefixes constantly.
  *
- * When IGDB is available this searches games, characters and companies
- * together, because "Kratos" and "FromSoftware" are questions the game index
- * alone cannot answer. Without IGDB it falls back to the provider chain's game
- * search, which is all Steam can offer.
+ * One relevance-ranked game request plus one IGDB Multi-Query covers series,
+ * franchises, studios, characters, genres and platforms. Without IGDB it
+ * falls back to the provider chain's game search, which is all Steam can offer.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

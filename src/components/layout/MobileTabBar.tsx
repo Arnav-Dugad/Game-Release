@@ -74,7 +74,7 @@ export function MobileTabBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                 <button
                   type="button"
                   onClick={onOpenSearch}
-                  aria-label="Search games"
+                  aria-label="Search the complete database"
                   className={className}
                 >
                   {content}

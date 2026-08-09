@@ -97,7 +97,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
           <button
             type="button"
             onClick={onOpenSearch}
-            aria-label="Search games"
+            aria-label="Search the complete database"
             className={cn(
               "group flex items-center gap-2.5 rounded-full border border-line bg-white/[0.04] text-muted transition-colors duration-300",
               "h-9 w-9 justify-center fine:hover:border-line-strong fine:hover:text-text",
@@ -105,7 +105,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
             )}
           >
             <Search size={16} className="shrink-0" />
-            <span className="hidden text-[13px] lg:inline">Search games…</span>
+            <span className="hidden text-[13px] lg:inline">Search everything…</span>
             <kbd className="ml-auto hidden items-center gap-0.5 rounded border border-line px-1.5 py-0.5 text-[10px] text-faint lg:inline-flex">
               ⌘K
             </kbd>

@@ -51,6 +51,7 @@ import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { platformKey, type PlatformKey } from "@/lib/utils/format";
 import { storeFromUrl } from "../stores";
 import { buildDirectoryWhere, type DirectoryOrder } from "../directory";
+import type { SearchHit } from "../search";
 
 const API = "https://api.igdb.com/v4";
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
@@ -1342,7 +1343,7 @@ async function platformIdsForFamilies(slugs: string[]): Promise<number[]> {
   return index
     .filter((platform) => {
       const key = platformKey(platform.slug ?? platform.name ?? "");
-      return key !== null && wanted.has(key);
+      return wanted.has(platform.slug ?? "") || (key !== null && wanted.has(key));
     })
     .map((platform) => platform.id);
 }
@@ -1737,90 +1738,155 @@ async function searchPool(term: string, where: string, limit: number, revalidate
  * Multi-entity search
  * ------------------------------------------------------------------------ */
 
-export interface IgdbSearchHit {
-  kind: "game" | "character" | "company";
-  id: number;
+export type IgdbSearchHit = SearchHit;
+
+export interface IgdbSearchLimits {
+  games: number;
+  characters: number;
+  companies: number;
+  series: number;
+  franchises: number;
+  genres: number;
+  platforms: number;
+}
+
+const DEFAULT_SEARCH_LIMITS: IgdbSearchLimits = {
+  games: 8,
+  characters: 3,
+  companies: 3,
+  series: 3,
+  franchises: 3,
+  genres: 3,
+  platforms: 3,
+};
+
+interface IgdbMultiQueryResult {
   name: string;
-  /** Route target — games link to their page, others to a filtered browse. */
-  slug: string;
-  subtitle: string | null;
-  image: string | null;
+  result?: unknown[];
 }
 
 /**
- * Searches games, characters and companies in one pass.
+ * Searches every entity the product can route with two upstream requests.
  *
- * IGDB indexes all three, and someone typing "Kratos" or "FromSoftware" is
- * asking a question the game index alone cannot answer. Each entity is its own
- * endpoint, so these run in parallel and any one failing degrades that section
- * rather than the whole palette.
+ * Multi-Query keeps one palette request from consuming seven of IGDB's four
+ * requests-per-second allowance. Games retain native full-text relevance and
+ * alternative-name matching; the other indexes use sanitised name filters.
  */
 export async function igdbSearchAll(
   term: string,
-  limits = { games: 8, characters: 4, companies: 4 },
+  requestedLimits: Partial<IgdbSearchLimits> = {},
 ): Promise<IgdbSearchHit[]> {
   if (!igdbConfigured() || term.trim().length < 2) return [];
+  const limits = { ...DEFAULT_SEARCH_LIMITS, ...requestedLimits };
   const query = queryFor(TTL.search);
+  const safeTerm = term.trim().slice(0, 80);
+  const nameWhere = (base: string) => buildDirectoryWhere(base, safeTerm);
+  const block = (endpoint: string, name: string, body: string) =>
+    `query ${endpoint} "${name}" {\n${body}\n};`;
+  const gamePoolLimit = Math.min(120, Math.max(limits.games * 5, limits.games));
 
-  const [games, characters, companies] = await Promise.all([
-    searchPool(term, MAIN_GAMES, Math.min(120, limits.games * 6), TTL.search)
-      .then(({ games: pool, altNames }) =>
-        rankSearchResults(pool, term, altNames).slice(0, limits.games),
-      )
-      .catch((err) => {
+  try {
+    // IGDB's native `search` statement is not executed inside Multi-Query.
+    // Keep the relevance-ranked game search as one direct request and batch
+    // every name-indexed entity into one second request.
+    const [gameSearch, response] = await Promise.all([
+      searchPool(safeTerm, MAIN_GAMES, gamePoolLimit, TTL.search).catch((err) => {
         warn("search.games", err);
-        return [] as GameSummary[];
+        return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
       }),
-    query<IgdbCharacter[]>(
-      "characters",
-      apicalypse({
-        fields: "name,slug,mug_shot.image_id,species",
-        search: term,
-        limit: limits.characters,
+      query<IgdbMultiQueryResult[]>("multiquery", [
+        block("characters", "characters", apicalypse({
+          fields: "name,slug,mug_shot.image_id,species",
+          where: nameWhere("slug != null"),
+          sort: "name asc",
+          limit: limits.characters,
+        })),
+        block("companies", "companies", apicalypse({
+          fields: "name,slug,logo.image_id",
+          where: nameWhere("slug != null"),
+          sort: "name asc",
+          limit: limits.companies,
+        })),
+        block("collections", "series", apicalypse({
+          fields: "name,slug,games",
+          where: nameWhere("slug != null & games != null"),
+          sort: "name asc",
+          limit: limits.series,
+        })),
+        block("franchises", "franchises", apicalypse({
+          fields: "name,slug,games",
+          where: nameWhere("slug != null & games != null"),
+          sort: "name asc",
+          limit: limits.franchises,
+        })),
+        block("genres", "genres", apicalypse({
+          fields: "name,slug",
+          where: nameWhere("slug != null"),
+          sort: "name asc",
+          limit: limits.genres,
+        })),
+        block("platforms", "platforms", apicalypse({
+          fields: "name,slug,abbreviation,platform_logo.image_id",
+          where: nameWhere("slug != null"),
+          sort: "name asc",
+          limit: limits.platforms,
+        })),
+      ].join("\n\n")).catch((err) => {
+        warn("search.entities", err);
+        return [] as IgdbMultiQueryResult[];
       }),
-    ).catch((err) => {
-      warn("search.characters", err);
-      return [] as IgdbCharacter[];
-    }),
-    query<IgdbCompany[]>(
-      "companies",
-      apicalypse({
-        fields: "name,slug,logo.image_id,country",
-        search: term,
-        limit: limits.companies,
-      }),
-    ).catch((err) => {
-      warn("search.companies", err);
-      return [] as IgdbCompany[];
-    }),
-  ]);
+    ]);
 
-  return [
-    ...games.map((game): IgdbSearchHit => ({
-      kind: "game",
-      id: game.id,
-      name: game.name,
-      slug: game.slug,
-      subtitle: game.genres[0]?.name ?? null,
-      image: game.image,
-    })),
-    ...characters.map((character): IgdbSearchHit => ({
-      kind: "character",
-      id: character.id,
-      name: character.name,
-      slug: character.slug ?? String(character.id),
-      subtitle: "Character",
-      image: igdbImage(character.mug_shot?.image_id, "thumb"),
-    })),
-    ...companies.map((company): IgdbSearchHit => ({
-      kind: "company",
-      id: company.id,
-      name: company.name,
-      slug: company.slug ?? String(company.id),
-      subtitle: "Studio",
-      image: igdbImage(company.logo?.image_id, "logo_med"),
-    })),
-  ];
+    const result = <T>(name: string): T[] =>
+      (response.find((entry) => entry.name === name)?.result ?? []) as T[];
+    const games = rankSearchResults(gameSearch.games, safeTerm, gameSearch.altNames).slice(0, limits.games);
+    const characters = result<IgdbCharacter>("characters");
+    const companies = result<IgdbCompany>("companies");
+    const series = result<IgdbNamed>("series");
+    const franchises = result<IgdbNamed>("franchises");
+    const genres = result<IgdbNamed>("genres");
+    const platforms = result<IgdbPlatform>("platforms");
+
+    return [
+      ...games.map((game): IgdbSearchHit => ({
+        kind: "game", id: game.id, name: game.name, slug: game.slug,
+        subtitle: game.genres.slice(0, 2).map((genre) => genre.name).join(" · ") || "Game",
+        image: game.image,
+      })),
+      ...series.map((entry): IgdbSearchHit => ({
+        kind: "series", id: entry.id, name: entry.name, slug: entry.slug ?? String(entry.id),
+        subtitle: `${entry.games?.length ?? 0} connected games`, image: null,
+      })),
+      ...franchises.map((entry): IgdbSearchHit => ({
+        kind: "franchise", id: entry.id, name: entry.name, slug: entry.slug ?? String(entry.id),
+        subtitle: `${entry.games?.length ?? 0} franchise entries`, image: null,
+      })),
+      ...companies.map((company): IgdbSearchHit => ({
+        kind: "company", id: company.id, name: company.name,
+        slug: company.slug ?? String(company.id), subtitle: "Studio or publisher",
+        image: igdbImage(company.logo?.image_id, "logo_med"),
+      })),
+      ...characters.map((character): IgdbSearchHit => ({
+        kind: "character", id: character.id, name: character.name,
+        slug: character.slug ?? String(character.id),
+        subtitle: CHARACTER_SPECIES[character.species ?? -1] ?? "Character",
+        image: igdbImage(character.mug_shot?.image_id, "thumb"),
+      })),
+      ...genres.map((genre): IgdbSearchHit => ({
+        kind: "genre", id: genre.id, name: genre.name,
+        slug: genre.slug ?? String(genre.id), subtitle: "Game genre", image: null,
+      })),
+      ...platforms.map((platform): IgdbSearchHit => ({
+        kind: "platform", id: platform.id, name: platform.name,
+        slug: platform.slug ?? String(platform.id),
+        subtitle: platform.abbreviation ? `${platform.abbreviation} · Platform` : "Platform",
+        image: igdbImage(platform.platform_logo?.image_id, "logo_med"),
+      })),
+    ];
+  } catch (err) {
+    warn("search.multiquery", err);
+    return [];
+  }
 }
 
 export const igdbProvider: GameProvider = {

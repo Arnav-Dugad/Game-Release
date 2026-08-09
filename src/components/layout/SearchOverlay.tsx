@@ -1,65 +1,33 @@
 "use client";
 
-/**
- * Command-palette search.
- *
- * Opens on ⌘K / Ctrl-K, or from the header and mobile tab bar. Fully keyboard
- * driven: arrows move the selection, Enter opens, Escape closes. Requests are
- * debounced and each one aborts the previous, so a fast typist never sees an
- * earlier response overwrite a later one.
- */
-
 import { AnimatePresence, motion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CornerDownLeft, Loader2, Search, TrendingUp, User, X } from "lucide-react";
-import { GameCover } from "@/components/game/GameCover";
+import {
+  ArrowRight,
+  CornerDownLeft,
+  Loader2,
+  Search,
+  Sparkles,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
+import { SearchHitVisual, SearchKindIcon } from "@/components/search/SearchHitVisual";
 import { useDebouncedValue, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
+import {
+  SEARCH_KIND_LABELS,
+  SEARCH_KIND_ORDER,
+  groupSearchHits,
+  hrefForSearchHit,
+  type SearchHit,
+} from "@/lib/games/search";
 import type { GameSummary } from "@/lib/games/types";
 
-/**
- * One search result, which may be a game, a character or a studio.
- *
- * Mirrors `IgdbSearchHit` on the server. Kept as a local shape rather than
- * imported so the palette never pulls the provider module — and its
- * credentials — into the client bundle.
- */
-interface SearchHit {
-  kind: "game" | "character" | "company";
-  id: number;
-  name: string;
-  slug: string;
-  subtitle: string | null;
-  image: string | null;
-}
-
-/** Stable identity for the "no results" case. */
 const EMPTY_RESULTS: SearchHit[] = [];
 
-/** Every hit kind now has a real page of its own. */
-function hrefForHit(hit: SearchHit): string {
-  switch (hit.kind) {
-    case "character":
-      return `/character/${hit.slug}`;
-    case "company":
-      return `/studio/${hit.slug}`;
-    default:
-      return `/game/${hit.slug}`;
-  }
-}
-
-/**
- * Adapts a search hit to the shape `OwnershipPicker` writes from.
- *
- * The picker saves a watchlist entry, which needs more than a hit carries. The
- * missing fields are genuinely unknown here rather than faked — empty arrays
- * and nulls mean "not known at save time", and the record is filled in properly
- * the next time the game page is opened.
- */
 function hitAsGame(hit: SearchHit): GameSummary {
   return {
     id: hit.id,
@@ -85,76 +53,17 @@ function hitAsGame(hit: SearchHit): GameSummary {
   };
 }
 
-const GROUP_LABELS: Record<SearchHit["kind"], string> = {
-  game: "Games",
-  character: "Characters",
-  company: "Studios",
-};
-
-/**
- * Thumbnail per result kind.
- *
- * Games keep the 3:4 poster treatment; characters get a square portrait; a
- * studio logo is a transparent mark that needs padding and `object-contain`,
- * not a cover crop, or it ends up sliced.
- */
-function HitThumb({ hit }: { hit: SearchHit }) {
-  if (hit.kind === "game") {
-    return (
-      <span className="relative h-14 w-11 shrink-0 overflow-hidden rounded-lg">
-        <GameCover
-          name={hit.name}
-          slug={hit.slug}
-          image={hit.image}
-          imageFallback={null}
-          width={96}
-          sizes="44px"
-        />
-      </span>
-    );
-  }
-
-  if (!hit.image) {
-    return (
-      <span className="grid h-14 w-11 shrink-0 place-items-center rounded-lg bg-white/5 text-faint">
-        {hit.kind === "character" ? <User size={16} /> : <Building2 size={16} />}
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={cn(
-        "relative h-14 w-11 shrink-0 overflow-hidden rounded-lg bg-white/5",
-        hit.kind === "company" && "p-1.5",
-      )}
-    >
-      <Image
-        src={hit.image}
-        alt=""
-        fill
-        sizes="44px"
-        className={hit.kind === "company" ? "object-contain" : "object-cover"}
-      />
-    </span>
-  );
-}
-
 const QUICK_LINKS = [
-  { label: "Upcoming releases", href: "/upcoming" },
-  { label: "Browse all games", href: "/browse" },
-  { label: "Top rated", href: "/browse?ordering=-metacritic" },
-  { label: "New this month", href: "/browse?ordering=-released" },
+  { label: "Upcoming releases", detail: "The complete calendar", href: "/upcoming" },
+  { label: "Deals", detail: "Live regional prices", href: "/deals" },
+  { label: "Top rated", detail: "Critics’ highest scores", href: "/browse?ordering=-metacritic" },
+  { label: "Studios", detail: "Developers and publishers", href: "/studios" },
+  { label: "Series", detail: "Connected release lines", href: "/series" },
+  { label: "Every genre", detail: "Find your next obsession", href: "/genres" },
 ];
 
 export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
-  /**
-   * The last response we actually received, tagged with the term that produced
-   * it. Deriving `results` and `loading` from this — rather than tracking them
-   * as separate state — means an in-flight request can never briefly show the
-   * previous term's results, and there's no loading flag to get stuck.
-   */
   const [settled, setSettled] = useState<{ term: string; results: SearchHit[] }>({
     term: "",
     results: [],
@@ -162,19 +71,15 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  const debounced = useDebouncedValue(query, 260);
+  const debounced = useDebouncedValue(query, 280);
   const term = debounced.trim();
   const searchable = term.length >= 2;
-
-  // Memoised so the empty-array branch doesn't produce a new identity every
-  // render and invalidate everything downstream that depends on it.
   const results = useMemo(
     () => (searchable && settled.term === term ? settled.results : EMPTY_RESULTS),
     [searchable, settled, term],
   );
+  const groups = useMemo(() => groupSearchHits(results), [results]);
   const loading = searchable && settled.term !== term;
-  // Results can shrink between renders; never index past the end.
   const activeIndex = results.length > 0 ? Math.min(cursor, results.length - 1) : 0;
 
   useLockBodyScroll(open);
@@ -185,8 +90,6 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
     return () => cancelAnimationFrame(id);
   }, [open]);
 
-  // Reset on close so reopening never shows a stale result set. Deferred past
-  // the exit animation so the list doesn't visibly empty on the way out.
   useEffect(() => {
     if (open) return;
     const id = setTimeout(() => {
@@ -199,9 +102,6 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
 
   useEffect(() => {
     if (term.length < 2) return;
-
-    // Cleanup aborts the previous request, so responses can only ever settle
-    // for the term currently being typed.
     const controller = new AbortController();
 
     fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: controller.signal })
@@ -220,31 +120,32 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
     return () => controller.abort();
   }, [term]);
 
+  const openFullSearch = useCallback(() => {
+    const clean = query.trim();
+    if (!clean) return;
+    router.push(`/search?q=${encodeURIComponent(clean)}`);
+    onClose();
+  }, [query, router, onClose]);
+
   const submit = useCallback(
     (target?: SearchHit) => {
       const hit = target ?? results[activeIndex];
-      if (hit) {
-        router.push(hrefForHit(hit));
-      } else if (query.trim()) {
-        router.push(`/browse?search=${encodeURIComponent(query.trim())}`);
-      }
+      if (hit) router.push(hrefForSearchHit(hit));
+      else openFullSearch();
       onClose();
     },
-    [results, activeIndex, query, router, onClose],
+    [results, activeIndex, router, openFullSearch, onClose],
   );
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") {
-      onClose();
-      return;
-    }
+    if (event.key === "Escape") onClose();
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setCursor((c) => (results.length ? (c + 1) % results.length : 0));
+      setCursor((value) => (results.length ? (value + 1) % results.length : 0));
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setCursor((c) => (results.length ? (c - 1 + results.length) % results.length : 0));
+      setCursor((value) => (results.length ? (value - 1 + results.length) % results.length : 0));
     }
     if (event.key === "Enter") {
       event.preventDefault();
@@ -255,9 +156,9 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[250] flex items-start justify-center p-0 sm:p-6 sm:pt-[12vh]">
+        <div className="fixed inset-0 z-[250] flex items-start justify-center p-0 sm:p-6 sm:pt-[8vh]">
           <motion.div
-            className="absolute inset-0 bg-black/75 backdrop-blur-lg"
+            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -268,137 +169,119 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Search games"
-            className="glass glass-blur relative z-10 flex h-dvh-safe w-full flex-col overflow-hidden sm:h-auto sm:max-h-[72vh] sm:max-w-2xl sm:rounded-3xl"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            aria-label="Search all of LUDEX"
+            className="glass glass-blur relative z-10 flex h-dvh-safe w-full flex-col overflow-hidden sm:h-auto sm:max-h-[84vh] sm:max-w-4xl sm:rounded-[2rem] sm:border-brand/20 sm:shadow-[0_40px_140px_-45px_rgba(124,92,255,0.75)]"
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.99 }}
             transition={{ type: "spring", stiffness: 400, damping: 34 }}
             onKeyDown={onKeyDown}
           >
-            <div className="flex items-center gap-3 border-b border-line px-4 py-4 safe-t sm:px-5">
-              <Search size={18} className="shrink-0 text-faint" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search games, studios, genres…"
-                aria-label="Search games"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-faint"
-              />
-              {loading && <Loader2 size={16} className="shrink-0 animate-spin text-faint" />}
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close search"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-white/8 hover:text-text"
-              >
-                <X size={16} />
+            <div className="relative flex items-center gap-3 border-b border-line px-4 py-4 safe-t sm:px-6 sm:py-5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand/12 text-brand-soft">
+                <Search size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <label htmlFor="global-search" className="sr-only">Search games and the entire database</label>
+                <input
+                  id="global-search"
+                  ref={inputRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search games, series, studios, characters…"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="w-full bg-transparent text-base font-medium outline-none placeholder:text-faint sm:text-lg"
+                />
+                <p className="mt-0.5 hidden text-[11px] text-faint sm:block">One search across the complete game universe</p>
+              </div>
+              {loading && <Loader2 size={17} className="shrink-0 animate-spin text-brand-soft" />}
+              <button type="button" onClick={onClose} aria-label="Close search" className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-white/8 hover:text-text">
+                <X size={17} />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 safe-b">
-              {query.trim().length < 2 ? (
-                <div className="p-3">
-                  <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
-                    Jump to
-                  </p>
-                  <ul className="space-y-1">
-                    {QUICK_LINKS.map((link) => (
-                      <li key={link.href}>
-                        <Link
-                          href={link.href}
-                          onClick={onClose}
-                          className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted transition-colors hover:bg-white/6 hover:text-text"
-                        >
-                          <TrendingUp size={15} className="text-faint" />
-                          {link.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain safe-b">
+              {!searchable ? (
+                <DiscoveryStart onClose={onClose} />
               ) : results.length === 0 && !loading ? (
-                <div className="px-5 py-14 text-center">
-                  <p className="text-sm text-muted">
-                    No matches for <span className="text-text">“{query.trim()}”</span>
-                  </p>
-                  <p className="mt-1 text-xs text-faint">Try a shorter or differently spelled title.</p>
+                <div className="px-6 py-16 text-center sm:py-20">
+                  <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-line bg-white/[0.04] text-faint"><Search size={22} /></span>
+                  <p className="mt-5 font-display text-lg font-bold">No direct matches for “{query.trim()}”</p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">Try a shorter spelling, or search the complete games catalogue for looser title matches.</p>
+                  <button type="button" onClick={openFullSearch} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-bg">
+                    Open full search <ArrowRight size={15} />
+                  </button>
                 </div>
               ) : (
-                <ul className="space-y-1">
-                  {results.map((hit, i) => {
-                    // A section label whenever the kind changes, so a mixed
-                    // result list reads as grouped rather than jumbled.
-                    const newGroup = i === 0 || results[i - 1].kind !== hit.kind;
-                    return (
-                      <li key={`${hit.kind}-${hit.id}`} className="relative">
-                        {newGroup && (
-                          <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
-                            {GROUP_LABELS[hit.kind]}
-                          </p>
-                        )}
-                        <Link
-                          href={hrefForHit(hit)}
-                          onClick={onClose}
-                          onPointerEnter={() => setCursor(i)}
-                          className={cn(
-                            "flex items-center gap-3 rounded-xl p-2 pr-12 transition-colors",
-                            i === activeIndex ? "bg-white/8" : "hover:bg-white/5",
-                          )}
-                        >
-                          <HitThumb hit={hit} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{hit.name}</span>
-                            {hit.subtitle && (
-                              <span className="mt-0.5 block truncate text-xs text-faint">
-                                {hit.subtitle}
-                              </span>
-                            )}
-                          </span>
-                          {i === activeIndex && (
-                            <CornerDownLeft
-                              size={14}
-                              className="hidden shrink-0 text-faint fine:block"
-                            />
-                          )}
-                        </Link>
+                <div className="grid lg:grid-cols-[minmax(0,1fr)_230px]">
+                  <div className="p-2 sm:p-3 lg:border-r lg:border-line">
+                    {SEARCH_KIND_ORDER.map((kind) => {
+                      const hits = groups.get(kind) ?? [];
+                      if (hits.length === 0) return null;
+                      return (
+                        <section key={kind} aria-label={SEARCH_KIND_LABELS[kind]} className="mb-2 last:mb-0">
+                          <div className="flex items-center justify-between px-3 pb-1.5 pt-3">
+                            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.17em] text-faint"><SearchKindIcon kind={kind} size={13} /> {SEARCH_KIND_LABELS[kind]}</p>
+                            <span className="text-[10px] tabular-nums text-faint">{hits.length}</span>
+                          </div>
+                          <ul className="space-y-1">
+                            {hits.map((hit) => {
+                              const index = results.findIndex((entry) => entry.kind === hit.kind && entry.id === hit.id);
+                              return (
+                                <li key={`${hit.kind}-${hit.id}`} className="relative">
+                                  <Link
+                                    href={hrefForSearchHit(hit)}
+                                    onClick={onClose}
+                                    onPointerEnter={() => setCursor(index)}
+                                    className={cn("flex items-center gap-3 rounded-2xl p-2 pr-12 transition-[background-color,transform]", index === activeIndex ? "bg-white/[0.09]" : "hover:bg-white/[0.05]")}
+                                  >
+                                    <SearchHitVisual hit={hit} />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-sm font-semibold">{hit.name}</span>
+                                      {hit.subtitle && <span className="mt-1 block truncate text-xs text-faint">{hit.subtitle}</span>}
+                                    </span>
+                                    {index === activeIndex && <CornerDownLeft size={14} className="hidden shrink-0 text-faint fine:block" />}
+                                  </Link>
+                                  {hit.kind === "game" && <OwnershipPicker game={hitAsGame(hit)} variant="icon" className="absolute right-2 top-1/2 -translate-y-1/2" />}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      );
+                    })}
+                  </div>
 
-                        {/*
-                          Ownership, right where people already are.
-
-                          Search is how someone arrives at a game they just
-                          bought; making them open the page first to record that
-                          is a step for no reason. Sits outside the link so a
-                          click marks ownership instead of navigating.
-                        */}
-                        {hit.kind === "game" && (
-                          <OwnershipPicker
-                            game={hitAsGame(hit)}
-                            variant="icon"
-                            className="absolute right-2 top-1/2 -translate-y-1/2"
-                          />
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                  <aside className="hidden p-5 lg:block">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-brand-soft">Discovery map</p>
+                    <p className="mt-2 text-sm leading-relaxed text-muted">Results stay separated by what they are, so a genre can never masquerade as a series.</p>
+                    <div className="mt-5 space-y-2">
+                      {SEARCH_KIND_ORDER.map((kind) => {
+                        const count = groups.get(kind)?.length ?? 0;
+                        return (
+                          <div key={kind} className={cn("flex items-center justify-between rounded-xl px-3 py-2 text-xs", count ? "bg-white/[0.045] text-muted" : "text-faint/60")}>
+                            <span className="flex items-center gap-2"><SearchKindIcon kind={kind} size={13} /> {SEARCH_KIND_LABELS[kind]}</span>
+                            <span className="tabular-nums">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={openFullSearch} className="group mt-6 flex w-full items-center justify-between rounded-2xl border border-brand/25 bg-brand/10 p-4 text-left transition-colors hover:bg-brand/15">
+                      <span><span className="block text-sm font-bold text-text">View every result</span><span className="mt-1 block text-[11px] text-muted">Open full discovery</span></span>
+                      <ArrowRight size={16} className="text-brand-soft transition-transform group-hover:translate-x-1" />
+                    </button>
+                  </aside>
+                </div>
               )}
             </div>
 
-            <div className="hidden items-center justify-between gap-4 border-t border-line px-5 py-3 text-[11px] text-faint fine:flex">
-              <span className="flex items-center gap-3">
-                <Key>↑</Key>
-                <Key>↓</Key>
-                to navigate
-              </span>
-              <span className="flex items-center gap-2">
-                <Key>↵</Key> to open
-                <Key>esc</Key> to close
-              </span>
+            <div className="flex items-center justify-between gap-4 border-t border-line px-4 py-3 text-[11px] text-faint sm:px-6">
+              <span className="hidden items-center gap-2 fine:flex"><Key>↑</Key><Key>↓</Key> navigate <Key>↵</Key> open</span>
+              <button type="button" onClick={openFullSearch} disabled={!query.trim()} className="ml-auto inline-flex items-center gap-2 font-semibold text-muted transition-colors hover:text-text disabled:pointer-events-none disabled:opacity-35">
+                Full search <ArrowRight size={13} />
+              </button>
             </div>
           </motion.div>
         </div>
@@ -407,10 +290,26 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
-function Key({ children }: { children: React.ReactNode }) {
+function DiscoveryStart({ onClose }: { onClose: () => void }) {
   return (
-    <kbd className="inline-grid h-5 min-w-5 place-items-center rounded border border-line bg-white/5 px-1 font-sans text-[10px] text-muted">
-      {children}
-    </kbd>
+    <div className="p-4 sm:p-6">
+      <div className="mb-5 flex items-center gap-2">
+        <Sparkles size={15} className="text-brand-soft" />
+        <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-faint">Explore LUDEX</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {QUICK_LINKS.map((link, index) => (
+          <Link key={link.href} href={link.href} onClick={onClose} className="group rounded-2xl border border-line bg-white/[0.025] p-4 transition-[border-color,background-color,transform] hover:-translate-y-0.5 hover:border-line-strong hover:bg-white/[0.05]">
+            <span className="flex items-center justify-between"><TrendingUp size={15} className={index % 2 ? "text-neon" : "text-brand-soft"} /><ArrowRight size={14} className="text-faint transition-transform group-hover:translate-x-1" /></span>
+            <span className="mt-4 block text-sm font-bold">{link.label}</span>
+            <span className="mt-1 block text-xs text-faint">{link.detail}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
+}
+
+function Key({ children }: { children: React.ReactNode }) {
+  return <kbd className="inline-grid h-5 min-w-5 place-items-center rounded border border-line bg-white/5 px-1 font-sans text-[10px] text-muted">{children}</kbd>;
 }

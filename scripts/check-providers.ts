@@ -19,6 +19,7 @@ import { filterDeals } from "../src/lib/games/deals";
 import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/price-history";
 import type { DealListing, GameSummary } from "../src/lib/games/types";
 import { canonicalEntryHref, dealNotification, releaseNotifications } from "../src/lib/notifications/model";
+import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
@@ -325,6 +326,30 @@ check(
   dealNotification(notificationEntry(), 124, { current: "$5.00", original: "$10.00", discountPercent: 50, isFree: false }, "United States", 1).id,
   "deal:124:50:$5.00",
 );
+
+console.log("\nUniversal discovery routing");
+const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({
+  kind,
+  id: 1,
+  name: "Result",
+  slug,
+  subtitle: null,
+  image: null,
+});
+check("series has its own route", hrefForSearchHit(searchHit("series", "cyberpunk")), "/series/cyberpunk");
+check("franchise has its own route", hrefForSearchHit(searchHit("franchise", "cyberpunk")), "/franchise/cyberpunk");
+check("genre routes to a genre filter", hrefForSearchHit(searchHit("genre", "role-playing-rpg")), "/browse?genres=role-playing-rpg");
+check("exact platform routes to a platform filter", hrefForSearchHit(searchHit("platform", "ps5")), "/browse?platforms=ps5");
+const groupedSearch = groupSearchHits([
+  searchHit("series", "cyberpunk"),
+  searchHit("franchise", "cyberpunk"),
+  searchHit("genre", "cyberpunk"),
+]);
+check("same-name entity types remain separate", [
+  groupedSearch.get("series")?.length,
+  groupedSearch.get("franchise")?.length,
+  groupedSearch.get("genre")?.length,
+], [1, 1, 1]);
 
 console.log("\nHTML handling");
 check(
