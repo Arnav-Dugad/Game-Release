@@ -19,6 +19,7 @@ const PAGE_ROUTES = [
   "/notifications",
   "/library",
   "/watchlist",
+  "/planner",
   "/settings",
   "/profile",
 ];

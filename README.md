@@ -138,6 +138,7 @@ that do not carry the cron secret.
 | `/genres`, `/platforms` | Category browsing |
 | `/login`, `/signup` | Split-screen auth with email/password and Google |
 | `/watchlist` | Tracked games with play status (want / playing / played) |
+| `/planner` | Personal release runway with collision detection, weekly capacity, backlog guidance, a next-play decision, and private `.ics` calendar export |
 | `/profile` | Identity, stats, review history, settings |
 
 Every game page also generates its own social card at

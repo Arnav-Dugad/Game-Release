@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { Bell, Bookmark, Library, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { Bell, Bookmark, CalendarRange, Library, LogOut, Settings, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useClickOutside, useEscapeKey } from "@/hooks";
 import { useToast } from "@/components/ui/Toast";
@@ -105,6 +105,9 @@ export function UserMenu() {
             </MenuLink>
             <MenuLink href="/watchlist" icon={<Bookmark size={15} />} onClick={() => setOpen(false)}>
               Watchlist
+            </MenuLink>
+            <MenuLink href="/planner" icon={<CalendarRange size={15} />} onClick={() => setOpen(false)}>
+              Release planner
             </MenuLink>
             <MenuLink href="/notifications" icon={<Bell size={15} />} onClick={() => setOpen(false)}>
               Notifications

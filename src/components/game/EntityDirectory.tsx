@@ -226,12 +226,13 @@ function directoryHref(basePath: string, query: string, order: "name" | "-name",
 }
 
 function StudioCard({ studio, priority }: { studio: DirectoryRef; priority: boolean }) {
+  const [logoFailed, setLogoFailed] = useState(false);
   return (
     <Link
       href={`/studio/${studio.slug}`}
       className="group flex h-full min-h-36 flex-col items-center gap-3 rounded-2xl border border-line bg-panel/40 p-4 text-center transition-all duration-300 fine:hover:-translate-y-1 fine:hover:border-line-strong fine:hover:bg-panel/70 fine:hover:shadow-[0_22px_55px_-30px_rgba(124,92,255,0.7)]"
     >
-      {studio.logo ? (
+      {studio.logo && !logoFailed ? (
         <span className="relative grid h-16 w-full place-items-center overflow-hidden rounded-xl bg-white/[0.94] p-2 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]">
           <Image
             src={studio.logo}
@@ -239,6 +240,7 @@ function StudioCard({ studio, priority }: { studio: DirectoryRef; priority: bool
             fill
             priority={priority}
             sizes="(max-width: 640px) 42vw, 180px"
+            onError={() => setLogoFailed(true)}
             className="object-contain p-2.5 transition-transform duration-500 fine:group-hover:scale-105"
           />
         </span>

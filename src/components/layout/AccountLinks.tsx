@@ -15,12 +15,14 @@ const SIGNED_OUT = [
   { label: "Sign in", href: "/login" },
   { label: "Create account", href: "/signup" },
   { label: "Your watchlist", href: "/watchlist" },
+  { label: "Release planner", href: "/planner" },
   { label: "Your profile", href: "/profile" },
   { label: "Settings", href: "/settings" },
 ];
 
 const SIGNED_IN = [
   { label: "Your watchlist", href: "/watchlist" },
+  { label: "Release planner", href: "/planner" },
   { label: "Games you own", href: "/library" },
   { label: "Play history", href: "/profile#history" },
   { label: "Your reviews", href: "/profile" },

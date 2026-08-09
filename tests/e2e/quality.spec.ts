@@ -19,6 +19,7 @@ const PUBLIC_ROUTES = [
   "/notifications",
   "/library",
   "/watchlist",
+  "/planner",
   "/settings",
   "/profile",
 ] as const;
@@ -95,18 +96,28 @@ test("mobile navigation remains thumb-reachable and opens search", async ({ brow
 
 test("deal cards keep discovery on canonical IGDB-backed pages", async ({ page }) => {
   await page.goto("/deals");
-  await page.waitForLoadState("networkidle").catch(() => undefined);
 
   const discoveryLinks = page.locator('a[aria-label^="View "][aria-label$=" in IGDB"]');
+  const quietState = page.getByText(/The live sale feed is taking a breather|No deals match these filters/).first();
+  await Promise.race([
+    discoveryLinks.first().waitFor({ state: "attached", timeout: 12_000 }),
+    quietState.waitFor({ state: "visible", timeout: 12_000 }),
+  ]).catch(() => undefined);
   const count = await discoveryLinks.count();
   if (count === 0) {
-    await expect(page.getByText(/The live sale feed is taking a breather|No deals match these filters/).first()).toBeVisible();
+    await expect(quietState).toBeVisible();
   }
   for (let index = 0; index < count; index++) {
     const href = await discoveryLinks.nth(index).getAttribute("href");
     expect(href).toMatch(/^\/(?:game|search)(?:\/|\?)/);
     expect(href).not.toContain("steampowered.com");
   }
+});
+
+test("release planner protects personal data behind an explicit account state", async ({ page }) => {
+  await page.goto("/planner", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name: "Release planner" })).toBeVisible();
+  await expect(page.getByText(/Accounts aren't configured yet|Sign in to continue/)).toBeVisible();
 });
 
 for (const route of ["/", "/deals", DETAIL_ROUTE, "/login"] as const) {

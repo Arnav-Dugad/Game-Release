@@ -152,7 +152,26 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
-  if (!active) return null;
+  if (!active) {
+    return (
+      <section className="noise relative isolate flex min-h-[62svh] items-end overflow-hidden border-b border-line">
+        <div aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_24%,rgba(124,92,255,0.24),transparent_36%),radial-gradient(circle_at_82%_12%,rgba(34,211,238,0.12),transparent_32%),linear-gradient(180deg,#090914,var(--color-bg))]" />
+        <Container className="pb-14 pt-32 sm:pb-18 lg:pb-24 lg:pt-44">
+          <Badge tone="brand">Your game universe, one place</Badge>
+          <h1 className="mt-5 max-w-4xl font-display text-[clamp(2.6rem,8vw,5.8rem)] font-black leading-[0.92] tracking-[-0.05em]">
+            Never miss the game worth waiting for.
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
+            Explore releases, compare live deals, and turn your watchlist into a personal plan. Live discovery will refill automatically when the catalogue reconnects.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button href="/browse" size="lg" iconRight={<ArrowRight size={17} />}>Explore the catalogue</Button>
+            <Button href="/planner" size="lg" variant="secondary">Open release planner</Button>
+          </div>
+        </Container>
+      </section>
+    );
+  }
 
   return (
     <section

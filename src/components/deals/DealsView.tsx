@@ -521,7 +521,7 @@ function ModeButton({ active, onClick, children }: { active: boolean; onClick: (
 
 function LoadingGrid() {
   return (
-    <div aria-label="Loading deals" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <div role="status" aria-label="Loading deals" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {Array.from({ length: 10 }, (_, index) => (
         <div key={index} className="overflow-hidden rounded-2xl border border-line bg-panel/40">
           <div className="shimmer-bg aspect-[2/3]" />

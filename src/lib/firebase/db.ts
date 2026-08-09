@@ -47,6 +47,8 @@ export interface WatchlistEntry {
   releaseWindow: string | null;
   tba: boolean;
   metacritic: number | null;
+  /** Main-story completion time in hours when the provider knows it. */
+  playtime?: number;
   status: WatchStatus;
   /**
    * Which platform the user played (or intends to play) this on — a family
@@ -134,6 +136,8 @@ export interface UserPreferences {
   notificationEmailEnabled?: boolean;
   /** Do not deliver a deal below this percentage. */
   notificationMinimumDiscount?: number;
+  /** Device/account planning capacity used by the release planner. */
+  plannerWeeklyHours?: number;
   /** Local quiet window in 24-hour HH:mm form and its IANA timezone. */
   notificationQuietStart?: string;
   notificationQuietEnd?: string;
@@ -259,6 +263,7 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     releaseWindow: game.releaseWindow,
     tba: game.tba,
     metacritic: game.metacritic,
+    playtime: game.playtime,
     status,
     platform: null,
     startedAt: status === "playing" ? Date.now() : null,

@@ -172,7 +172,7 @@ export function Marquee({
         }
       >
         <div className="flex shrink-0 gap-4">{children}</div>
-        <div className="flex shrink-0 gap-4" aria-hidden>
+        <div className="flex shrink-0 gap-4" aria-hidden inert>
           {children}
         </div>
       </div>
