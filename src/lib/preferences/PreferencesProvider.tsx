@@ -28,6 +28,8 @@ import {
   steamRegion,
   type SteamRegion,
 } from "@/lib/games/stores-catalog";
+import { useAuth } from "@/lib/firebase/AuthProvider";
+import { getUserPreferences, saveUserPreferences } from "@/lib/firebase/db";
 
 export const REGION_COOKIE = "ludex_region";
 const REGION_KEY = "ludex:region";
@@ -62,11 +64,18 @@ function readRegionCookie(): string | null {
 }
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   // Always starts at the default so server and client markup agree. The real
   // value lands on mount, below.
   const [region, setRegionState] = useState<string>(DEFAULT_STEAM_REGION);
   const [reduceMotion, setReduceMotionState] = useState(false);
   const [ready, setReady] = useState(false);
+  /**
+   * True once the device copy has been read. Account preferences are only
+   * applied after this, so a slow Firestore read can never overwrite a choice
+   * the reader just made on this device.
+   */
+  const [deviceLoaded, setDeviceLoaded] = useState(false);
 
   useEffect(() => {
     // Deferred a frame so nothing is written during the effect itself.
@@ -89,34 +98,82 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         /* private mode or storage disabled — defaults are fine */
       }
       setReady(true);
+      setDeviceLoaded(true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  /**
+   * Pull account preferences once signed in.
+   *
+   * Deliberately runs *after* the device read and only fills values the device
+   * didn't already have. Signing in on a new browser inherits your settings;
+   * signing in on a device you've already configured leaves it alone.
+   */
+  useEffect(() => {
+    if (!user || !deviceLoaded) return;
+    let cancelled = false;
+
+    getUserPreferences(user.uid)
+      .then((prefs) => {
+        if (cancelled || !prefs) return;
+        try {
+          const hasLocalRegion = Boolean(window.localStorage.getItem(REGION_KEY));
+          if (!hasLocalRegion && prefs.region && isValidRegion(prefs.region)) {
+            setRegionState(prefs.region);
+            writeRegionCookie(prefs.region);
+          }
+          const hasLocalMotion = window.localStorage.getItem(MOTION_KEY) !== null;
+          if (!hasLocalMotion && typeof prefs.reduceMotion === "boolean") {
+            setReduceMotionState(prefs.reduceMotion);
+          }
+        } catch {
+          /* storage unavailable — account values simply aren't applied */
+        }
+      })
+      .catch(() => {
+        /* preferences are best-effort; the device copy already works */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, deviceLoaded]);
 
   useEffect(() => {
     // Lets CSS opt out of motion without every component subscribing.
     document.documentElement.dataset.reduceMotion = reduceMotion ? "true" : "false";
   }, [reduceMotion]);
 
-  const setRegion = useCallback((cc: string) => {
-    if (!isValidRegion(cc)) return;
-    setRegionState(cc);
-    try {
-      window.localStorage.setItem(REGION_KEY, cc);
-    } catch {
-      /* in-memory state still updates */
-    }
-    writeRegionCookie(cc);
-  }, []);
+  const setRegion = useCallback(
+    (cc: string) => {
+      if (!isValidRegion(cc)) return;
+      setRegionState(cc);
+      try {
+        window.localStorage.setItem(REGION_KEY, cc);
+      } catch {
+        /* in-memory state still updates */
+      }
+      writeRegionCookie(cc);
+      // Fire-and-forget: the device copy is already authoritative for this
+      // session, so a failed sync must never block or surface an error.
+      if (user) void saveUserPreferences(user.uid, { region: cc }).catch(() => {});
+    },
+    [user],
+  );
 
-  const setReduceMotion = useCallback((value: boolean) => {
-    setReduceMotionState(value);
-    try {
-      window.localStorage.setItem(MOTION_KEY, String(value));
-    } catch {
-      /* in-memory state still updates */
-    }
-  }, []);
+  const setReduceMotion = useCallback(
+    (value: boolean) => {
+      setReduceMotionState(value);
+      try {
+        window.localStorage.setItem(MOTION_KEY, String(value));
+      } catch {
+        /* in-memory state still updates */
+      }
+      if (user) void saveUserPreferences(user.uid, { reduceMotion: value }).catch(() => {});
+    },
+    [user],
+  );
 
   const value = useMemo<PreferencesValue>(
     () => ({

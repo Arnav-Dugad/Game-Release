@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { Bookmark, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { Bookmark, Library, LogOut, Settings, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useClickOutside, useEscapeKey } from "@/hooks";
 import { useToast } from "@/components/ui/Toast";
@@ -99,6 +99,9 @@ export function UserMenu() {
             </div>
             <MenuLink href="/profile" icon={<UserIcon size={15} />} onClick={() => setOpen(false)}>
               Profile
+            </MenuLink>
+            <MenuLink href="/library" icon={<Library size={15} />} onClick={() => setOpen(false)}>
+              Games you own
             </MenuLink>
             <MenuLink href="/watchlist" icon={<Bookmark size={15} />} onClick={() => setOpen(false)}>
               Watchlist

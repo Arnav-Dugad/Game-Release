@@ -9,18 +9,22 @@ import { ToastProvider } from "@/components/ui/Toast";
 /**
  * Client provider stack.
  *
- * Order matters: preferences are device-level and wrap everything; the
- * watchlist listener keys off the signed-in user, so it sits inside auth; and
- * toasts are leaf-level so anything below can surface a message.
+ * Order matters. Auth is outermost because both of the providers below it read
+ * the signed-in user: the watchlist keys its listener off the uid, and
+ * preferences sync to the account so settings follow the reader to a new
+ * device. Toasts are leaf-level so anything below can surface a message.
+ *
+ * Preferences still work fully signed-out — the account is a mirror of the
+ * device copy, not a prerequisite for it.
  */
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <PreferencesProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <PreferencesProvider>
         <WatchlistProvider>
           <ToastProvider>{children}</ToastProvider>
         </WatchlistProvider>
-      </AuthProvider>
-    </PreferencesProvider>
+      </PreferencesProvider>
+    </AuthProvider>
   );
 }

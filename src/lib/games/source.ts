@@ -25,7 +25,13 @@
  * the data and surface an outage state truthfully.
  */
 
-import { igdbProvider, igdbSpotlight, igdbTotalGames } from "./providers/igdb";
+import {
+  igdbProvider,
+  igdbSpotlight,
+  igdbSteamCharts,
+  igdbTotalGames,
+  type SteamChart,
+} from "./providers/igdb";
 import { enrichWithSteam, steamProvider } from "./providers/steam";
 import type { GameProvider } from "./providers/types";
 import type {
@@ -161,6 +167,22 @@ export async function getUpcoming(
  */
 export async function getSpotlight(limit = 6): Promise<Sourced<GameSummary[]>> {
   const data = await igdbSpotlight(limit);
+  return data && data.length > 0
+    ? { data, source: "igdb" }
+    : { data: [], source: UNAVAILABLE };
+}
+
+/**
+ * Steam's own charts — most played, top sellers, most wishlisted.
+ *
+ * Sourced from IGDB rather than Steam directly, which sounds backwards until
+ * you look at what Steam actually exposes: there is no public "top games"
+ * query, only the storefront's curated promotional shelves. IGDB ingests the
+ * real charts from Steam and republishes them, so this is the only route to a
+ * genuine Steam-wide ranking.
+ */
+export async function getSteamCharts(perChart = 12): Promise<Sourced<SteamChart[]>> {
+  const data = await igdbSteamCharts(perChart);
   return data && data.length > 0
     ? { data, source: "igdb" }
     : { data: [], source: UNAVAILABLE };

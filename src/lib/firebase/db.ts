@@ -99,6 +99,25 @@ export interface UserProfile {
   createdAt: number;
 }
 
+/**
+ * Account-level display preferences.
+ *
+ * Mirrored from `localStorage` rather than replacing it. The device copy is
+ * what makes preferences work signed-out and available synchronously on the
+ * first paint; this copy is what makes them follow the account to a new
+ * browser or phone. Neither alone covers both cases.
+ *
+ * Every field is optional: a profile written before a preference existed must
+ * stay readable, and a partial write must never blank a key it didn't set.
+ */
+export interface UserPreferences {
+  /** Steam country code driving price currency, e.g. "in". */
+  region?: string;
+  /** User-level motion opt-out, on top of the OS setting. */
+  reduceMotion?: boolean;
+  updatedAt?: number;
+}
+
 const reviewId = (gameId: number, uid: string) => `${gameId}__${uid}`;
 
 /** Every write goes through this so a null db (unconfigured) is a clean error. */
@@ -149,6 +168,49 @@ export async function updateUserProfile(
 ): Promise<void> {
   const db = requireDb();
   await updateDoc(doc(db, "users", uid), { ...patch, updatedAt: serverTimestamp() });
+}
+
+/* ---------------------------------------------------------------------------
+ * Preferences
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Reads account preferences.
+ *
+ * Returns null rather than throwing when Firebase is unconfigured or the
+ * profile predates preferences, so the caller can simply fall back to whatever
+ * the device already knows.
+ */
+export async function getUserPreferences(uid: string): Promise<UserPreferences | null> {
+  const db = getDb();
+  if (!db) return null;
+  try {
+    const snap = await getDoc(doc(db, "users", uid, "settings", "preferences"));
+    return snap.exists() ? (snap.data() as UserPreferences) : null;
+  } catch (err) {
+    console.warn("[prefs] read failed", err);
+    return null;
+  }
+}
+
+/**
+ * Merges a preference patch into the account.
+ *
+ * `merge: true` matters: preferences are written from several places (settings
+ * page, a region change on a game page), and a whole-document write from one of
+ * them would silently clear whatever the others had set.
+ */
+export async function saveUserPreferences(
+  uid: string,
+  patch: UserPreferences,
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  await setDoc(
+    doc(db, "users", uid, "settings", "preferences"),
+    { ...patch, updatedAt: Date.now(), updatedAtServer: serverTimestamp() },
+    { merge: true },
+  );
 }
 
 /* ---------------------------------------------------------------------------

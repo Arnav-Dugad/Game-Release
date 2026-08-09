@@ -1252,8 +1252,16 @@ async function fetchCharacters(gameId: number): Promise<CharacterRef[]> {
 const POPULARITY = {
   /** What people are playing now — the honest basis for "trending". */
   playing: 3,
-  /** What people are waiting for — the right signal for a hero shelf. */
+  /** What people are waiting for. */
   wantToPlay: 2,
+  /** All-time completions; effectively a canon/classics list. */
+  played: 4,
+  /** Steam concurrents over 24h — the sharpest "hot right now" signal there is. */
+  steamPeak: 5,
+  /** Steam's global top sellers. */
+  steamTopSellers: 9,
+  /** Steam's most-wishlisted upcoming titles. */
+  steamWishlisted: 10,
 } as const;
 
 type PopularityType = (typeof POPULARITY)[keyof typeof POPULARITY];
@@ -1891,23 +1899,47 @@ export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
     games.filter((game) => game.heroTrailer && game.image);
 
   try {
-    // "Want to Play" rather than "Playing": a hero shelf should lead on what
-    // people are excited about, and those titles reliably have a real trailer.
-    const popularIds = await fetchPopularGameIds(limit * 8, POPULARITY.wantToPlay).catch(
-      (err) => {
-        warn("spotlight.popularity", err);
-        return [] as number[];
-      },
+    /*
+     * Worldwide popularity, blended from three global signals rather than one.
+     *
+     * No single list is a good hero on its own: "Want to Play" is all unreleased
+     * hype, "Playing" is dominated by the same handful of live-service giants
+     * every week, and Steam concurrents ignore consoles entirely. Interleaving
+     * them by rank means the carousel reflects what the world is collectively
+     * anticipating, playing and buying, and it visibly changes as any of the
+     * three move.
+     */
+    const [wanted, playing, steamHot] = await Promise.all(
+      [POPULARITY.wantToPlay, POPULARITY.playing, POPULARITY.steamPeak].map((type) =>
+        fetchPopularGameIds(limit * 4, type).catch((err) => {
+          warn("spotlight.popularity", err);
+          return [] as number[];
+        }),
+      ),
     );
+
+    // Round-robin so each signal contributes its top entries before any one of
+    // them contributes its long tail.
+    const popularIds: number[] = [];
+    const seen = new Set<number>();
+    for (let i = 0; i < limit * 4; i++) {
+      for (const list of [wanted, playing, steamHot]) {
+        const id = list[i];
+        if (typeof id === "number" && !seen.has(id)) {
+          seen.add(id);
+          popularIds.push(id);
+        }
+      }
+    }
 
     if (popularIds.length > 0) {
       const games = await listGames(
-        { where: `${MAIN_GAMES} & id = (${popularIds.join(",")})`, limit: limit * 8 },
+        { where: `${MAIN_GAMES} & id = (${popularIds.join(",")})`, limit: popularIds.length },
         TTL.list,
       );
       const rank = new Map(popularIds.map((id, index) => [id, index]));
       const ordered = withTrailer(games)
-        .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+        .sort((a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999))
         .slice(0, limit);
       if (ordered.length > 0) return ordered;
     }
@@ -1925,6 +1957,76 @@ export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
     return withTrailer(anticipated).slice(0, limit);
   } catch (err) {
     warn("spotlight", err);
+    return null;
+  }
+}
+
+/**
+ * A ranked Steam chart, straight from IGDB's popularity feed.
+ *
+ * IGDB ingests these from Steam itself (`popularity_source: 1`), which is what
+ * makes a Steam-wide view possible at all: Steam's own public endpoints expose
+ * no "top games" query, only curated storefront shelves. Recomputed daily.
+ */
+export interface SteamChart {
+  key: string;
+  title: string;
+  description: string;
+  games: GameSummary[];
+}
+
+export async function igdbSteamCharts(perChart = 12): Promise<SteamChart[] | null> {
+  if (!igdbConfigured()) return null;
+
+  const charts: { key: string; title: string; description: string; type: PopularityType }[] = [
+    {
+      key: "peak",
+      title: "Most played right now",
+      description: "Ranked by Steam's 24-hour peak concurrent players.",
+      type: POPULARITY.steamPeak,
+    },
+    {
+      key: "sellers",
+      title: "Global top sellers",
+      description: "Steam's worldwide revenue chart.",
+      type: POPULARITY.steamTopSellers,
+    },
+    {
+      key: "wishlisted",
+      title: "Most wishlisted",
+      description: "Unreleased games Steam players are waiting on.",
+      type: POPULARITY.steamWishlisted,
+    },
+  ];
+
+  try {
+    const resolved = await Promise.all(
+      charts.map(async (chart) => {
+        const ids = await fetchPopularGameIds(perChart * 3, chart.type).catch((err) => {
+          warn(`steam.${chart.key}`, err);
+          return [] as number[];
+        });
+        if (ids.length === 0) return { ...chart, games: [] };
+
+        const games = await listGames(
+          { where: `id = (${ids.join(",")})`, limit: ids.length },
+          TTL.list,
+        );
+        // `where id = (…)` does not preserve the ranking, so restore it.
+        const rank = new Map(ids.map((id, index) => [id, index]));
+        return {
+          ...chart,
+          games: games
+            .sort((a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999))
+            .slice(0, perChart),
+        };
+      }),
+    );
+
+    const usableCharts = resolved.filter((chart) => chart.games.length > 0);
+    return usableCharts.length > 0 ? usableCharts : null;
+  } catch (err) {
+    warn("steamCharts", err);
     return null;
   }
 }

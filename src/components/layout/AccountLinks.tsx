@@ -21,7 +21,7 @@ const SIGNED_OUT = [
 
 const SIGNED_IN = [
   { label: "Your watchlist", href: "/watchlist" },
-  { label: "Games you own", href: "/profile#library" },
+  { label: "Games you own", href: "/library" },
   { label: "Play history", href: "/profile#history" },
   { label: "Your reviews", href: "/profile" },
   { label: "Settings", href: "/settings" },

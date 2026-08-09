@@ -15,6 +15,7 @@ import Link from "next/link";
 import { CalendarDays, Star } from "lucide-react";
 import { TiltCard } from "@/components/motion/TiltCard";
 import { GameCover } from "./GameCover";
+import { OwnedBadge } from "./OwnedBadge";
 import { PlatformIcons } from "./PlatformIcons";
 import { WatchButton } from "./WatchButton";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -91,6 +92,8 @@ export function GameCard({
                 Soon
               </span>
             )}
+            {/* Answers "do I already have this?" without leaving the grid. */}
+            <OwnedBadge gameId={game.id} />
           </div>
         </div>
 

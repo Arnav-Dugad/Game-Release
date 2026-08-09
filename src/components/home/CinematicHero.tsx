@@ -148,10 +148,17 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
           delayMs={0}
         />
 
-        {/* Legibility stack. Two gradients: one anchors the copy, one keeps the
-            whole frame from competing with it. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/75 to-bg/25" />
-        <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/55 to-transparent lg:via-bg/25" />
+        {/*
+          Legibility stack, kept as light as the text will tolerate.
+
+          Two gradients rather than one flat wash: the vertical pass anchors the
+          copy at the bottom, the horizontal pass protects the left column, and
+          both clear to fully transparent well before the top-right — so the
+          artwork and trailer stay bright where nothing overlaps them. The copy
+          carries its own drop shadow, which is what lets these stay this thin.
+        */}
+        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/45 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bg/85 via-bg/25 to-transparent lg:via-bg/10" />
       </div>
 
       <Container className="relative z-10 pb-6 pt-28 sm:pb-8 lg:pb-10 lg:pt-36">

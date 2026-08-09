@@ -25,6 +25,7 @@ const NAV = [
   { href: "/", label: "Home" },
   { href: "/upcoming", label: "Upcoming" },
   { href: "/browse", label: "Browse" },
+  { href: "/steam", label: "Steam" },
   { href: "/genres", label: "Genres" },
   { href: "/platforms", label: "Platforms" },
 ];

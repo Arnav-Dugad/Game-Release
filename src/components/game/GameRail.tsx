@@ -58,10 +58,20 @@ export function GameRail({ games, className, shape = "poster", priorityCount = 0
     <div className={cn("group/rail relative", className)}>
       {/* `rail-gutter` keeps the first card aligned with the section heading
           above it while still letting cards scroll off the viewport edge. */}
+      {/*
+        The vertical padding is load-bearing, not decoration.
+
+        `.snap-rail` sets `overflow-x: auto`, and CSS forces the other axis to
+        `auto` whenever one axis is not `visible` — so the rail clips vertically
+        too, even though nothing scrolls that way. Cards lift on hover (a 3%
+        scale, a 3D tilt and a 24px drop shadow), and all of that was being
+        sliced off at the rail's edges. Padding gives the hover state somewhere
+        to grow into; the negative margin keeps the surrounding rhythm intact.
+      */}
       <div
         ref={railRef}
         onScroll={syncEdges}
-        className="snap-rail rail-gutter gap-3.5 pb-2 sm:gap-4 lg:gap-5"
+        className="snap-rail rail-gutter -my-4 gap-3.5 py-4 sm:gap-4 lg:gap-5"
       >
         {games.map((game, i) => (
           <Reveal

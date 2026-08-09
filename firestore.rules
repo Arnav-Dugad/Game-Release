@@ -36,6 +36,14 @@ service cloud.firestore {
       match /watchlist/{gameId} {
         allow read, write: if isOwner(uid);
       }
+
+      // --- Settings -------------------------------------------------------
+      // Display preferences (currency region, reduced motion). Private to the
+      // owner: unlike the profile above, nothing here is shown to anyone else,
+      // so there is no reason for it to be world-readable.
+      match /settings/{document} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // --- Reviews ----------------------------------------------------------
