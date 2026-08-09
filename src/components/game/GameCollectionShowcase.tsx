@@ -120,7 +120,7 @@ export function GameCollectionShowcase({ game }: { game: GameDetail }) {
   if (!hasUniverse && groups.length === 0 && !game.parentGame) return null;
 
   return (
-    <section id="collection" className="space-y-12 sm:space-y-16">
+    <section id="collection" className="scroll-mt-32 space-y-12 sm:space-y-16">
       {hasUniverse && <UniverseShowcase game={game} />}
 
       {(groups.length > 0 || game.parentGame) && (

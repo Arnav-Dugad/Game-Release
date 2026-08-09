@@ -134,7 +134,7 @@ that do not carry the cron secret.
 | `/` | Auto-advancing featured hero, live stats, upcoming/trending/acclaimed/new rails, genre grid |
 | `/upcoming` | Month-grouped release calendar with per-title countdowns |
 | `/browse` | Full database with genre/platform filters, sorting and pagination — all URL-driven |
-| `/game/[slug]` | Detail page: parallax hero, countdown, score ring, screenshots lightbox, trailers, system requirements, community reviews, related games |
+| `/game/[slug]` | Cinematic game dossier: live hero media, active section dock, editorial gallery, distinct DLC/expansion/edition poster shelves, franchise portals, structured metadata, requirements, reviews and related games |
 | `/genres`, `/platforms` | Category browsing |
 | `/login`, `/signup` | Split-screen auth with email/password and Google |
 | `/watchlist` | Tracked games with play status (want / playing / played) |

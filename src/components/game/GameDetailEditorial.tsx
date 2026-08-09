@@ -67,7 +67,7 @@ export function GameEditorialOverview({ game }: { game: GameDetail }) {
   ].filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
-    <section id="overview">
+    <section id="overview" className="scroll-mt-32">
       <Reveal>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-soft">Editorial overview</p>
         <h2 className="text-3xl font-black sm:text-4xl">Inside {game.name}</h2>

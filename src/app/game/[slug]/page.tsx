@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  Clapperboard,
   Cpu,
   Eye,
   ExternalLink,
@@ -14,7 +15,9 @@ import {
   Globe,
   Languages,
   Layers,
+  Images,
   MonitorCog,
+  ShoppingBag,
   ShieldCheck,
   Star,
   Tag,
@@ -49,11 +52,13 @@ import { Collapsible } from "@/components/ui/Collapsible";
 import { Reveal } from "@/components/motion/Reveal";
 import { TextReveal } from "@/components/motion/text";
 import { Parallax } from "@/components/motion/effects";
+import { Aurora, GridLines } from "@/components/motion/Aurora";
 import { getGame, getRelated, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
 import { PriceCard } from "@/components/game/PriceCard";
 import { GameCollectionShowcase } from "@/components/game/GameCollectionShowcase";
 import { GameEditorialOverview, GamePulseStrip } from "@/components/game/GameDetailEditorial";
+import { GameDetailDock, type DetailSectionLink } from "@/components/game/GameDetailDock";
 import {
   compactNumber,
   isUnreleased,
@@ -115,90 +120,88 @@ export default async function GamePage({ params }: { params: Params }) {
   // Screenshots first (they show the game running), then key art. Deduped
   // because some providers list the same asset in both collections.
   const media = [...new Set([...game.screenshots, ...game.artworks])];
+  const hasCollection = Boolean(
+    game.parentGame || game.series.length || game.franchises.length || game.dlcs.length ||
+    game.expansions.length || game.standaloneExpansions.length || game.editions.length ||
+    game.bundles.length || game.remakes.length || game.remasters.length || game.ports.length,
+  );
+  const hasDetails = Boolean(
+    game.characters.length || game.companies.length || game.platformDetails.length ||
+    game.releases.length > 1 || game.tags.length || game.keywords.length || game.requirements.length,
+  );
+  const sections: DetailSectionLink[] = [
+    ...(game.description ? [{ id: "overview", label: "Overview" }] : []),
+    ...(game.trailers.length || media.length ? [{ id: "media-archive", label: "Media" }] : []),
+    ...(hasCollection ? [{ id: "collection", label: "Universe & content" }] : []),
+    ...(hasDetails ? [{ id: "details", label: "Game details" }] : []),
+    { id: "reviews", label: "Reviews" },
+  ];
+  const jsonLd = videoGameJsonLd(game);
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+      />
       <GameHero game={game} />
 
-      <Container className="relative z-10 space-y-3 pb-2">
+      <Container className="relative z-20 space-y-3 pb-2">
         <GamePulseStrip game={game} />
         <DataSourceNotice source={source} degraded={isDegraded(source)} />
         <SourceAttribution source={source} />
       </Container>
+      <GameDetailDock gameName={game.name} sections={sections} />
 
       <Container className="grid gap-10 pb-8 pt-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-14 lg:pb-12 lg:pt-10">
         <div className="min-w-0 space-y-14">
           {game.description && <GameEditorialOverview game={game} />}
 
-          <GameCollectionShowcase game={game} />
-
-          {game.trailers.length > 0 && (
-            <section id="trailers">
-              <Reveal>
-                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Trailers</h2>
+          {(game.trailers.length > 0 || media.length > 0) && (
+            <section id="media-archive" className="space-y-12 scroll-mt-32">
+              <Reveal className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                <div>
+                  <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-neon"><Clapperboard size={13} /> Cinematic archive</p>
+                  <h2 className="text-3xl font-black sm:text-4xl">See the world in motion</h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-[15px]">Official footage, in-game captures, and production artwork—collected into one immersive gallery.</p>
+                </div>
+                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-line bg-white/[0.03] px-3 py-1.5 text-xs text-faint"><Images size={13} /> {game.trailers.length + media.length} assets</span>
               </Reveal>
-              <MediaGallery
-                items={game.trailers.map((trailer) => ({ kind: "trailer" as const, trailer }))}
-                gameName={game.name}
-              />
-            </section>
-          )}
 
-          {media.length > 0 && (
-            <section id="media">
-              <Reveal>
-                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">
-                  {game.artworks.length > 0 ? "Screenshots & art" : "Screenshots"}
-                </h2>
-              </Reveal>
-              <MediaGallery
-                items={media.map((src) => ({ kind: "image" as const, src }))}
-                gameName={game.name}
-              />
-            </section>
-          )}
-
-          {game.characters.length > 0 && (
-            <section>
-              <Reveal>
-                <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Characters</h2>
-              </Reveal>
-              <CharacterRail characters={game.characters} />
-            </section>
-          )}
-
-          {game.companies.length > 0 && (
-            <Reveal>
-              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Who made it</h2>
-              <CompanyGrid companies={game.companies} />
-              {game.engines.length > 0 && (
-                <div className="mt-5">
-                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
-                    Built with
-                  </h3>
-                  <EngineRow engines={game.engines} />
+              {game.trailers.length > 0 && (
+                <div id="trailers">
+                  <Reveal><h3 className="mb-5 text-xl font-bold sm:text-2xl">Official trailers</h3></Reveal>
+                  <MediaGallery items={game.trailers.map((trailer) => ({ kind: "trailer" as const, trailer }))} gameName={game.name} />
                 </div>
               )}
-            </Reveal>
+
+              {media.length > 0 && (
+                <div id="media">
+                  <Reveal><h3 className="mb-5 text-xl font-bold sm:text-2xl">{game.artworks.length > 0 ? "Screenshots & key art" : "Screenshots"}</h3></Reveal>
+                  <MediaGallery items={media.map((src) => ({ kind: "image" as const, src }))} gameName={game.name} variant="cinematic" />
+                </div>
+              )}
+            </section>
           )}
 
-          {game.platformDetails.length > 0 && (
-            <Reveal>
-              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Platforms</h2>
-              <PlatformGrid platforms={game.platformDetails} />
-            </Reveal>
-          )}
+          <GameCollectionShowcase game={game} />
 
-          {game.releases.length > 1 && (
+          {hasDetails && <section id="details" className="space-y-14 scroll-mt-32">
             <Reveal>
-              <h2 className="mb-5 text-2xl font-bold sm:text-3xl">Release history</h2>
-              <ReleaseTable releases={game.releases} />
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-soft">Production dossier</p>
+              <h2 className="text-3xl font-black sm:text-4xl">The complete game record</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-[15px]">Cast, creators, hardware, release history, and the details that define how this game plays.</p>
             </Reveal>
-          )}
 
-          {(game.tags.length > 0 || game.keywords.length > 0) && (
-            <Reveal>
-              <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h2>
+            {game.characters.length > 0 && <div><Reveal><h3 className="mb-5 text-2xl font-bold sm:text-3xl">Characters</h3></Reveal><CharacterRail characters={game.characters} /></div>}
+
+            {game.companies.length > 0 && <Reveal><h3 className="mb-5 text-2xl font-bold sm:text-3xl">Who made it</h3><CompanyGrid companies={game.companies} />{game.engines.length > 0 && <div className="mt-5"><h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">Built with</h4><EngineRow engines={game.engines} /></div>}</Reveal>}
+
+            {game.platformDetails.length > 0 && <Reveal><h3 className="mb-5 text-2xl font-bold sm:text-3xl">Platforms</h3><PlatformGrid platforms={game.platformDetails} /></Reveal>}
+
+            {game.releases.length > 1 && <Reveal><h3 className="mb-5 text-2xl font-bold sm:text-3xl">Release history</h3><ReleaseTable releases={game.releases} /></Reveal>}
+
+            {(game.tags.length > 0 || game.keywords.length > 0) && <Reveal><h3 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h3>
               <div className="flex flex-wrap gap-2">
                 {game.themes.map((theme) => (
                   <Badge key={`theme-${theme.id}`} tone="brand">
@@ -229,15 +232,15 @@ export default async function GamePage({ params }: { params: Params }) {
                   </ul>
                 </div>
               )}
-            </Reveal>
-          )}
+            </Reveal>}
 
           {/* Bulky, and relevant to a minority of readers — so it sits at the
               end of the article, closed, rather than between the media and the
               conversation about the game. */}
-          {game.requirements.length > 0 && <Requirements game={game} />}
+            {game.requirements.length > 0 && <Requirements game={game} />}
+          </section>}
 
-          <section id="reviews">
+          <section id="reviews" className="scroll-mt-32">
             <ReviewSection game={game} />
           </section>
         </div>
@@ -290,10 +293,13 @@ function GameHero({ game }: { game: GameDetail }) {
         <BackdropTrailer trailer={game.trailers[0] ?? game.heroTrailer} />
 
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/90 to-bg/55" />
-        <div className="absolute inset-0 bg-gradient-to-r from-bg/90 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/75 to-transparent lg:via-bg/48" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_34%,transparent_0%,rgba(4,4,10,0.24)_48%,rgba(4,4,10,0.76)_100%)]" />
+        <Aurora intensity="subtle" className="mix-blend-screen opacity-25" />
+        <GridLines className="opacity-20" />
       </div>
 
-      <Container className="flex min-h-[620px] flex-col justify-end pb-8 pt-24 sm:min-h-[680px] lg:min-h-[760px] lg:pb-12 lg:pt-32">
+      <Container className="flex min-h-[720px] flex-col justify-end pb-9 pt-24 sm:min-h-[760px] lg:min-h-[820px] lg:pb-14 lg:pt-32">
         <Reveal>
           <div className="mb-7 flex flex-wrap items-center gap-2 text-xs text-white/55">
             <Link
@@ -331,22 +337,26 @@ function GameHero({ game }: { game: GameDetail }) {
             <Reveal
               direction="right"
               className={cn(
-                "relative aspect-[3/4] shrink-0 overflow-hidden rounded-2xl border border-line-strong",
-                "shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)]",
+                "relative shrink-0",
                 // Shown at every size — the poster is the strongest identifying
                 // element on the page, and hiding it on phones wasted that.
                 "w-36 sm:w-48 lg:w-64",
               )}
             >
-              <GameCover
-                name={game.name}
-                slug={game.slug}
-                image={game.image}
-                imageFallback={game.imageFallback}
-                width={720}
-                sizes="(max-width: 640px) 144px, (max-width: 1024px) 192px, 256px"
-                priority
-              />
+              <span aria-hidden className="absolute -inset-2 rounded-[1.5rem] bg-gradient-to-br from-brand/35 via-white/5 to-neon/25 blur-sm" />
+              <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/20 bg-panel shadow-[0_35px_90px_-30px_rgba(0,0,0,0.95)]">
+                <GameCover
+                  name={game.name}
+                  slug={game.slug}
+                  image={game.image}
+                  imageFallback={game.imageFallback}
+                  width={720}
+                  sizes="(max-width: 640px) 144px, (max-width: 1024px) 192px, 256px"
+                  priority
+                />
+                <span aria-hidden className="absolute inset-0 bg-gradient-to-tr from-black/20 via-transparent to-white/[0.08]" />
+                <span className="absolute inset-x-3 bottom-3 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+              </div>
             </Reveal>
 
             {/* Platform marks sit directly beside the poster, on every size —
@@ -369,6 +379,10 @@ function GameHero({ game }: { game: GameDetail }) {
           </div>
 
           <div className="min-w-0 flex-1">
+            <Reveal className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
+              <span aria-hidden className="h-px w-8 bg-gradient-to-r from-brand-soft to-transparent" />
+              LUDEX game dossier
+            </Reveal>
             <Reveal className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4">
               {game.genres.slice(0, 3).map((genre) => (
                 <Chip key={genre.id} href={`/browse?genres=${genre.slug}`}>
@@ -432,6 +446,11 @@ function GameHero({ game }: { game: GameDetail }) {
               needed here. */}
           <StatusPicker game={game} />
           <OwnershipPicker game={game} />
+          {(game.steamAppId || game.stores.length > 0) && (
+            <Button href="#where-to-play" variant="secondary" icon={<ShoppingBag size={16} />}>
+              Where to play
+            </Button>
+          )}
           {game.website && (
             <Button
               href={game.website}
@@ -448,42 +467,8 @@ function GameHero({ game }: { game: GameDetail }) {
           </Button>
         </Reveal>
 
-        <Reveal delay={0.28}>
-          <nav
-            aria-label="On this page"
-            className="mt-8 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-1.5 text-xs font-medium text-white/60 backdrop-blur-xl sm:w-fit sm:text-sm"
-          >
-            {game.description && <QuickLink href="#overview">Overview</QuickLink>}
-            {game.trailers.length > 0 && <QuickLink href="#trailers">Trailers</QuickLink>}
-            {(game.series.length > 0 ||
-              game.franchises.length > 0 ||
-              game.dlcs.length > 0 ||
-              game.expansions.length > 0 ||
-              game.standaloneExpansions.length > 0 ||
-              game.editions.length > 0 ||
-              game.bundles.length > 0 ||
-              game.remakes.length > 0 ||
-              game.remasters.length > 0 ||
-              game.ports.length > 0) && (
-              <QuickLink href="#collection">Universe & content</QuickLink>
-            )}
-            {(game.screenshots.length > 0 || game.artworks.length > 0) && <QuickLink href="#media">Gallery</QuickLink>}
-            <QuickLink href="#reviews">Reviews</QuickLink>
-          </nav>
-        </Reveal>
       </Container>
     </header>
-  );
-}
-
-function QuickLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      className="shrink-0 rounded-xl px-3.5 py-2.5 transition-colors hover:bg-white/[0.08] hover:text-white"
-    >
-      {children}
-    </a>
   );
 }
 
@@ -695,7 +680,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
   ];
 
   return (
-    <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+    <aside id="where-to-play" className="scroll-mt-32 space-y-5 lg:sticky lg:top-28 lg:self-start">
       <PriceCard steamAppId={game.steamAppId} />
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
@@ -842,4 +827,41 @@ function Requirements({ game }: { game: GameDetail }) {
       </Collapsible>
     </Reveal>
   );
+}
+
+/** Search and assistant-readable identity for the same game record shown above. */
+function videoGameJsonLd(game: GameDetail) {
+  const site = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const images = [game.image, ...game.artworks.slice(0, 3), ...game.screenshots.slice(0, 3)]
+    .filter((image): image is string => Boolean(image));
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    name: game.name,
+    description: game.description || undefined,
+    url: site ? `${site}/game/${game.slug}` : undefined,
+    image: images.length > 0 ? images : undefined,
+    datePublished: game.released ?? undefined,
+    genre: game.genres.map((genre) => genre.name),
+    gamePlatform: game.platforms.map((platform) => platform.name),
+    playMode: game.gameModes.map((mode) => mode.name),
+    developer: game.developers.map((developer) => ({
+      "@type": "Organization",
+      name: developer.name,
+    })),
+    publisher: game.publishers.map((publisher) => ({
+      "@type": "Organization",
+      name: publisher.name,
+    })),
+    aggregateRating: game.rating > 0 && game.ratingsCount > 0 ? {
+      "@type": "AggregateRating",
+      ratingValue: game.rating,
+      bestRating: 5,
+      worstRating: 0,
+      ratingCount: game.ratingsCount,
+    } : undefined,
+    sameAs: [...new Set([game.website, ...game.websites.map((website) => website.url)])]
+      .filter((url): url is string => Boolean(url)),
+  };
 }

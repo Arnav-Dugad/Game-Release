@@ -39,18 +39,25 @@ export function MediaGallery({
   gameName,
   /** Wider tiles suit trailers, which carry a caption under them. */
   size = "wide",
+  variant = "rail",
 }: {
   items: MediaItem[];
   gameName: string;
   size?: "wide" | "standard";
+  /** A magazine-like lead image with supporting tiles, using the same lightbox. */
+  variant?: "rail" | "cinematic";
 }) {
   const [openAt, setOpenAt] = useState<number | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
   const isMobile = useIsMobile();
 
-  const close = useCallback(() => setOpenAt(null), []);
+  const close = useCallback(() => {
+    setOpenAt(null);
+    requestAnimationFrame(() => openerRef.current?.focus());
+  }, []);
   const step = useCallback(
     (delta: number) =>
       setOpenAt((current) =>
@@ -102,9 +109,59 @@ export function MediaGallery({
       : "w-[72vw] max-w-[420px] sm:w-[340px] lg:w-[400px]";
 
   const active = openAt !== null ? items[openAt] : null;
+  const previewItems = items.slice(0, 5);
 
   return (
     <div className="group/media relative">
+      {variant === "cinematic" && (
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:h-[520px] lg:grid-cols-4 lg:grid-rows-2">
+          {previewItems.map((item, index) => {
+            const poster = posterOf(item);
+            const more = index === previewItems.length - 1 ? items.length - previewItems.length : 0;
+            return (
+              <button
+                key={`${item.kind}-${index}`}
+                type="button"
+                onClick={(event) => {
+                  openerRef.current = event.currentTarget;
+                  setOpenAt(index);
+                }}
+                aria-label={`View ${captionOf(item, index)}, image ${index + 1} of ${items.length}`}
+                className={cn(
+                  "group/tile relative min-h-0 overflow-hidden rounded-xl border border-line bg-panel text-left transition-[border-color,transform,box-shadow] duration-500 fine:hover:-translate-y-0.5 fine:hover:border-line-strong fine:hover:shadow-[0_24px_60px_-28px_rgba(124,92,255,0.65)] sm:rounded-2xl",
+                  index === 0 && "col-span-2 aspect-video lg:row-span-2 lg:aspect-auto",
+                  index > 0 && "aspect-video lg:aspect-auto",
+                  previewItems.length === 1 && "lg:col-span-4",
+                  previewItems.length > 1 && previewItems.length <= 3 && index === 0 && "lg:col-span-3",
+                  previewItems.length === 2 && index === 1 && "lg:row-span-2",
+                  previewItems.length === 4 && index === 3 && "lg:col-span-2",
+                )}
+              >
+                {poster ? (
+                  <Image
+                    src={sizedImage(poster, index === 0 ? 1280 : 720) ?? poster}
+                    alt={`${gameName} — ${captionOf(item, index)}`}
+                    fill
+                    sizes={index === 0 ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 1024px) 50vw, 25vw"}
+                    className="object-cover transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] fine:group-hover/tile:scale-105"
+                  />
+                ) : <span className="absolute inset-0 bg-panel-2" />}
+                <span className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/10" />
+                <span className="absolute bottom-2.5 left-2.5 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/75 backdrop-blur-md sm:bottom-3 sm:left-3">
+                  {index === 0 ? "Featured capture" : `${index + 1} / ${items.length}`}
+                </span>
+                {more > 0 ? (
+                  <span className="absolute inset-0 grid place-items-center bg-black/55 text-center backdrop-blur-[2px]"><span><span className="block font-display text-2xl font-black text-white">+{more}</span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-white/65">More images</span></span></span>
+                ) : (
+                  <span className="absolute bottom-2.5 right-2.5 grid h-8 w-8 place-items-center rounded-lg bg-black/55 text-white backdrop-blur-md sm:bottom-3 sm:right-3"><Expand size={14} /></span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {variant === "rail" && <>
       <div
         ref={railRef}
         onScroll={syncEdges}
@@ -116,7 +173,10 @@ export function MediaGallery({
             <div key={`${item.kind}-${i}`} className={tileWidth}>
               <button
                 type="button"
-                onClick={() => setOpenAt(i)}
+                onClick={(event) => {
+                  openerRef.current = event.currentTarget;
+                  setOpenAt(i);
+                }}
                 aria-label={
                   item.kind === "trailer"
                     ? `Play ${item.trailer.name}`
@@ -161,10 +221,11 @@ export function MediaGallery({
 
       <RailArrow direction="left" disabled={atStart} onClick={() => scrollByPage(-1)} />
       <RailArrow direction="right" disabled={atEnd} onClick={() => scrollByPage(1)} />
+      </>}
 
       <AnimatePresence>
         {active && (
-          <div className="fixed inset-0 z-[400] flex items-center justify-center">
+          <div role="dialog" aria-modal="true" aria-label={`${gameName} media viewer`} className="fixed inset-0 z-[400] flex items-center justify-center">
             <motion.div
               className="absolute inset-0 bg-black/93 backdrop-blur-sm"
               initial={{ opacity: 0 }}
@@ -221,6 +282,7 @@ export function MediaGallery({
             <button
               type="button"
               onClick={close}
+              autoFocus
               aria-label="Close"
               className="absolute right-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition-colors hover:bg-white/20 sm:right-6 sm:top-6"
             >
