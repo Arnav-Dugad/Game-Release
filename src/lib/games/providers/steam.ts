@@ -541,6 +541,7 @@ export async function steamDeals(
       }
       return {
         game,
+        canonicalSlug: null,
         price,
         steamAppId: appid,
         currentAmount: amount,

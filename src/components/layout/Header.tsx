@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import { Logo } from "./Logo";
 import { UserMenu } from "./UserMenu";
+import { NotificationBell } from "./NotificationBell";
 import { useScrollDirection } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 
@@ -110,6 +111,7 @@ export function Header({ onOpenSearch }: { onOpenSearch: () => void }) {
             </kbd>
           </button>
 
+          <NotificationBell />
           <UserMenu />
         </div>
       </div>

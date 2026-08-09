@@ -138,6 +138,8 @@ export interface Price {
 /** A verified storefront discount, normalised for the deals experience. */
 export interface DealListing {
   game: GameSummary;
+  /** Canonical IGDB route target. Null means the UI must use IGDB search. */
+  canonicalSlug: string | null;
   price: Price;
   steamAppId: number;
   /** Steam's integer minor-unit price, used for exact regional sorting. */

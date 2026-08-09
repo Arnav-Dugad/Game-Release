@@ -35,6 +35,8 @@ export const REGION_COOKIE = "ludex_region";
 const REGION_KEY = "ludex:region";
 const MOTION_KEY = "ludex:reduce-motion";
 const POSTER_KEY = "ludex:poster-sizes";
+const NOTIFICATION_DEALS_KEY = "ludex:notifications:deals";
+const NOTIFICATION_RELEASES_KEY = "ludex:notifications:releases";
 
 interface PreferencesValue {
   /** Steam country code, e.g. "in". Drives the currency prices are shown in. */
@@ -50,6 +52,10 @@ interface PreferencesValue {
    */
   posterSizes: Record<string, string>;
   setPosterSize: (key: string, size: string) => void;
+  notificationDeals: boolean;
+  setNotificationDeals: (value: boolean) => void;
+  notificationReleases: boolean;
+  setNotificationReleases: (value: boolean) => void;
   /** False until localStorage has been read, so nothing renders a wrong value. */
   ready: boolean;
 }
@@ -77,6 +83,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [region, setRegionState] = useState<string>(DEFAULT_STEAM_REGION);
   const [reduceMotion, setReduceMotionState] = useState(false);
   const [posterSizes, setPosterSizesState] = useState<Record<string, string>>({});
+  const [notificationDeals, setNotificationDealsState] = useState(true);
+  const [notificationReleases, setNotificationReleasesState] = useState(true);
   const [ready, setReady] = useState(false);
   /**
    * True once the device copy has been read. Account preferences are only
@@ -111,6 +119,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
             setPosterSizesState(parsed as Record<string, string>);
           }
         }
+        setNotificationDealsState(window.localStorage.getItem(NOTIFICATION_DEALS_KEY) !== "false");
+        setNotificationReleasesState(window.localStorage.getItem(NOTIFICATION_RELEASES_KEY) !== "false");
       } catch {
         /* private mode or storage disabled — defaults are fine */
       }
@@ -148,6 +158,14 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
           const hasLocalSizes = window.localStorage.getItem(POSTER_KEY) !== null;
           if (!hasLocalSizes && prefs.posterSizes) {
             setPosterSizesState(prefs.posterSizes);
+          }
+          const hasLocalDealAlerts = window.localStorage.getItem(NOTIFICATION_DEALS_KEY) !== null;
+          if (!hasLocalDealAlerts && typeof prefs.notificationDeals === "boolean") {
+            setNotificationDealsState(prefs.notificationDeals);
+          }
+          const hasLocalReleaseAlerts = window.localStorage.getItem(NOTIFICATION_RELEASES_KEY) !== null;
+          if (!hasLocalReleaseAlerts && typeof prefs.notificationReleases === "boolean") {
+            setNotificationReleasesState(prefs.notificationReleases);
           }
         } catch {
           /* storage unavailable — account values simply aren't applied */
@@ -214,6 +232,32 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const setNotificationDeals = useCallback(
+    (value: boolean) => {
+      setNotificationDealsState(value);
+      try {
+        window.localStorage.setItem(NOTIFICATION_DEALS_KEY, String(value));
+      } catch {
+        /* in-memory state still updates */
+      }
+      if (user) void saveUserPreferences(user.uid, { notificationDeals: value }).catch(() => {});
+    },
+    [user],
+  );
+
+  const setNotificationReleases = useCallback(
+    (value: boolean) => {
+      setNotificationReleasesState(value);
+      try {
+        window.localStorage.setItem(NOTIFICATION_RELEASES_KEY, String(value));
+      } catch {
+        /* in-memory state still updates */
+      }
+      if (user) void saveUserPreferences(user.uid, { notificationReleases: value }).catch(() => {});
+    },
+    [user],
+  );
+
   const value = useMemo<PreferencesValue>(
     () => ({
       region,
@@ -223,9 +267,25 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       setReduceMotion,
       posterSizes,
       setPosterSize,
+      notificationDeals,
+      setNotificationDeals,
+      notificationReleases,
+      setNotificationReleases,
       ready,
     }),
-    [region, setRegion, reduceMotion, setReduceMotion, posterSizes, setPosterSize, ready],
+    [
+      region,
+      setRegion,
+      reduceMotion,
+      setReduceMotion,
+      posterSizes,
+      setPosterSize,
+      notificationDeals,
+      setNotificationDeals,
+      notificationReleases,
+      setNotificationReleases,
+      ready,
+    ],
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

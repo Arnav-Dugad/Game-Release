@@ -18,6 +18,8 @@ import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/game
 import { filterDeals } from "../src/lib/games/deals";
 import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/price-history";
 import type { DealListing, GameSummary } from "../src/lib/games/types";
+import { canonicalEntryHref, dealNotification, releaseNotifications } from "../src/lib/notifications/model";
+import type { WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
 
@@ -270,8 +272,8 @@ const dealGame = (id: number, name: string, genre: string): GameSummary => ({
   added: 0,
 });
 const testDeals: DealListing[] = [
-  { game: dealGame(1, "Quiet RPG", "RPG"), price: { current: "$20.00", original: "$40.00", discountPercent: 50, isFree: false }, steamAppId: 1, currentAmount: 2000, currency: "USD", storeUrl: "https://store.steampowered.com/app/1/" },
-  { game: dealGame(2, "Fast Action", "Action"), price: { current: "$5.00", original: "$20.00", discountPercent: 75, isFree: false }, steamAppId: 2, currentAmount: 500, currency: "USD", storeUrl: "https://store.steampowered.com/app/2/" },
+  { game: dealGame(1, "Quiet RPG", "RPG"), canonicalSlug: "quiet-rpg", price: { current: "$20.00", original: "$40.00", discountPercent: 50, isFree: false }, steamAppId: 1, currentAmount: 2000, currency: "USD", storeUrl: "https://store.steampowered.com/app/1/" },
+  { game: dealGame(2, "Fast Action", "Action"), canonicalSlug: "fast-action", price: { current: "$5.00", original: "$20.00", discountPercent: 75, isFree: false }, steamAppId: 2, currentAmount: 500, currency: "USD", storeUrl: "https://store.steampowered.com/app/2/" },
 ];
 check("discount sort is default", filterDeals(testDeals, {}).map((deal) => deal.steamAppId), [2, 1]);
 check("genre search participates", filterDeals(testDeals, { query: "rpg" }).map((deal) => deal.steamAppId), [1]);
@@ -280,6 +282,49 @@ check("regional price parsing", parseAmount("₹3,999"), 399900);
 const point = (date: string, amount: number): PricePoint => ({ date, amount, original: null, discountPercent: 0, isFree: false, formatted: String(amount), currency: "USD" });
 check("two observations make no price claim", priceInsight([point("2026-08-02", 500), point("2026-08-01", 700)]), null);
 check("three observations can establish a low", priceInsight([point("2026-08-03", 400), point("2026-08-02", 500), point("2026-08-01", 700)])?.isAllTimeLow, true);
+
+console.log("\nNotification signals");
+const notificationEntry = (overrides: Partial<WatchlistEntry> = {}): WatchlistEntry => ({
+  gameId: 77,
+  steamAppId: 124,
+  slug: "signal-game",
+  name: "Signal Game",
+  image: null,
+  imageFallback: null,
+  released: "2026-08-15",
+  releaseWindow: null,
+  tba: false,
+  metacritic: null,
+  status: "want",
+  platform: null,
+  startedAt: null,
+  finishedAt: null,
+  genreIds: [],
+  platformSlugs: [],
+  ownedOn: [],
+  addedAt: 0,
+  ...overrides,
+});
+check(
+  "release inside fourteen days alerts",
+  releaseNotifications([notificationEntry()], Date.parse("2026-08-09T12:00:00Z"))[0]?.kind,
+  "release-soon",
+);
+check(
+  "distant release stays quiet",
+  releaseNotifications([notificationEntry({ released: "2026-09-15" })], Date.parse("2026-08-09T12:00:00Z")),
+  [],
+);
+check(
+  "Steam fallback entry routes to IGDB search",
+  canonicalEntryHref(notificationEntry({ slug: "signal-game-s124" })),
+  "/browse?search=Signal%20Game",
+);
+check(
+  "deal notification identity is stable",
+  dealNotification(notificationEntry(), 124, { current: "$5.00", original: "$10.00", discountPercent: 50, isFree: false }, "United States", 1).id,
+  "deal:124:50:$5.00",
+);
 
 console.log("\nHTML handling");
 check(

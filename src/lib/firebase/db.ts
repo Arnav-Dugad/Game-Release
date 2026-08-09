@@ -125,6 +125,10 @@ export interface UserPreferences {
    * controls, a library as a wall of covers.
    */
   posterSizes?: Record<string, string>;
+  /** Stable derived-notification ids already seen by this account. */
+  notificationReadIds?: string[];
+  notificationDeals?: boolean;
+  notificationReleases?: boolean;
   updatedAt?: number;
 }
 

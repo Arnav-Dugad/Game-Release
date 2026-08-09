@@ -5,6 +5,7 @@ import { PreferencesProvider } from "@/lib/preferences/PreferencesProvider";
 import { AuthProvider } from "@/lib/firebase/AuthProvider";
 import { WatchlistProvider } from "@/lib/firebase/WatchlistProvider";
 import { ToastProvider } from "@/components/ui/Toast";
+import { NotificationsProvider } from "@/lib/notifications/NotificationsProvider";
 
 /**
  * Client provider stack.
@@ -22,7 +23,9 @@ export function Providers({ children }: { children: ReactNode }) {
     <AuthProvider>
       <PreferencesProvider>
         <WatchlistProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <NotificationsProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </NotificationsProvider>
         </WatchlistProvider>
       </PreferencesProvider>
     </AuthProvider>

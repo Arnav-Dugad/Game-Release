@@ -94,6 +94,7 @@ function personalListing(entry: WatchlistEntry, data: PriceResponse, currency: s
   if (!data.price || data.price.discountPercent <= 0 || !data.appId) return null;
   return {
     game: summaryFromEntry(entry),
+    canonicalSlug: /-s\d+$/.test(entry.slug) ? null : entry.slug,
     price: data.price,
     steamAppId: data.appId,
     currentAmount: parseAmount(data.price.current) ?? Number.MAX_SAFE_INTEGER,
@@ -406,10 +407,13 @@ export function DealsView() {
 function DealCard({ deal, history, tracked, owned, priority }: { deal: DealListing; history: PricePoint[]; tracked: boolean; owned: boolean; priority: boolean }) {
   const insight = priceInsight(history);
   const points = [...history].reverse().slice(-24);
+  const href = deal.canonicalSlug
+    ? `/game/${deal.canonicalSlug}`
+    : `/browse?search=${encodeURIComponent(deal.game.name)}`;
   return (
     <article className="group h-full overflow-hidden rounded-2xl border border-line bg-panel/55 transition-[transform,border-color,box-shadow] duration-300 fine:hover:-translate-y-1 fine:hover:border-brand/35 fine:hover:shadow-[0_20px_60px_-30px_rgba(124,92,255,0.7)]">
       <div className="relative aspect-[2/3] overflow-hidden bg-bg-elev">
-        <Link href={`/game/${deal.game.slug}`} aria-label={`View ${deal.game.name}`} className="absolute inset-0 z-10">
+        <Link href={href} aria-label={`View ${deal.game.name} in IGDB`} className="absolute inset-0 z-10">
           <GameCover
             name={deal.game.name}
             slug={deal.game.slug}
@@ -428,9 +432,9 @@ function DealCard({ deal, history, tracked, owned, priority }: { deal: DealListi
             <span title="On your watchlist" className="grid h-9 w-9 place-items-center rounded-full border border-brand/40 bg-brand/35 text-white backdrop-blur-md">
               <BookmarkCheck size={16} />
             </span>
-          ) : (
+          ) : deal.canonicalSlug ? (
             <WatchButton game={deal.game} />
-          )}
+          ) : null}
         </div>
         <div className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap gap-1.5 pointer-events-none">
           {insight?.isAllTimeLow && (
@@ -451,7 +455,7 @@ function DealCard({ deal, history, tracked, owned, priority }: { deal: DealListi
         </div>
       </div>
       <div className="p-3.5">
-        <Link href={`/game/${deal.game.slug}`} className="line-clamp-2 min-h-10 text-sm font-semibold leading-snug transition-colors hover:text-brand-soft">
+        <Link href={href} className="line-clamp-2 min-h-10 text-sm font-semibold leading-snug transition-colors hover:text-brand-soft">
           {deal.game.name}
         </Link>
         <div className="mt-3 flex items-end justify-between gap-2">

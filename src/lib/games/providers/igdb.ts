@@ -782,6 +782,13 @@ interface IgdbGameVersion {
   games?: Array<number | { id?: number }>;
 }
 
+interface IgdbExternalGame {
+  uid?: string;
+  external_game_source?: number;
+  url?: string;
+  game?: IgdbGame;
+}
+
 /* ---------------------------------------------------------------------------
  * Images
  * ------------------------------------------------------------------------ */
@@ -1103,6 +1110,47 @@ function mapSummary(game: IgdbGame): GameSummary {
     // engagement. Either is a reasonable popularity proxy for its lifecycle stage.
     added: game.total_rating_count ?? game.hypes ?? 0,
   };
+}
+
+/**
+ * Resolves Steam storefront ids to the canonical IGDB game records.
+ *
+ * Deals originate from Steam because it owns the live price, but every
+ * internal game journey belongs to IGDB. The external-games endpoint provides
+ * the exact bridge, avoiding unreliable title matching and edition mistakes.
+ */
+export async function igdbGamesForSteamAppIds(
+  appids: number[],
+): Promise<Map<number, GameSummary>> {
+  if (!igdbConfigured()) return new Map();
+  const ids = [...new Set(appids.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 60);
+  if (ids.length === 0) return new Map();
+
+  const fields = ["uid", "external_game_source", "url", ...CORE_SUMMARY.map((field) => `game.${field}`)];
+  const quoted = ids.map((id) => `"${id}"`).join(",");
+
+  try {
+    const rows = await queryFor(TTL.search)<IgdbExternalGame[]>(
+      "external_games",
+      apicalypse({
+        fields: fields.join(","),
+        where: `external_game_source = 1 & uid = (${quoted})`,
+        limit: ids.length,
+      }),
+    );
+
+    const mapped = new Map<number, GameSummary>();
+    for (const row of rows) {
+      const appid = Number(row.uid);
+      if (!Number.isInteger(appid) || !row.game || row.external_game_source !== 1) continue;
+      if (!row.game.id || !row.game.name || !row.game.slug || row.game.status === CANCELLED) continue;
+      mapped.set(appid, mapSummary(row.game));
+    }
+    return mapped;
+  } catch (err) {
+    warn("deals.canonical", err);
+    return new Map();
+  }
 }
 
 /** Nested game relations only request summary fields, which is exactly enough

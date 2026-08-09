@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { steamDeals } from "@/lib/games/providers/steam";
+import { igdbGamesForSteamAppIds } from "@/lib/games/providers/igdb";
 import { DEFAULT_STEAM_REGION, isValidRegion } from "@/lib/games/stores-catalog";
 
 /** Regional, verified Steam discounts for the public Deals page. */
@@ -13,7 +14,12 @@ export async function GET(request: Request) {
     : 36;
 
   try {
-    const deals = await steamDeals(limit, region);
+    const steam = await steamDeals(limit, region);
+    const canonical = await igdbGamesForSteamAppIds(steam.map((deal) => deal.steamAppId));
+    const deals = steam.map((deal) => {
+      const game = canonical.get(deal.steamAppId);
+      return game ? { ...deal, game, canonicalSlug: game.slug } : deal;
+    });
     return NextResponse.json(
       { deals, region, refreshedAt: new Date().toISOString() },
       {
