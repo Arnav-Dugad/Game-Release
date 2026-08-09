@@ -276,12 +276,12 @@ export function DealsView() {
           </label>
         </div>
 
-        <dl className="mt-7 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <div className="mt-7 grid grid-cols-2 gap-2.5 lg:grid-cols-4" aria-label="Live deal metrics">
           <Metric icon={<ShoppingBag size={16} />} label="Live deals" value={loading ? "—" : String(allDeals.length)} />
           <Metric icon={<BadgePercent size={16} />} label="Best discount" value={biggest ? `−${biggest}%` : "—"} tone="mint" />
           <Metric icon={<BookmarkCheck size={16} />} label="Watchlist matches" value={personal === null ? "—" : String(personal.length)} />
           <Metric icon={<History size={16} />} label="Observed lows" value={String(lowCount)} tone="gold" />
-        </dl>
+        </div>
       </section>
 
       <section aria-label="Deal filters" className="glass sticky top-[4.5rem] z-30 mb-8 rounded-2xl p-3 lg:top-20">
@@ -409,7 +409,7 @@ function DealCard({ deal, history, tracked, owned, priority }: { deal: DealListi
   const points = [...history].reverse().slice(-24);
   const href = deal.canonicalSlug
     ? `/game/${deal.canonicalSlug}`
-    : `/browse?search=${encodeURIComponent(deal.game.name)}`;
+    : `/search?q=${encodeURIComponent(deal.game.name)}`;
   return (
     <article className="group h-full overflow-hidden rounded-2xl border border-line bg-panel/55 transition-[transform,border-color,box-shadow] duration-300 fine:hover:-translate-y-1 fine:hover:border-brand/35 fine:hover:shadow-[0_20px_60px_-30px_rgba(124,92,255,0.7)]">
       <div className="relative aspect-[2/3] overflow-hidden bg-bg-elev">
@@ -503,10 +503,10 @@ function Sparkline({ points }: { points: PricePoint[] }) {
 
 function Metric({ icon, label, value, tone = "brand" }: { icon: ReactNode; label: string; value: string; tone?: "brand" | "mint" | "gold" }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-3.5 backdrop-blur-sm">
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-3.5 backdrop-blur-sm" role="group" aria-label={label}>
       <div className={cn("mb-2", tone === "mint" ? "text-mint" : tone === "gold" ? "text-gold" : "text-brand-soft")}>{icon}</div>
-      <dd className="font-display text-xl font-black tabular-nums">{value}</dd>
-      <dt className="mt-0.5 text-[11px] text-muted">{label}</dt>
+      <p className="font-display text-xl font-black tabular-nums">{value}</p>
+      <p className="mt-0.5 text-[11px] text-muted">{label}</p>
     </div>
   );
 }

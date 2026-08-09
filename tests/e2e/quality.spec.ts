@@ -43,7 +43,7 @@ for (const route of PUBLIC_ROUTES) {
     expect(response?.status()).toBe(200);
     await expect(page.locator("main#main")).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
-    await expect(page.locator('a[href="#main"]')).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Skip to content" })).toHaveCount(1);
     await expect(page).toHaveTitle(/LUDEX/);
     await expectHealthyImages(page);
     expect(pageErrors).toEqual([]);
@@ -69,17 +69,28 @@ test("global search traps and restores keyboard focus", async ({ page }) => {
   await expect(trigger).toBeFocused();
 });
 
-test("mobile navigation remains thumb-reachable and opens search", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+test("mobile navigation remains thumb-reachable and opens search", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36",
+    deviceScaleFactor: 2.75,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/");
 
-  const mobileNav = page.getByRole("navigation", { name: "Primary" }).last();
-  await expect(mobileNav).toBeVisible();
-  await expect(mobileNav.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
-  await mobileNav.getByRole("button", { name: "Search the complete database" }).click();
-  await expect(page.getByRole("dialog", { name: "Search all of LUDEX" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Search all of LUDEX" })).toBeHidden();
+    const mobileNav = page.getByRole("navigation", { name: "Primary" }).last();
+    await expect(mobileNav).toBeVisible();
+    await expect(mobileNav.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    await mobileNav.getByRole("button", { name: "Search the complete database" }).click();
+    await expect(page.getByRole("dialog", { name: "Search all of LUDEX" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Search all of LUDEX" })).toBeHidden();
+  } finally {
+    await context.close();
+  }
 });
 
 test("deal cards keep discovery on canonical IGDB-backed pages", async ({ page }) => {
