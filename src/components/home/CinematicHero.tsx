@@ -162,7 +162,7 @@ export function CinematicHero({ games }: { games: GameSummary[] }) {
             Never miss the game worth waiting for.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-            Explore releases, compare live deals, and turn your watchlist into a personal plan. Live discovery will refill automatically when the catalogue reconnects.
+            Explore releases, build your collection, and turn your watchlist into a personal plan. Live discovery will refill automatically when the catalogue reconnects.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button href="/browse" size="lg" iconRight={<ArrowRight size={17} />}>Explore the catalogue</Button>

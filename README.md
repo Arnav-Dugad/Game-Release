@@ -121,7 +121,7 @@ domain to Firebase's authorised domains or Google sign-in will be rejected.
 `vercel.json` runs the protected dispatcher twice daily. To activate delivery,
 configure Firebase Admin and `CRON_SECRET`; add the VAPID key for device push
 and Resend variables for email. Users opt into each channel from Settings and
-can choose a minimum discount plus local quiet hours. The dispatcher is
+can choose local quiet hours. The dispatcher is
 idempotent, records delivery receipts privately, and ignores direct requests
 that do not carry the cron secret.
 
@@ -131,7 +131,7 @@ that do not carry the cron secret.
 
 | Route | What it does |
 | --- | --- |
-| `/` | Cinematic hero plus a signed-in command center for current games, tracked releases, regional deal radar, taste signals and explained recommendations; live discovery rails remain for everyone |
+| `/` | Cinematic hero plus a signed-in command center for current games, tracked releases, collection progress, taste signals and explained recommendations; live discovery rails remain for everyone |
 | `/upcoming` | Month-grouped release calendar with per-title countdowns |
 | `/browse` | Full database with genre/platform filters, sorting and pagination — all URL-driven |
 | `/game/[slug]` | Cinematic game dossier: live hero media, active section dock, editorial gallery, distinct DLC/expansion/edition poster shelves, franchise portals, structured metadata, requirements, reviews and related games |
@@ -139,6 +139,7 @@ that do not carry the cron secret.
 | `/login`, `/signup` | Split-screen auth with email/password and Google |
 | `/watchlist` | Tracked games with play status (want / playing / played) |
 | `/planner` | Personal release runway with collision detection, weekly capacity, backlog guidance, a next-play decision, and private `.ics` calendar export |
+| `/stats` | Private Firebase-backed collection intelligence with unique-game ownership, progress, platform, genre, timeline and review insights |
 | `/profile` | Identity, stats, review history, settings |
 
 Every game page also generates its own social card at
@@ -181,7 +182,7 @@ writing one file and appending it to the chain — no component changes.
 
 **Providers are merged, not just chained.** When IGDB reports that a title has
 a Steam listing (via `external_games`), the record is enriched with Steam's
-current price and system requirements — data IGDB does not carry. The base
+system requirements — data IGDB does not carry. The base
 record wins every contested field; the merge only fills gaps and adds what
 Steam uniquely has, and a failed lookup returns the original untouched.
 

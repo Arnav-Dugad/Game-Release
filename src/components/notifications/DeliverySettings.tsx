@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BellRing, Check, Clock3, Mail, Send, ShieldCheck, Smartphone } from "lucide-react";
+import { Check, Clock3, Mail, Send, ShieldCheck, Smartphone } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { getFirebaseApp } from "@/lib/firebase/config";
 import { getUserPreferences, saveUserPreferences, type UserPreferences } from "@/lib/firebase/db";
@@ -139,8 +139,7 @@ export function DeliverySettings() {
         <ChannelCard icon={<Mail size={17} />} title="Email alerts" detail={emailReady ? user.email ?? "Account email" : status?.emailConfigured ? "Connect the scheduler to activate" : "Connect Resend to activate"} active={emailActive} configured={emailReady} onClick={() => void update({ notificationEmailEnabled: !emailActive, notificationTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, !emailActive ? "Email alerts enabled" : "Email alerts disabled")} />
       </div>
 
-      <div className="grid gap-3 rounded-2xl border border-line bg-black/15 p-4 sm:grid-cols-3">
-        <label className="text-xs text-muted"><span className="mb-2 flex items-center gap-1.5 font-semibold text-text"><BellRing size={13} className="text-brand-soft" /> Minimum deal</span><select value={preferences.notificationMinimumDiscount ?? 20} onChange={(event) => void update({ notificationMinimumDiscount: Number(event.target.value) })} className="h-11 w-full rounded-xl border border-line bg-bg px-3 text-sm outline-none focus:border-brand"><option value="10">10% off</option><option value="20">20% off</option><option value="30">30% off</option><option value="50">50% off</option></select></label>
+      <div className="grid gap-3 rounded-2xl border border-line bg-black/15 p-4 sm:grid-cols-2">
         <TimeField label="Quiet from" value={preferences.notificationQuietStart ?? "22:00"} onChange={(value) => void update({ notificationQuietStart: value, notificationTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone })} />
         <TimeField label="Quiet until" value={preferences.notificationQuietEnd ?? "08:00"} onChange={(value) => void update({ notificationQuietEnd: value, notificationTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone })} />
       </div>

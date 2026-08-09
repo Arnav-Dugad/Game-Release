@@ -11,7 +11,6 @@ import {
   Library,
   Radar,
   Sparkles,
-  Tag,
   Trophy,
 } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
@@ -23,17 +22,11 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import type { WatchlistEntry } from "@/lib/firebase/db";
-import { usePreferences } from "@/lib/preferences/PreferencesProvider";
 import { buildDashboardSnapshot, daysUntilRelease } from "@/lib/games/dashboard";
 import { buildTasteProfile, MIN_TASTE_STRENGTH } from "@/lib/games/taste";
 import { canonicalEntryHref } from "@/lib/notifications/model";
 import { cn } from "@/lib/utils/cn";
-import type { GameSummary, Price, Ref } from "@/lib/games/types";
-
-interface DealSignal {
-  entry: WatchlistEntry;
-  price: Price;
-}
+import type { GameSummary, Ref } from "@/lib/games/types";
 
 interface RecommendationState {
   key: string;
@@ -41,23 +34,10 @@ interface RecommendationState {
   personalised: boolean;
 }
 
-interface DealState {
-  key: string;
-  result: DealSignal | null;
-  available: boolean;
-}
-
-interface DealCheck {
-  signal: DealSignal | null;
-  available: boolean;
-}
-
 export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
   const { user, loading: authLoading } = useAuth();
   const { entries, loading: watchlistLoading } = useWatchlist();
-  const { region, ready: regionReady } = usePreferences();
   const [recommendations, setRecommendations] = useState<RecommendationState | null>(null);
-  const [dealState, setDealState] = useState<DealState | null>(null);
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -115,48 +95,11 @@ export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
     return () => controller.abort();
   }, [user, recommendationKey, recommendationGenres, recommendationPlatforms, recommendationExclude]);
 
-  const dealCandidates = useMemo(() => entries
-    .filter((entry) => entry.status === "want" && (entry.ownedOn ?? []).length === 0)
-    .sort((a, b) => b.addedAt - a.addedAt)
-    .slice(0, 8), [entries]);
-  const dealKey = `${region}:${dealCandidates.map((entry) => entry.gameId).join(",")}`;
-
-  useEffect(() => {
-    if (!user || !regionReady || dealCandidates.length === 0) return;
-    const controller = new AbortController();
-    void mapWithLimit(dealCandidates, 3, async (entry) => {
-      try {
-        const response = await fetch(`/api/price?slug=${encodeURIComponent(entry.slug)}&cc=${encodeURIComponent(region)}`, { signal: controller.signal });
-        if (!response.ok) return { signal: null, available: false } satisfies DealCheck;
-        const data = (await response.json()) as { price?: Price | null };
-        return {
-          signal: data.price && data.price.discountPercent > 0 ? { entry, price: data.price } : null,
-          available: true,
-        } satisfies DealCheck;
-      } catch {
-        return { signal: null, available: false } satisfies DealCheck;
-      }
-    }).then((results) => {
-      if (controller.signal.aborted) return;
-      const best = results
-        .map((result) => result.signal)
-        .filter((result): result is DealSignal => result !== null)
-        .sort((a, b) => b.price.discountPercent - a.price.discountPercent)[0] ?? null;
-      setDealState({ key: dealKey, result: best, available: results.some((result) => result.available) });
-    }).catch(() => {
-      if (!controller.signal.aborted) setDealState({ key: dealKey, result: null, available: false });
-    });
-    return () => controller.abort();
-  }, [user, regionReady, region, dealKey, dealCandidates]);
-
   if (authLoading || !user || now === 0) return null;
   if (watchlistLoading) return <CommandCenterSkeleton />;
   if (entries.length === 0) return <CommandCenterOnboarding name={firstName(user.displayName)} />;
 
   const currentRecommendations = recommendations?.key === recommendationKey ? recommendations : null;
-  const currentDealState = dealCandidates.length === 0
-    ? null
-    : dealState?.key === dealKey ? dealState : undefined;
   const focus = snapshot.focus!;
   const focusLabel = focus.status === "playing" ? "Continue your run" : focus.status === "want" ? "Up next" : "Revisit your library";
 
@@ -168,7 +111,7 @@ export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
             <div>
               <p className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-soft"><Radar size={13} /> Personalized command center</p>
               <h2 id="command-center-title" className="text-3xl font-black sm:text-4xl">Welcome back, {firstName(user.displayName)}</h2>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">Your library, release radar, regional prices, and taste profile—synchronized into one live briefing.</p>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">Your library, release radar, progress, and taste profile—synchronized into one live briefing.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/planner" className="group inline-flex w-fit items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Open planner <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></Link>
@@ -200,8 +143,11 @@ export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
               <BriefingCard icon={<CalendarClock size={17} />} eyebrow="Release radar" tone="brand">
                 {snapshot.nextRelease ? <ReleaseSignal entry={snapshot.nextRelease} now={now} releasesSoon={snapshot.releasesSoon} /> : <QuietSignal title="No exact tracked dates" body="Your undated and release-window games remain safe in the watchlist." />}
               </BriefingCard>
-              <BriefingCard icon={<Tag size={17} />} eyebrow="Deal radar" tone="mint">
-                {currentDealState === undefined ? <DealSkeleton /> : currentDealState?.result ? <DealSpotlight signal={currentDealState.result} /> : currentDealState && !currentDealState.available ? <QuietSignal title="Deal radar unavailable" body="Regional prices could not be checked right now. Your watchlist is safe; try again shortly." /> : <QuietSignal title="No tracked sale today" body={dealCandidates.length > 0 ? `Checked ${dealCandidates.length} wanted games in your region.` : "Add wanted games to start scanning regional prices."} success={dealCandidates.length > 0} />}
+              <BriefingCard icon={<Trophy size={17} />} eyebrow="Collection pulse" tone="mint">
+                <Link href="/stats" className="group flex flex-1 items-start gap-3">
+                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-mint/10 text-mint"><CheckCircle2 size={15} /></span>
+                  <span><span className="block text-sm font-semibold transition-colors group-hover:text-mint">{snapshot.played} completed · {snapshot.owned} owned</span><span className="mt-1 block text-xs leading-relaxed text-muted">Open your personal stats studio for progress, platforms, genres, and collecting patterns.</span></span>
+                </Link>
               </BriefingCard>
             </div>
           </div>
@@ -249,16 +195,8 @@ function ReleaseSignal({ entry, now, releasesSoon }: { entry: WatchlistEntry; no
   return <Link href={canonicalEntryHref(entry)} className="group flex min-h-0 flex-1 items-center gap-3"><span className="relative h-20 w-15 shrink-0 overflow-hidden rounded-xl border border-line"><GameCover name={entry.name} slug={entry.slug} image={entry.image} imageFallback={entry.imageFallback} width={180} sizes="60px" /></span><span className="min-w-0"><span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-brand-soft">{days === 0 ? "Releases today" : days === 1 ? "Tomorrow" : `In ${days} days`}</span><span className="mt-1 block line-clamp-2 font-display text-base font-bold leading-snug transition-colors group-hover:text-brand-soft">{entry.name}</span><span className="mt-1 block text-xs text-faint">{formatDate(entry.released)}{releasesSoon > 1 ? ` · ${releasesSoon} due in 30 days` : ""}</span></span></Link>;
 }
 
-function DealSpotlight({ signal }: { signal: DealSignal }) {
-  return <Link href={canonicalEntryHref(signal.entry)} className="group flex min-h-0 flex-1 items-center gap-3"><span className="relative h-20 w-15 shrink-0 overflow-hidden rounded-xl border border-line"><GameCover name={signal.entry.name} slug={signal.entry.slug} image={signal.entry.image} imageFallback={signal.entry.imageFallback} width={180} sizes="60px" /></span><span className="min-w-0 flex-1"><span className="block truncate font-display text-base font-bold transition-colors group-hover:text-mint">{signal.entry.name}</span><span className="mt-1 flex items-baseline gap-2"><span className="font-bold text-mint">{signal.price.current}</span>{signal.price.original && <span className="text-xs text-faint line-through">{signal.price.original}</span>}</span><span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.13em] text-mint">{signal.price.discountPercent}% below list price</span></span></Link>;
-}
-
 function QuietSignal({ title, body, success = false }: { title: string; body: string; success?: boolean }) {
   return <div className="flex flex-1 items-start gap-3"><span className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full", success ? "bg-mint/10 text-mint" : "bg-white/[0.05] text-faint")}>{success ? <CheckCircle2 size={15} /> : <Radar size={15} />}</span><div><p className="text-sm font-semibold">{title}</p><p className="mt-1 text-xs leading-relaxed text-muted">{body}</p></div></div>;
-}
-
-function DealSkeleton() {
-  return <div className="flex items-center gap-3"><Skeleton className="h-20 w-15 shrink-0 rounded-xl" /><div className="flex-1"><Skeleton className="h-4 w-4/5" /><Skeleton className="mt-2 h-3 w-2/5" /><Skeleton className="mt-2 h-3 w-3/5" /></div></div>;
 }
 
 function DashboardStat({ icon, value, label, tone }: { icon: React.ReactNode; value: number; label: string; tone: "brand" | "mint" | "neon" | "gold" }) {
@@ -274,7 +212,7 @@ function CommandCenterOnboarding({ name }: { name: string }) {
   const steps = [
     { icon: <Library size={17} />, title: "Build your library", body: "Track what you own and where you own it." },
     { icon: <Gamepad2 size={17} />, title: "Set your status", body: "Playing and completed games shape your taste." },
-    { icon: <Sparkles size={17} />, title: "Unlock your briefing", body: "Get release, deal, and recommendation signals." },
+    { icon: <Sparkles size={17} />, title: "Unlock your briefing", body: "Get release, progress, and recommendation signals." },
   ];
   return <section className="py-8 sm:py-11"><Container><Reveal className="relative overflow-hidden rounded-[2rem] border border-brand/20 bg-[radial-gradient(circle_at_0%_0%,rgba(124,92,255,0.2),transparent_45%),rgba(16,16,32,0.72)] p-5 sm:p-8"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-soft">Your command center</p><h2 className="mt-2 text-3xl font-black">Let&apos;s make LUDEX yours, {name}</h2><p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">Track one game to activate a personal homepage. Nothing is guessed and no placeholder activity is invented.</p><Stagger className="mt-7 grid gap-3 sm:grid-cols-3" gap={0.05} onMount>{steps.map((step) => <StaggerItem key={step.title}><div className="h-full rounded-2xl border border-line bg-black/20 p-4"><span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-soft">{step.icon}</span><h3 className="mt-3 text-sm font-bold">{step.title}</h3><p className="mt-1 text-xs leading-relaxed text-muted">{step.body}</p></div></StaggerItem>)}</Stagger><div className="mt-6 flex flex-wrap gap-3"><Button href="/browse">Find your first game</Button><Button href="/upcoming" variant="secondary">Explore upcoming releases</Button></div></Reveal></Container></section>;
 }
@@ -290,17 +228,4 @@ function statusLabel(status: WatchlistEntry["status"]): string {
 function formatDate(value: string | null): string {
   if (!value) return "Date to be announced";
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(Date.parse(`${value}T00:00:00Z`));
-}
-
-async function mapWithLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const output = new Array<R>(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      output[index] = await worker(items[index]);
-    }
-  });
-  await Promise.all(workers);
-  return output;
 }

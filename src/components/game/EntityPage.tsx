@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ExpandableText } from "@/components/ui/ExpandableText";
 import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
+import { isIgdbImage } from "@/lib/games/image";
 import type { IgdbEntity } from "@/lib/games/providers/igdb";
 
 export function EntityPage({
@@ -37,7 +38,7 @@ export function EntityPage({
       <header className="noise relative isolate overflow-hidden border-b border-line">
         {collectionPage && entity.image && (
           <div className="absolute inset-0 -z-20">
-            <Image src={entity.image} alt="" fill priority sizes="100vw" className="scale-110 object-cover opacity-35 blur-[2px]" />
+            <Image src={entity.image} alt="" fill priority sizes="100vw" unoptimized={isIgdbImage(entity.image)} className="scale-110 object-cover opacity-35 blur-[2px]" />
           </div>
         )}
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(70%_80%_at_75%_20%,rgba(124,92,255,0.2),transparent_65%)]" />
@@ -74,6 +75,7 @@ export function EntityPage({
                     width={kind === "company" ? 180 : undefined}
                     height={kind === "company" ? 180 : undefined}
                     sizes="176px"
+                    unoptimized={isIgdbImage(entity.image)}
                     className={kind === "company" ? "object-contain p-1" : "object-cover"}
                   />
                 </Reveal>

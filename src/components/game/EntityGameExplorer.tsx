@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { GameGrid } from "./GameGrid";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { GameSummary } from "@/lib/games/types";
@@ -19,6 +19,7 @@ export function EntityGameExplorer({
   const [sort, setSort] = useState<EntitySort>(
     kind === "series" || kind === "franchise" ? "newest" : "featured",
   );
+  const [visibleCount, setVisibleCount] = useState(60);
   const normalised = query.trim().toLocaleLowerCase();
 
   const filtered = useMemo(() => {
@@ -35,6 +36,7 @@ export function EntityGameExplorer({
     }
     return matches;
   }, [games, normalised, sort]);
+  const visible = filtered.slice(0, visibleCount);
 
   return (
     <div className="space-y-6">
@@ -85,12 +87,20 @@ export function EntityGameExplorer({
       </div>
 
       <p aria-live="polite" className="text-sm text-muted">
-        Showing <span className="font-semibold text-text tabular-nums">{filtered.length}</span> of{" "}
-        <span className="tabular-nums">{games.length}</span> games
+        Showing <span className="font-semibold text-text tabular-nums">{visible.length}</span> of{" "}
+        <span className="tabular-nums">{filtered.length}</span> matching games
       </p>
 
       {filtered.length > 0 ? (
-        <GameGrid games={filtered} priorityCount={5} />
+        <>
+          <GameGrid games={visible} priorityCount={5} />
+          {visible.length < filtered.length && (
+            <div className="mt-8 flex flex-col items-center gap-3 rounded-3xl border border-line bg-white/[0.025] p-5 text-center">
+              <p className="text-xs text-muted"><span className="font-semibold text-text tabular-nums">{filtered.length - visible.length}</span> more games remain in this complete catalogue.</p>
+              <button type="button" onClick={() => setVisibleCount((count) => count + 60)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-5 text-sm font-bold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Load 60 more <ChevronDown size={15} /></button>
+            </div>
+          )}
+        </>
       ) : (
         <EmptyState
           icon={<Search size={23} />}

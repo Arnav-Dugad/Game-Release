@@ -29,7 +29,7 @@ const isPosterSize = (value: unknown): value is PosterSize =>
  * Reads and persists the choice for one page, keyed so pages differ freely.
  *
  * Backed by the shared preferences store rather than its own `localStorage`
- * key, so density syncs to the account alongside currency and reduced motion —
+ * key, so density syncs to the account alongside reduced motion —
  * the alternative left one preference stranded on the device while its
  * neighbours followed the reader everywhere.
  */

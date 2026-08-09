@@ -23,11 +23,25 @@ const IGDB_SIZE_SEGMENT = /\/t_[a-z0-9_]+\//i;
  * 264px cover into a 440px slot and look soft on exactly the screens people
  * notice it on.
  */
-function igdbSizeFor(width: number): string {
-  if (width <= 200) return "cover_big";
-  if (width <= 400) return "cover_big_2x";
-  if (width <= 900) return "720p";
-  return "1080p";
+function igdbSizeFor(currentSize: string, width: number): string {
+  // Covers are portrait crops. Retargeting them to 720p/1080p changes the
+  // transform to a landscape fit and was the reason some hero posters appeared
+  // blank or tiny. Keep the asset family intact.
+  if (currentSize.startsWith("cover_")) {
+    return width <= 160 ? "cover_big" : "cover_big_2x";
+  }
+  if (currentSize.startsWith("screenshot_")) return "screenshot_huge";
+  if (currentSize === "logo_med") return currentSize;
+  return width <= 900 ? "720p" : "1080p";
+}
+
+export function isIgdbImage(url: string | null | undefined): boolean {
+  return Boolean(url?.includes(IGDB_HOST));
+}
+
+/** Hosts that already publish fixed transforms and are more reliable direct. */
+export function shouldBypassImageOptimizer(url: string | null | undefined): boolean {
+  return isIgdbImage(url) || Boolean(url?.includes("i.ytimg.com"));
 }
 
 export function sizedImage(url: string | null | undefined, width?: number): string | null {
@@ -35,7 +49,8 @@ export function sizedImage(url: string | null | undefined, width?: number): stri
   if (!width) return url;
 
   if (url.includes(IGDB_HOST) && IGDB_SIZE_SEGMENT.test(url)) {
-    return url.replace(IGDB_SIZE_SEGMENT, `/t_${igdbSizeFor(width)}/`);
+    const currentSize = url.match(/\/t_([a-z0-9_]+)\//i)?.[1] ?? "";
+    return url.replace(IGDB_SIZE_SEGMENT, `/t_${igdbSizeFor(currentSize, width)}/`);
   }
 
   return url;

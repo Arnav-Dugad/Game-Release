@@ -127,7 +127,7 @@ export function GameCard({
 
           "Do I own this?" is the question people are actually answering while
           scrolling a catalogue, and it is the one the site can act on later —
-          for deals, for the library, for recommendations. The watchlist still
+          for the library, planner, and recommendations. The watchlist still
           lives on the game page, where there is room to explain it.
         */}
         {showOwnership && (

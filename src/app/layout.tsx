@@ -68,20 +68,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-/*
- * Deliberately not `async`, and deliberately reads no cookies.
- *
- * The region preference used to be read here so the provider could be seeded
- * during SSR. `cookies()` in the *root layout* is the widest possible dynamic
- * opt-in: it forces every route in the application to be server-rendered on
- * demand, which cost the site all of its prerendering and ISR — the homepage,
- * browse, genres, platforms and all 60 prerendered game pages included.
- *
- * That is a very large bill for a very small benefit. The region only affects
- * Steam price formatting, `PreferencesProvider` already recovers it on mount
- * from localStorage and the cookie, and the one page where the price is shown
- * resolves it separately. So the read belongs there, not here.
- */
+/* Deliberately static so catalogue pages keep prerendering and ISR. */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sora.variable} ${inter.variable}`} suppressHydrationWarning>

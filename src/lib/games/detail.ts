@@ -12,7 +12,6 @@ export const DETAIL_DEFAULTS: Omit<GameDetail, keyof import("./types").GameSumma
   description: "",
   storyline: null,
   steamAppId: null,
-  price: null,
   website: null,
   companies: [],
   developers: [],

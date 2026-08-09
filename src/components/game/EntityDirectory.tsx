@@ -20,6 +20,7 @@ import { Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { hueFromString } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { DirectoryRef } from "@/lib/games/types";
+import { isIgdbImage } from "@/lib/games/image";
 
 export function EntityDirectory({
   items,
@@ -239,6 +240,7 @@ function StudioCard({ studio, priority }: { studio: DirectoryRef; priority: bool
             alt=""
             fill
             priority={priority}
+            unoptimized={isIgdbImage(studio.logo)}
             sizes="(max-width: 640px) 42vw, 180px"
             onError={() => setLogoFailed(true)}
             className="object-contain p-2.5 transition-transform duration-500 fine:group-hover:scale-105"

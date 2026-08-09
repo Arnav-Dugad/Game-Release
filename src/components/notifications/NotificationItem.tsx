@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Gamepad2, Rocket, Tag } from "lucide-react";
+import { CalendarClock, Gamepad2, Rocket } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
 import type { AppNotification, NotificationKind } from "@/lib/notifications/model";
 import { cn } from "@/lib/utils/cn";
 
-const KIND_META: Record<NotificationKind, { label: string; icon: typeof Tag; tone: string }> = {
-  deal: { label: "Deal alert", icon: Tag, tone: "text-mint bg-mint/10 border-mint/20" },
+const KIND_META: Record<NotificationKind, { label: string; icon: typeof Rocket; tone: string }> = {
   "release-today": { label: "Releases today", icon: Rocket, tone: "text-gold bg-gold/10 border-gold/20" },
   "release-soon": { label: "Coming soon", icon: CalendarClock, tone: "text-brand-soft bg-brand/10 border-brand/20" },
   released: { label: "Out now", icon: Gamepad2, tone: "text-neon bg-neon/10 border-neon/20" },

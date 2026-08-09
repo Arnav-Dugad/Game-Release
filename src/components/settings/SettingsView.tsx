@@ -1,21 +1,19 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 /**
  * Settings.
  *
  * Every control here applies immediately — there is no save button, because a
  * save button on a preferences screen is a promise the reader has to trust.
- * Changing the currency reloads the current route so server-rendered prices
- * re-fetch in the new region rather than showing a stale figure.
  */
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   BellRing,
   Bookmark,
   Check,
-  Coins,
   Gauge,
   LogOut,
   Sparkles,
@@ -25,7 +23,6 @@ import {
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { usePreferences } from "@/lib/preferences/PreferencesProvider";
-import { STEAM_REGIONS } from "@/lib/games/stores-catalog";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/SectionHeading";
 import { useToast } from "@/components/ui/Toast";
@@ -37,7 +34,6 @@ export function SettingsView() {
   return (
     <Container className="max-w-3xl py-10 lg:py-14">
       <div className="space-y-5">
-        <RegionCard />
         <NotificationCard />
         <MotionCard />
         <AccountCard />
@@ -82,8 +78,6 @@ function SettingCard({
 
 function NotificationCard() {
   const {
-    notificationDeals,
-    setNotificationDeals,
     notificationReleases,
     setNotificationReleases,
   } = usePreferences();
@@ -103,84 +97,12 @@ function NotificationCard() {
           label="Release reminders"
           hint="From 14 days before launch through the first three days after release."
         />
-        <Toggle
-          checked={notificationDeals}
-          onChange={setNotificationDeals}
-          label="Watchlist deal alerts"
-          hint="Checks wanted games against live prices in your selected Steam region."
-        />
       </div>
       <DeliverySettings />
     </SettingCard>
   );
 }
 
-function RegionCard() {
-  const { region, regionInfo, setRegion, ready } = usePreferences();
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  const choose = (cc: string) => {
-    if (cc === region) return;
-    setRegion(cc);
-    // Prices are rendered on the server from the region cookie, so the route
-    // has to re-run for the change to be visible.
-    startTransition(() => {
-      router.refresh();
-      toast(`Prices now shown in ${STEAM_REGIONS.find((r) => r.cc === cc)?.currency}`, "success");
-    });
-  };
-
-  return (
-    <SettingCard
-      icon={<Coins size={19} />}
-      title="Store region & currency"
-      description="Steam prices are shown for this country. Changing it changes the currency on every game page."
-    >
-      <div className="mb-4 flex items-center gap-2 text-sm">
-        <span className="text-muted">Currently</span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-brand/40 bg-brand/12 px-3 py-1.5 font-semibold text-white">
-          {regionInfo.name}
-          <span className="text-brand-soft">{regionInfo.currency}</span>
-        </span>
-        {pending && <span className="text-xs text-faint">updating…</span>}
-      </div>
-
-      <ul
-        className={cn(
-          "grid grid-cols-2 gap-2 sm:grid-cols-3",
-          !ready && "pointer-events-none opacity-60",
-        )}
-      >
-        {STEAM_REGIONS.map((option) => {
-          const active = option.cc === region;
-          return (
-            <li key={option.cc}>
-              <button
-                type="button"
-                onClick={() => choose(option.cc)}
-                aria-pressed={active}
-                className={cn(
-                  "flex w-full min-h-12 items-center justify-between gap-2 rounded-xl border px-3.5 text-left text-[13px] transition-colors",
-                  active
-                    ? "border-brand/50 bg-brand/15 text-white"
-                    : "border-line bg-white/[0.03] text-muted fine:hover:border-line-strong fine:hover:text-text",
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate">{option.name}</span>
-                <span className={cn("shrink-0 text-[11px]", active ? "text-brand-soft" : "text-faint")}>
-                  {option.currency}
-                </span>
-                {active && <Check size={13} className="shrink-0 text-brand-soft" />}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </SettingCard>
-  );
-}
 
 function MotionCard() {
   const { reduceMotion, setReduceMotion } = usePreferences();
@@ -317,7 +239,7 @@ function DataCard() {
     <SettingCard
       icon={<Wifi size={19} />}
       title="Data source"
-      description="Game data comes from IGDB, with Steam supplying live prices and system requirements."
+      description="Game data comes from IGDB, with Steam used only when a platform-specific system requirement is unavailable there."
       delay={0.15}
     >
       <div className="flex flex-wrap items-center gap-3">

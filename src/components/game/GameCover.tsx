@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { sizedImage } from "@/lib/games/image";
+import { isIgdbImage, sizedImage } from "@/lib/games/image";
 import { hueFromString, initials } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -74,6 +74,7 @@ export function GameCover({
       fill
       sizes={sizes}
       priority={priority}
+      unoptimized={isIgdbImage(src)}
       onError={() => setFailed((prev) => (prev.includes(src) ? prev : [...prev, src]))}
       className={cn("object-cover", rounded, className)}
     />

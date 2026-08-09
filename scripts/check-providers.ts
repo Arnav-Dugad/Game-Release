@@ -15,13 +15,11 @@ import { stripHtml, slugify } from "../src/lib/utils/html";
 import { classifyUrl, storeFromUrl } from "../src/lib/games/stores";
 import { buildTasteProfile, MIN_TASTE_STRENGTH } from "../src/lib/games/taste";
 import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/games/directory";
-import { filterDeals } from "../src/lib/games/deals";
-import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/price-history";
-import type { DealListing, GameSummary } from "../src/lib/games/types";
-import { canonicalEntryHref, dealNotification, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
+import { canonicalEntryHref, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
 import { buildPlannerIcs, buildPlannerSnapshot } from "../src/lib/games/planner";
+import { buildLibraryStats } from "../src/lib/games/stats";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
@@ -116,9 +114,9 @@ check(
   "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
 );
 check(
-  "upsizes for a hero",
+  "hero preserves the portrait cover transform",
   sizedImage(cover, 1920),
-  "https://images.igdb.com/igdb/image/upload/t_1080p/co4jni.jpg",
+  "https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co4jni.jpg",
 );
 check(
   "non-IGDB host is untouched",
@@ -251,41 +249,6 @@ check(
   'games != null & name ~ *"Halo id > 0"*',
 );
 
-console.log("\nDeal filtering and price evidence");
-const dealGame = (id: number, name: string, genre: string): GameSummary => ({
-  id,
-  slug: name.toLowerCase().replaceAll(" ", "-"),
-  name,
-  released: null,
-  releaseWindow: null,
-  tba: false,
-  image: null,
-  imageFallback: null,
-  rating: 0,
-  ratingsCount: 0,
-  metacritic: null,
-  platforms: [],
-  parentPlatforms: [],
-  genres: [{ id, slug: genre.toLowerCase(), name: genre }],
-  screenshots: [],
-  esrb: null,
-  popScore: null,
-  heroTrailer: null,
-  playtime: 0,
-  added: 0,
-});
-const testDeals: DealListing[] = [
-  { game: dealGame(1, "Quiet RPG", "RPG"), canonicalSlug: "quiet-rpg", price: { current: "$20.00", original: "$40.00", discountPercent: 50, isFree: false }, steamAppId: 1, currentAmount: 2000, currency: "USD", storeUrl: "https://store.steampowered.com/app/1/" },
-  { game: dealGame(2, "Fast Action", "Action"), canonicalSlug: "fast-action", price: { current: "$5.00", original: "$20.00", discountPercent: 75, isFree: false }, steamAppId: 2, currentAmount: 500, currency: "USD", storeUrl: "https://store.steampowered.com/app/2/" },
-];
-check("discount sort is default", filterDeals(testDeals, {}).map((deal) => deal.steamAppId), [2, 1]);
-check("genre search participates", filterDeals(testDeals, { query: "rpg" }).map((deal) => deal.steamAppId), [1]);
-check("minimum discount filters", filterDeals(testDeals, { minimumDiscount: 60 }).map((deal) => deal.steamAppId), [2]);
-check("regional price parsing", parseAmount("₹3,999"), 399900);
-const point = (date: string, amount: number): PricePoint => ({ date, amount, original: null, discountPercent: 0, isFree: false, formatted: String(amount), currency: "USD" });
-check("two observations make no price claim", priceInsight([point("2026-08-02", 500), point("2026-08-01", 700)]), null);
-check("three observations can establish a low", priceInsight([point("2026-08-03", 400), point("2026-08-02", 500), point("2026-08-01", 700)])?.isAllTimeLow, true);
-
 console.log("\nNotification signals");
 const notificationEntry = (overrides: Partial<WatchlistEntry> = {}): WatchlistEntry => ({
   gameId: 77,
@@ -323,11 +286,6 @@ check(
   canonicalEntryHref(notificationEntry({ slug: "signal-game-s124" })),
   "/browse?search=Signal%20Game",
 );
-check(
-  "deal notification identity is stable",
-  dealNotification(notificationEntry(), 124, { current: "$5.00", original: "$10.00", discountPercent: 50, isFree: false }, "United States", 1).id,
-  "deal:124:50:$5.00",
-);
 check("overnight quiet hours include midnight", isQuietHours(Date.parse("2026-08-09T00:30:00Z"), "UTC", "22:00", "08:00"), true);
 check("overnight quiet hours end cleanly", isQuietHours(Date.parse("2026-08-09T08:00:00Z"), "UTC", "22:00", "08:00"), false);
 check("daytime quiet window works", isQuietHours(Date.parse("2026-08-09T13:00:00Z"), "UTC", "12:00", "14:00"), true);
@@ -346,6 +304,16 @@ check("dashboard status counts are honest", [dashboardSnapshot.playing, dashboar
 check("owned count ignores wishlist-only games", dashboardSnapshot.owned, 2);
 check("thirty-day release window", dashboardSnapshot.releasesSoon, 1);
 check("release countdown is day-stable", daysUntilRelease("2026-08-25", dashboardNow), 16);
+
+console.log("\nFirebase library statistics");
+const libraryStats = buildLibraryStats([
+  notificationEntry({ gameId: 10, name: "Cross-platform", ownedOn: ["steam", "playstation"], status: "played" }),
+  notificationEntry({ gameId: 10, name: "Cross-platform", ownedOn: ["xbox"], status: "played", addedAt: 2 }),
+  notificationEntry({ gameId: 11, name: "One copy", ownedOn: ["steam"], status: "want", addedAt: 3 }),
+]);
+check("duplicate records merge by game id", libraryStats.uniqueGames, 2);
+check("multi-platform ownership counts once", libraryStats.ownedGames, 2);
+check("platform copies remain a separate metric", libraryStats.platformCopies, 4);
 
 console.log("\nPersonal release planner");
 const plannerEntries = [

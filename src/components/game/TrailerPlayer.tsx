@@ -11,10 +11,10 @@
  * third-party tracker.
  */
 
-import Image from "next/image";
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { ExternalLink, Play } from "lucide-react";
 import type { Trailer } from "@/lib/games/types";
+import { ResilientMediaImage } from "./ResilientMediaImage";
 
 export function TrailerPlayer({
   trailer,
@@ -48,14 +48,17 @@ export function TrailerPlayer({
 
   if (playing) {
     return (
-      <iframe
-        // `youtube-nocookie` avoids setting tracking cookies until playback.
-        src={`https://www.youtube-nocookie.com/embed/${trailer.youtubeId}?autoplay=1&rel=0`}
-        title={trailer.name}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        className="h-full w-full border-0 bg-black"
-      />
+      <div className="relative h-full w-full bg-black">
+        <iframe
+          // `youtube-nocookie` avoids setting tracking cookies until playback.
+          src={`https://www.youtube-nocookie.com/embed/${trailer.youtubeId}?autoplay=1&rel=0`}
+          title={trailer.name}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="h-full w-full border-0 bg-black"
+        />
+        <a href={trailer.url ?? `https://www.youtube.com/watch?v=${trailer.youtubeId}`} target="_blank" rel="noreferrer" className="absolute bottom-3 right-3 inline-flex min-h-9 items-center gap-2 rounded-full border border-white/15 bg-black/70 px-3 text-[11px] font-semibold text-white/80 backdrop-blur-md transition-colors hover:bg-black hover:text-white">Open on YouTube <ExternalLink size={12} /></a>
+      </div>
     );
   }
 
@@ -67,10 +70,9 @@ export function TrailerPlayer({
       className="group relative block h-full w-full overflow-hidden bg-black"
     >
       {trailer.preview && (
-        <Image
+        <ResilientMediaImage
           src={trailer.preview}
           alt=""
-          fill
           sizes="(max-width: 640px) 100vw, 50vw"
           className="object-cover opacity-80 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
         />

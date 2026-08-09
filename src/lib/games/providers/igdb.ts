@@ -783,13 +783,6 @@ interface IgdbGameVersion {
   games?: Array<number | { id?: number }>;
 }
 
-interface IgdbExternalGame {
-  uid?: string;
-  external_game_source?: number;
-  url?: string;
-  game?: IgdbGame;
-}
-
 /* ---------------------------------------------------------------------------
  * Images
  * ------------------------------------------------------------------------ */
@@ -1068,9 +1061,13 @@ const CANCELLED = 6;
 
 /** IGDB hosts no media itself — `video_id` is always a YouTube id. */
 function toTrailers(game: IgdbGame): Trailer[] {
+  const seen = new Set<string>();
   return (game.videos ?? [])
-    .filter((video) => video.video_id)
-    .slice(0, 6)
+    .filter((video): video is { video_id: string; name?: string } => {
+      if (!video.video_id || seen.has(video.video_id)) return false;
+      seen.add(video.video_id);
+      return true;
+    })
     .map((video, index) => ({
       id: index,
       name: video.name?.trim() || "Trailer",
@@ -1084,6 +1081,9 @@ function toTrailers(game: IgdbGame): Trailer[] {
 function mapSummary(game: IgdbGame): GameSummary {
   const release = resolveRelease(game);
   const ratings = mapAgeRatings(game);
+  const screenshots = (game.screenshots ?? [])
+    .map((shot) => igdbImage(shot.image_id, "screenshot_huge"))
+    .filter((url): url is string => Boolean(url));
 
   return {
     id: game.id,
@@ -1091,7 +1091,9 @@ function mapSummary(game: IgdbGame): GameSummary {
     name: game.name,
     ...release,
     image: igdbImage(game.cover?.image_id, "cover_big_2x"),
-    imageFallback: null,
+    // A minority of valid IGDB records have no cover. Real key media is a
+    // stronger fallback than generated initials, even when cropped to a card.
+    imageFallback: screenshots[0] ?? null,
     // IGDB user ratings are 0–100; the UI's star scale is 0–5.
     rating: typeof game.rating === "number" ? Math.round((game.rating / 20) * 10) / 10 : 0,
     ratingsCount: game.rating_count ?? 0,
@@ -1100,9 +1102,7 @@ function mapSummary(game: IgdbGame): GameSummary {
     platforms: toRefs(game.platforms),
     parentPlatforms: toFamilies(game.platforms),
     genres: toRefs(game.genres),
-    screenshots: (game.screenshots ?? [])
-      .map((shot) => igdbImage(shot.image_id, "screenshot_huge"))
-      .filter((url): url is string => Boolean(url)),
+    screenshots,
     esrb: ratings.find((r) => r.organization.toUpperCase().includes("ESRB"))?.rating ?? null,
     heroTrailer: toTrailers(game).at(0) ?? null,
     popScore: typeof game.popScore === "number" ? game.popScore : null,
@@ -1111,47 +1111,6 @@ function mapSummary(game: IgdbGame): GameSummary {
     // engagement. Either is a reasonable popularity proxy for its lifecycle stage.
     added: game.total_rating_count ?? game.hypes ?? 0,
   };
-}
-
-/**
- * Resolves Steam storefront ids to the canonical IGDB game records.
- *
- * Deals originate from Steam because it owns the live price, but every
- * internal game journey belongs to IGDB. The external-games endpoint provides
- * the exact bridge, avoiding unreliable title matching and edition mistakes.
- */
-export async function igdbGamesForSteamAppIds(
-  appids: number[],
-): Promise<Map<number, GameSummary>> {
-  if (!igdbConfigured()) return new Map();
-  const ids = [...new Set(appids.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 60);
-  if (ids.length === 0) return new Map();
-
-  const fields = ["uid", "external_game_source", "url", ...CORE_SUMMARY.map((field) => `game.${field}`)];
-  const quoted = ids.map((id) => `"${id}"`).join(",");
-
-  try {
-    const rows = await queryFor(TTL.search)<IgdbExternalGame[]>(
-      "external_games",
-      apicalypse({
-        fields: fields.join(","),
-        where: `external_game_source = 1 & uid = (${quoted})`,
-        limit: ids.length,
-      }),
-    );
-
-    const mapped = new Map<number, GameSummary>();
-    for (const row of rows) {
-      const appid = Number(row.uid);
-      if (!Number.isInteger(appid) || !row.game || row.external_game_source !== 1) continue;
-      if (!row.game.id || !row.game.name || !row.game.slug || row.game.status === CANCELLED) continue;
-      mapped.set(appid, mapSummary(row.game));
-    }
-    return mapped;
-  } catch (err) {
-    warn("deals.canonical", err);
-    return new Map();
-  }
 }
 
 /** Nested game relations only request summary fields, which is exactly enough
@@ -1225,13 +1184,16 @@ function mapDetail(game: IgdbGame): GameDetail {
         offlineMax: multiplayer.offlinemax ?? null,
       }
     : null;
+  const artworks = (game.artworks ?? [])
+    .map((art) => igdbImage(art.image_id, "1080p"))
+    .filter((url): url is string => Boolean(url));
 
   return {
     ...summary,
+    imageFallback: summary.imageFallback ?? artworks[0] ?? null,
     description,
     storyline: summaryText && storylineText ? storylineText : null,
     steamAppId,
-    price: null,
     website: officialSite,
     companies: toCompanies(game),
     developers: companiesWhere((entry) => Boolean(entry.developer)),
@@ -1263,9 +1225,7 @@ function mapDetail(game: IgdbGame): GameDetail {
       ),
     ],
     multiplayerModes,
-    artworks: (game.artworks ?? [])
-      .map((art) => igdbImage(art.image_id, "1080p"))
-      .filter((url): url is string => Boolean(url)),
+    artworks,
     platformDetails: toPlatformDetails(game.platforms),
     releases: toReleaseEvents(game),
     // Filled by `detail()`, which fetches the cast separately — characters are
@@ -1378,7 +1338,7 @@ async function fetchCharacters(gameId: number): Promise<CharacterRef[]> {
     apicalypse({
       fields: "name,slug,description,mug_shot.image_id,species,gender",
       where: `games = (${gameId})`,
-      limit: 24,
+      limit: 500,
     }),
   );
 
@@ -1514,6 +1474,48 @@ async function listGames(parts: Omit<QueryParts, "fields">, revalidate: number) 
   return usable(rows).map(mapSummary);
 }
 
+/**
+ * Loads every game linked by an IGDB relationship.
+ *
+ * A single IGDB request is capped at 500 records. Series, franchises and
+ * prolific studios can exceed that, so relationship ids must be chunked
+ * instead of silently slicing the catalogue to a UI-sized number.
+ */
+async function listGamesByIds(
+  rawIds: number[],
+  order: "release-desc" | "popularity" = "release-desc",
+): Promise<GameSummary[]> {
+  const ids = [...new Set(rawIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return [];
+
+  const chunks: number[][] = [];
+  for (let index = 0; index < ids.length; index += 450) {
+    chunks.push(ids.slice(index, index + 450));
+  }
+
+  const pages = await Promise.all(
+    chunks.map((chunk) =>
+      listGames(
+        {
+          where: `id = (${chunk.join(",")})`,
+          limit: chunk.length,
+        },
+        TTL.detail,
+      ),
+    ),
+  );
+
+  const games = pages.flat();
+  return games.sort((a, b) => {
+    if (order === "popularity") {
+      const engagement = b.added - a.added;
+      if (engagement !== 0) return engagement;
+    }
+    const release = (b.released ?? "0000").localeCompare(a.released ?? "0000");
+    return release || a.name.localeCompare(b.name);
+  });
+}
+
 /** True alternate editions from IGDB's dedicated version relationship. */
 async function fetchEditions(gameId: number): Promise<GameSummary[]> {
   const query = queryFor(TTL.detail);
@@ -1522,7 +1524,7 @@ async function fetchEditions(gameId: number): Promise<GameSummary[]> {
     apicalypse({
       fields: "game,games",
       where: `(game = ${gameId} | games = (${gameId}))`,
-      limit: 50,
+      limit: 500,
     }),
   );
   const ids = [
@@ -1534,7 +1536,7 @@ async function fetchEditions(gameId: number): Promise<GameSummary[]> {
     ),
   ];
   if (ids.length === 0) return [];
-  return listGames({ where: `id = (${ids.join(",")})`, limit: Math.min(ids.length, 50) }, TTL.detail);
+  return listGamesByIds(ids);
 }
 
 async function countGames(where: string, revalidate: number): Promise<number> {
@@ -2342,18 +2344,8 @@ export async function igdbCompany(slug: string): Promise<IgdbEntity | null> {
     if (!company) return null;
 
     // Developed first, then published — a studio's own work leads.
-    const gameIds = [...new Set([...(company.developed ?? []), ...(company.published ?? [])])].slice(
-      0,
-      60,
-    );
-
-    const games =
-      gameIds.length > 0
-        ? await listGames(
-            { where: `id = (${gameIds.join(",")})`, sort: "total_rating_count desc", limit: 48 },
-            TTL.detail,
-          )
-        : [];
+    const gameIds = [...new Set([...(company.developed ?? []), ...(company.published ?? [])])];
+    const games = await listGamesByIds(gameIds, "popularity");
 
     return {
       id: company.id,
@@ -2387,14 +2379,7 @@ export async function igdbCharacter(slug: string): Promise<IgdbEntity | null> {
     const character = rows[0];
     if (!character) return null;
 
-    const gameIds = (character.games ?? []).slice(0, 48);
-    const games =
-      gameIds.length > 0
-        ? await listGames(
-            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 48 },
-            TTL.detail,
-          )
-        : [];
+    const games = await listGamesByIds(character.games ?? []);
 
     return {
       id: character.id,
@@ -2432,14 +2417,7 @@ export async function igdbSeries(slug: string): Promise<IgdbEntity | null> {
     const entity = rows[0];
     if (!entity) return null;
 
-    const gameIds = (entity.games ?? []).slice(0, 60);
-    const games =
-      gameIds.length > 0
-        ? await listGames(
-            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 60 },
-            TTL.detail,
-          )
-        : [];
+    const games = await listGamesByIds(entity.games ?? []);
 
     if (games.length < 2) return null;
 
@@ -2478,14 +2456,7 @@ export async function igdbFranchise(slug: string): Promise<IgdbEntity | null> {
     const entity = rows[0];
     if (!entity) return null;
 
-    const gameIds = (entity.games ?? []).slice(0, 80);
-    const games =
-      gameIds.length > 0
-        ? await listGames(
-            { where: `id = (${gameIds.join(",")})`, sort: "first_release_date desc", limit: 72 },
-            TTL.detail,
-          )
-        : [];
+    const games = await listGamesByIds(entity.games ?? []);
 
     return {
       id: entity.id,

@@ -17,7 +17,6 @@ import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
 import { PlatformPicker } from "./PlatformPicker";
 import { PosterTile } from "./PosterTile";
-import { DealsRail } from "@/components/library/DealsRail";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -145,10 +144,6 @@ export function WatchlistView() {
 
   return (
     <Container className="py-8 lg:py-12">
-      {/* A discount on something you're waiting for is the most actionable
-          thing this page can tell you, so it goes above the list itself. */}
-      <DealsRail />
-
       <div className="mb-6 space-y-4 rounded-2xl border border-line bg-panel/40 p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1">

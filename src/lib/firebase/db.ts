@@ -65,6 +65,8 @@ export interface WatchlistEntry {
    * pages for every tracked game.
    */
   genreIds: number[];
+  /** Genre labels kept with the record so personal analytics remain useful offline. */
+  genres?: Array<{ id: number; slug: string; name: string }>;
   /** Platform family slugs the game is available on. */
   platformSlugs: string[];
   /**
@@ -115,8 +117,6 @@ export interface UserProfile {
  * stay readable, and a partial write must never blank a key it didn't set.
  */
 export interface UserPreferences {
-  /** Steam country code driving price currency, e.g. "in". */
-  region?: string;
   /** User-level motion opt-out, on top of the OS setting. */
   reduceMotion?: boolean;
   /**
@@ -129,13 +129,10 @@ export interface UserPreferences {
   posterSizes?: Record<string, string>;
   /** Stable derived-notification ids already seen by this account. */
   notificationReadIds?: string[];
-  notificationDeals?: boolean;
   notificationReleases?: boolean;
   /** Scheduled outbound delivery channels. Both are opt-in. */
   notificationPushEnabled?: boolean;
   notificationEmailEnabled?: boolean;
-  /** Do not deliver a deal below this percentage. */
-  notificationMinimumDiscount?: number;
   /** Device/account planning capacity used by the release planner. */
   plannerWeeklyHours?: number;
   /** Local quiet window in 24-hour HH:mm form and its IANA timezone. */
@@ -270,6 +267,7 @@ export function watchlistEntryFromGame(game: GameSummary, status: WatchStatus): 
     finishedAt: status === "played" ? Date.now() : null,
     ownedOn: [],
     genreIds: game.genres.map((genre) => genre.id),
+    genres: game.genres.map(({ id, slug, name }) => ({ id, slug, name })),
     platformSlugs: game.parentPlatforms.map((platform) => platform.slug),
     addedAt: Date.now(),
   };
@@ -361,6 +359,7 @@ export function subscribeWatchlist(
           startedAt: data.startedAt ?? null,
           finishedAt: data.finishedAt ?? null,
           genreIds: data.genreIds ?? [],
+          genres: data.genres ?? [],
           ownedOn: data.ownedOn ?? [],
           platformSlugs: data.platformSlugs ?? [],
         };

@@ -4,7 +4,7 @@ import { SettingsView } from "@/components/settings/SettingsView";
 
 export const metadata: Metadata = {
   title: "Settings",
-  description: "Currency, motion and account preferences for LUDEX.",
+  description: "Notification, motion, account and data preferences for LUDEX.",
   robots: { index: false, follow: false },
 };
 
@@ -14,7 +14,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Preferences"
         title="Settings"
-        description="How prices are shown, how much the interface moves, and what's connected."
+        description="Control notifications, motion, account access, and data connectivity."
       />
       <SettingsView />
     </>

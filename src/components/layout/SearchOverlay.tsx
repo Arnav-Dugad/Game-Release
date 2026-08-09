@@ -55,7 +55,7 @@ function hitAsGame(hit: SearchHit): GameSummary {
 
 const QUICK_LINKS = [
   { label: "Upcoming releases", detail: "The complete calendar", href: "/upcoming" },
-  { label: "Deals", detail: "Live regional prices", href: "/deals" },
+  { label: "Personal stats", detail: "Your library, beautifully measured", href: "/stats" },
   { label: "Top rated", detail: "Critics’ highest scores", href: "/browse?ordering=-metacritic" },
   { label: "Studios", detail: "Developers and publishers", href: "/studios" },
   { label: "Series", detail: "Connected release lines", href: "/series" },

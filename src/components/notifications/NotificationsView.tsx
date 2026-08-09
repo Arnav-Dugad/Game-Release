@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bell, BellRing, CalendarClock, CheckCheck, Radio, Tag } from "lucide-react";
+import { Bell, BellRing, CalendarClock, CheckCheck, Radio } from "lucide-react";
 import { NotificationItem } from "./NotificationItem";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -11,19 +11,16 @@ import { useNotifications } from "@/lib/notifications/NotificationsProvider";
 import { cn } from "@/lib/utils/cn";
 import { DeliveryHistory } from "./DeliveryHistory";
 
-type Filter = "all" | "unread" | "deals" | "releases";
+type Filter = "all" | "unread";
 
 export function NotificationsView() {
   const { notifications, unreadCount, loading, isRead, markRead, markAllRead } = useNotifications();
   const [filter, setFilter] = useState<Filter>("all");
-  const dealCount = notifications.filter((item) => item.kind === "deal").length;
-  const releaseCount = notifications.length - dealCount;
+  const releaseCount = notifications.length;
   const visible = useMemo(
     () =>
       notifications.filter((item) => {
         if (filter === "unread") return !isRead(item.id);
-        if (filter === "deals") return item.kind === "deal";
-        if (filter === "releases") return item.kind !== "deal";
         return true;
       }),
     [notifications, filter, isRead],
@@ -44,16 +41,14 @@ export function NotificationsView() {
     <Container className="py-8 lg:py-12">
       <Stagger className="grid gap-3 sm:grid-cols-3" onMount gap={0.05}>
         <StaggerItem><Metric icon={<BellRing size={18} />} label="Unread" value={unreadCount} tone="brand" /></StaggerItem>
-        <StaggerItem><Metric icon={<Tag size={18} />} label="Live deals" value={dealCount} tone="mint" /></StaggerItem>
-        <StaggerItem><Metric icon={<CalendarClock size={18} />} label="Release updates" value={releaseCount} tone="gold" /></StaggerItem>
+        <StaggerItem><Metric icon={<CalendarClock size={18} />} label="Release updates" value={releaseCount} tone="mint" /></StaggerItem>
+        <StaggerItem><Metric icon={<CheckCheck size={18} />} label="Read" value={releaseCount - unreadCount} tone="gold" /></StaggerItem>
       </Stagger>
 
       <Reveal onMount className="mt-8 flex flex-col gap-3 rounded-2xl border border-line bg-panel/40 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex overflow-x-auto rounded-xl border border-line bg-black/20 p-1 no-scrollbar">
           <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All <span>{notifications.length}</span></FilterButton>
           <FilterButton active={filter === "unread"} onClick={() => setFilter("unread")}>Unread <span>{unreadCount}</span></FilterButton>
-          <FilterButton active={filter === "deals"} onClick={() => setFilter("deals")}>Deals <span>{dealCount}</span></FilterButton>
-          <FilterButton active={filter === "releases"} onClick={() => setFilter("releases")}>Releases <span>{releaseCount}</span></FilterButton>
         </div>
         {unreadCount > 0 && <Button variant="secondary" size="sm" icon={<CheckCheck size={15} />} onClick={markAllRead}>Mark all read</Button>}
       </Reveal>
@@ -63,9 +58,8 @@ export function NotificationsView() {
           <EmptyState
             icon={filter === "all" ? <Bell size={23} /> : <CheckCheck size={23} />}
             title={notifications.length === 0 ? "Nothing needs your attention" : "You're caught up here"}
-            body={notifications.length === 0 ? "Track upcoming games to receive launch reminders and live regional deal alerts." : "There are no notifications matching this filter."}
+            body={notifications.length === 0 ? "Track upcoming games to receive timely launch reminders." : "There are no notifications matching this filter."}
             action={notifications.length === 0 ? { href: "/upcoming", label: "Find upcoming games" } : { onClick: () => setFilter("all"), label: "Show everything" }}
-            secondaryAction={{ href: "/deals", label: "Explore deals" }}
           />
         ) : (
           <Stagger as="ul" onMount className="space-y-2.5" gap={0.035}>
@@ -84,7 +78,7 @@ export function NotificationsView() {
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div className="flex gap-4">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-mint/20 bg-mint/10 text-mint"><Radio size={18} /></span>
-            <div><h2 className="font-display text-lg font-bold">Your delivery control room</h2><p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">The inbox is always available. Enable scheduled device push or email, choose a meaningful discount threshold, and protect your quiet hours in Settings.</p></div>
+            <div><h2 className="font-display text-lg font-bold">Your delivery control room</h2><p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">The inbox is always available. Enable scheduled device push or email and protect your quiet hours in Settings.</p></div>
           </div>
           <Button href="/settings#notifications" variant="secondary" size="sm">Notification settings</Button>
         </div>

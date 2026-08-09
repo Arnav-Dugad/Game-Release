@@ -7,7 +7,7 @@ const PAGE_ROUTES = [
   "/",
   "/upcoming",
   "/browse",
-  "/deals",
+  "/stats",
   "/genres",
   "/platforms",
   "/studios",
@@ -228,15 +228,6 @@ async function auditApis() {
   const recommendationsBody = recordOf(recommendations.body);
   check("recommendation contract", recommendations.response.status === 200 && Array.isArray(recommendationsBody.results) && typeof recommendationsBody.personalised === "boolean", `status ${recommendations.response.status}`);
 
-  const deals = await json("/api/deals?cc=in&limit=12");
-  const dealsBody = recordOf(deals.body);
-  check("deal API degrades explicitly", [200, 503].includes(deals.response.status) && Array.isArray(dealsBody.deals) && typeof dealsBody.region === "string", `status ${deals.response.status}`);
-  if (REQUIRE_PROVIDER) check("regional deals are live", deals.response.status === 200, JSON.stringify(dealsBody));
-
-  const price = await json("/api/price?slug=cyberpunk-2077&cc=in");
-  const priceBody = recordOf(price.body);
-  check("regional price contract", price.response.status === 200 && "price" in priceBody && "appId" in priceBody, `status ${price.response.status}`);
-  if (REQUIRE_PROVIDER) check("regional price resolution is live", priceBody.region === "in" && typeof priceBody.appId === "number", JSON.stringify(priceBody));
 }
 
 async function main() {

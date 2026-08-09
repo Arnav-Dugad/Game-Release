@@ -10,19 +10,15 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
-import { getUserPreferences, saveUserPreferences, type WatchlistEntry } from "@/lib/firebase/db";
+import { getUserPreferences, saveUserPreferences } from "@/lib/firebase/db";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { usePreferences } from "@/lib/preferences/PreferencesProvider";
-import type { Price } from "@/lib/games/types";
 import {
-  dealNotification,
   releaseNotifications,
   sortNotifications,
   type AppNotification,
 } from "./model";
 
-const MAX_DEAL_CHECKS = 18;
-const CONCURRENCY = 4;
 const EMPTY_READ = new Set<string>();
 
 interface NotificationsContextValue {
@@ -36,19 +32,6 @@ interface NotificationsContextValue {
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
-
-async function mapWithLimit<T, R>(items: T[], worker: (item: T) => Promise<R>): Promise<R[]> {
-  const output: R[] = new Array(items.length);
-  let cursor = 0;
-  const runners = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      output[index] = await worker(items[index]);
-    }
-  });
-  await Promise.all(runners);
-  return output;
-}
 
 function storageKey(uid: string) {
   return `ludex:notifications:read:${uid}`;
@@ -67,12 +50,8 @@ function persistRead(uid: string, ids: Set<string>) {
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { entries, loading: watchlistLoading } = useWatchlist();
-  const { region, regionInfo, ready, notificationDeals, notificationReleases } = usePreferences();
+  const { notificationReleases } = usePreferences();
   const [readState, setReadState] = useState<{ uid: string; ids: Set<string> } | null>(null);
-  const [dealState, setDealState] = useState<{
-    key: string;
-    items: AppNotification[];
-  } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -110,69 +89,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  const candidates = useMemo(
-    () =>
-      [...entries]
-        .filter((entry) => entry.status === "want")
-        .sort(
-          (a, b) =>
-            Number((a.ownedOn ?? []).length > 0) - Number((b.ownedOn ?? []).length > 0) ||
-            b.addedAt - a.addedAt,
-        )
-        .slice(0, MAX_DEAL_CHECKS),
-    [entries],
-  );
-  const candidateKey = candidates
-    .map((entry) => `${entry.gameId}:${entry.steamAppId ?? ""}`)
-    .join(",");
-  const dealRequestKey = `${user?.uid ?? "signed-out"}:${region}:${candidateKey}`;
-
-  useEffect(() => {
-    if (!user || !ready || watchlistLoading || !notificationDeals || candidates.length === 0) return;
-    const controller = new AbortController();
-    void mapWithLimit(candidates, async (entry: WatchlistEntry) => {
-      try {
-        const lookup = entry.steamAppId
-          ? `appid=${entry.steamAppId}`
-          : `slug=${encodeURIComponent(entry.slug)}`;
-        const response = await fetch(`/api/price?${lookup}&cc=${encodeURIComponent(region)}`, {
-          signal: controller.signal,
-        });
-        if (!response.ok) return null;
-        const data = (await response.json()) as { price: Price | null; appId: number | null };
-        if (!data.price || data.price.discountPercent <= 0 || !data.appId) return null;
-        return dealNotification(entry, data.appId, data.price, regionInfo.name);
-      } catch {
-        return null;
-      }
-    }).then((results) => {
-      if (controller.signal.aborted) return;
-      setDealState({
-        key: dealRequestKey,
-        items: results.filter((item): item is AppNotification => item !== null),
-      });
-    });
-    return () => controller.abort();
-    // candidateKey captures the persisted fields used by this request batch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidateKey, dealRequestKey, ready, region, regionInfo.name, user, watchlistLoading, notificationDeals]);
-
   const releases = useMemo(
     () => (notificationReleases ? releaseNotifications(entries) : []),
     [entries, notificationReleases],
   );
-  const deals = useMemo(
-    () =>
-      !user || !notificationDeals || candidates.length === 0
-        ? []
-        : dealState?.key === dealRequestKey
-          ? dealState.items
-          : null,
-    [user, notificationDeals, candidates.length, dealState, dealRequestKey],
-  );
   const notifications = useMemo(
-    () => sortNotifications([...releases, ...(deals ?? [])]),
-    [releases, deals],
+    () => sortNotifications(releases),
+    [releases],
   );
   const readIds = readState && readState.uid === user?.uid ? readState.ids : EMPTY_READ;
   const unread = useMemo(
@@ -205,12 +128,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       unreadCount: unread.length,
       loading:
         Boolean(user) &&
-        (watchlistLoading || readState?.uid !== user?.uid || deals === null),
+        (watchlistLoading || readState?.uid !== user?.uid),
       isRead: (id) => readIds.has(id),
       markRead,
       markAllRead,
     }),
-    [notifications, unread, user, watchlistLoading, readState, deals, readIds, markRead, markAllRead],
+    [notifications, unread, user, watchlistLoading, readState, readIds, markRead, markAllRead],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;

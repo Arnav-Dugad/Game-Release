@@ -125,29 +125,6 @@ export interface MultiplayerModes {
   offlineMax: number | null;
 }
 
-export interface Price {
-  /** Already formatted for display in the store's currency, e.g. "$59.99". */
-  current: string;
-  /** Pre-discount price, when the title is on sale. */
-  original: string | null;
-  /** 0 when not discounted. */
-  discountPercent: number;
-  isFree: boolean;
-}
-
-/** A verified storefront discount, normalised for the deals experience. */
-export interface DealListing {
-  game: GameSummary;
-  /** Canonical IGDB route target. Null means the UI must use IGDB search. */
-  canonicalSlug: string | null;
-  price: Price;
-  steamAppId: number;
-  /** Steam's integer minor-unit price, used for exact regional sorting. */
-  currentAmount: number;
-  currency: string | null;
-  storeUrl: string;
-}
-
 export interface GameSummary {
   id: number;
   slug: string;
@@ -215,8 +192,6 @@ export interface GameDetail extends GameSummary {
    * be enriched with Steam's pricing and system requirements.
    */
   steamAppId: number | null;
-  /** Storefront pricing, when a provider exposes it. */
-  price: Price | null;
   website: string | null;
   /** Every involved studio with its role and brand mark. */
   companies: CompanyRef[];

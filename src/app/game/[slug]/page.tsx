@@ -55,7 +55,6 @@ import { Parallax } from "@/components/motion/effects";
 import { Aurora, GridLines } from "@/components/motion/Aurora";
 import { getGame, getRelated, isDegraded } from "@/lib/games/source";
 import { sizedImage } from "@/lib/games/image";
-import { PriceCard } from "@/components/game/PriceCard";
 import { GameCollectionShowcase } from "@/components/game/GameCollectionShowcase";
 import { GameEditorialOverview, GamePulseStrip } from "@/components/game/GameDetailEditorial";
 import { GameDetailDock, type DetailSectionLink } from "@/components/game/GameDetailDock";
@@ -107,9 +106,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function GamePage({ params }: { params: Params }) {
   const { slug } = await params;
-  // No region here on purpose: everything this page renders is identical for
-  // every reader, which is what lets it stay prerendered. The one personalised
-  // part, the Steam price, is fetched client-side by `PriceCard`.
+  // Everything this page renders is identical for every reader, which keeps
+  // the detail route safely cacheable.
   const result = await getGame(slug);
   if (!result) notFound();
 
@@ -681,7 +679,6 @@ function GameSidebar({ game }: { game: GameDetail }) {
 
   return (
     <aside id="where-to-play" className="scroll-mt-32 space-y-5 lg:sticky lg:top-28 lg:self-start">
-      <PriceCard steamAppId={game.steamAppId} />
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
           {game.metacritic !== null && <ScoreRing score={game.metacritic} />}
@@ -718,12 +715,12 @@ function GameSidebar({ game }: { game: GameDetail }) {
         </h2>
         <dl className="space-y-3.5">
           {facts.map((fact) => (
-            <div key={fact.label} className="flex gap-3">
-              <span className="mt-0.5 shrink-0 text-faint">{fact.icon}</span>
-              <div className="min-w-0">
-                <dt className="text-[11px] uppercase tracking-[0.08em] text-faint">{fact.label}</dt>
-                <dd className="mt-0.5 text-sm leading-snug">{fact.value}</dd>
-              </div>
+            <div key={fact.label}>
+              <dt className="flex gap-3 text-[11px] uppercase tracking-[0.08em] text-faint">
+                <span className="mt-0.5 shrink-0" aria-hidden>{fact.icon}</span>
+                <span>{fact.label}</span>
+              </dt>
+              <dd className="mt-0.5 min-w-0 pl-7 text-sm leading-snug">{fact.value}</dd>
             </div>
           ))}
         </dl>

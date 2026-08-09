@@ -210,21 +210,17 @@ export async function getNewReleases(pageSize = 12): Promise<Sourced<GameSummary
  * a miss in the active provider legitimately falls through to the next. That
  * also keeps older bookmarked URLs working after credentials are added.
  */
-export async function getGame(
-  slug: string,
-  /** Steam country code, so prices render in the reader's currency. */
-  region?: string,
-): Promise<Sourced<GameDetail> | null> {
+export async function getGame(slug: string): Promise<Sourced<GameDetail> | null> {
   const result = await resolve("detail", (provider) => provider.detail(slug));
   if (!result) return null;
 
   // Providers are merged, not just chained. IGDB knows every platform and has
-  // the better artwork and critic scores; Steam knows the current price and the
-  // system requirements. When IGDB tells us a title has a Steam listing, both
+  // the better artwork and critic scores; Steam supplies system requirements.
+  // When IGDB tells us a title has a Steam listing, both
   // are worth having.
   if (result.source === "igdb" && result.data.steamAppId) {
     try {
-      return { ...result, data: await enrichWithSteam(result.data, region) };
+      return { ...result, data: await enrichWithSteam(result.data) };
     } catch (err) {
       console.warn(
         "[source] steam enrichment failed:",

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import {
   Building2,
   Gamepad2,
@@ -11,6 +10,7 @@ import {
 import { GameCover } from "@/components/game/GameCover";
 import { cn } from "@/lib/utils/cn";
 import type { SearchHit, SearchKind } from "@/lib/games/search";
+import { ResilientMediaImage } from "@/components/game/ResilientMediaImage";
 
 const ICONS: Record<SearchKind, typeof Gamepad2> = {
   game: Gamepad2,
@@ -60,10 +60,9 @@ export function SearchHitVisual({
   if (hit.image) {
     return (
       <span className={cn("relative shrink-0 overflow-hidden border border-white/10 bg-white/[0.05]", dimensions, hit.kind === "company" || hit.kind === "platform" ? "p-2" : "")}>
-        <Image
+        <ResilientMediaImage
           src={hit.image}
           alt=""
-          fill
           sizes={size === "card" ? "80px" : "44px"}
           className={hit.kind === "company" || hit.kind === "platform" ? "object-contain p-2" : "object-cover"}
         />

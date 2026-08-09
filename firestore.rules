@@ -38,7 +38,7 @@ service cloud.firestore {
       }
 
       // --- Settings -------------------------------------------------------
-      // Display preferences (currency region, reduced motion). Private to the
+      // Display preferences (motion, layout, alerts). Private to the
       // owner: unlike the profile above, nothing here is shown to anyone else,
       // so there is no reason for it to be world-readable.
       match /settings/{document} {
@@ -86,34 +86,7 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
-    // --- Price history ----------------------------------------------------
-    // A price is a fact about the world, identical for every reader in a
-    // region, so the series is shared rather than duplicated per user.
-    //
     // World-readable, and writable by any signed-in user — observations are
-    // contributed by whoever happens to view a game that day, which is what
-    // builds the history without a server-side scheduler. Writes are
-    // constrained to one document per app/region/day and to the expected
-    // shape, and existing points are immutable, so a client cannot rewrite
-    // history or inject a fake "all-time low".
-    match /prices/{series}/points/{date} {
-      allow read: if true;
-
-      allow create: if isSignedIn()
-        && request.resource.data.date == date
-        && request.resource.data.amount is int
-        && request.resource.data.amount >= 0
-        && request.resource.data.discountPercent is int
-        && request.resource.data.discountPercent >= 0
-        && request.resource.data.discountPercent <= 100
-        && request.resource.data.formatted is string
-        && request.resource.data.formatted.size() <= 32;
-
-      // Recorded prices are never edited or removed; a day's observation is
-      // either taken or it isn't.
-      allow update, delete: if false;
-    }
-
     // --- Default deny -----------------------------------------------------
     match /{document=**} {
       allow read, write: if false;

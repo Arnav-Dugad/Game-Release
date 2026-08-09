@@ -8,7 +8,6 @@
  * rather than a broken frame, so a studio with no logo still reads as a studio.
  */
 
-import Image from "next/image";
 import Link from "next/link";
 import { Building2, CalendarDays, Cpu, Globe2, ShieldAlert, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -22,6 +21,7 @@ import type {
   PlatformRef,
   ReleaseEvent,
 } from "@/lib/games/types";
+import { ResilientMediaImage } from "./ResilientMediaImage";
 
 /* -------------------------------------------------------------------------- */
 
@@ -38,7 +38,7 @@ function Mark({ src, alt, size = 40 }: { src: string; alt: string; size?: number
       className="relative shrink-0 overflow-hidden rounded-xl bg-white/[0.92] p-1.5 ring-1 ring-inset ring-white/10"
       style={{ width: size, height: size }}
     >
-      <Image src={src} alt={alt} fill sizes={`${size}px`} className="object-contain p-1" />
+      <ResilientMediaImage src={src} alt={alt} sizes={`${size}px`} className="object-contain p-1" />
     </span>
   );
 }
@@ -196,10 +196,9 @@ export function CharacterRail({ characters }: { characters: CharacterRef[] }) {
           >
             <div className="relative aspect-[3/4] w-full overflow-hidden bg-panel-2">
               {character.image ? (
-                <Image
+                <ResilientMediaImage
                   src={character.image}
                   alt={character.name}
-                  fill
                   sizes="148px"
                   className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] fine:group-hover:scale-105"
                 />

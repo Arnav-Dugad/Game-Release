@@ -1,7 +1,6 @@
 import type { WatchlistEntry } from "@/lib/firebase/db";
-import type { Price } from "@/lib/games/types";
 
-export type NotificationKind = "deal" | "release-today" | "release-soon" | "released";
+export type NotificationKind = "release-today" | "release-soon" | "released";
 
 export interface AppNotification {
   id: string;
@@ -114,27 +113,6 @@ export function releaseNotifications(
   }
 
   return out.sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
-}
-
-export function dealNotification(
-  entry: WatchlistEntry,
-  appId: number,
-  price: Price,
-  regionName: string,
-  now = Date.now(),
-): AppNotification {
-  return {
-    id: `deal:${appId}:${price.discountPercent}:${price.current}`,
-    kind: "deal",
-    title: `${entry.name} is ${price.discountPercent}% off`,
-    body: `${price.current}${price.original ? `, down from ${price.original}` : ""} on Steam in ${regionName}.`,
-    href: canonicalEntryHref(entry),
-    gameName: entry.name,
-    image: entry.image,
-    imageFallback: entry.imageFallback,
-    createdAt: now,
-    priority: 90 + price.discountPercent / 100,
-  };
 }
 
 export function sortNotifications(items: AppNotification[]): AppNotification[] {

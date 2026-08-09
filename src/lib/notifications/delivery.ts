@@ -4,18 +4,13 @@ import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminServices } from "@/lib/firebase/admin";
 import type { UserPreferences, WatchlistEntry } from "@/lib/firebase/db";
-import { steamPrice } from "@/lib/games/providers/steam";
-import { getGame } from "@/lib/games/source";
-import { DEFAULT_STEAM_REGION, isValidRegion, steamRegion } from "@/lib/games/stores-catalog";
 import {
-  dealNotification,
   isQuietHours,
   releaseNotifications,
   type AppNotification,
 } from "./model";
 
 const MAX_USERS = 200;
-const MAX_DEAL_CHECKS = 12;
 
 export interface DispatchSummary {
   users: number;
@@ -33,7 +28,6 @@ interface DeliveryPreferences extends UserPreferences {
   notificationQuietStart?: string;
   notificationQuietEnd?: string;
   notificationTimezone?: string;
-  notificationMinimumDiscount?: number;
 }
 
 function deliveryId(notificationId: string) {
@@ -81,31 +75,7 @@ async function sendEmail(to: string, notification: AppNotification) {
 }
 
 async function collectNotifications(entries: WatchlistEntry[], preferences: DeliveryPreferences) {
-  const notifications = preferences.notificationReleases === false ? [] : releaseNotifications(entries);
-  if (preferences.notificationDeals === false) return notifications;
-
-  const region = preferences.region && isValidRegion(preferences.region) ? preferences.region : DEFAULT_STEAM_REGION;
-  const minimumDiscount = Math.min(90, Math.max(1, preferences.notificationMinimumDiscount ?? 20));
-  const candidates = entries
-    .filter((entry) => entry.status === "want" && (entry.ownedOn ?? []).length === 0)
-    .sort((a, b) => b.addedAt - a.addedAt)
-    .slice(0, MAX_DEAL_CHECKS);
-
-  for (const entry of candidates) {
-    try {
-      let appId = entry.steamAppId ?? null;
-      if (!appId && !/-s\d+$/.test(entry.slug)) {
-        appId = (await getGame(entry.slug).catch(() => null))?.data.steamAppId ?? null;
-      }
-      if (!appId) continue;
-      const price = await steamPrice(appId, region);
-      if (!price || price.discountPercent < minimumDiscount) continue;
-      notifications.push(dealNotification(entry, appId, price, steamRegion(region).name));
-    } catch (error) {
-      console.warn(`[notifications] price check failed for ${entry.gameId}`, error);
-    }
-  }
-  return notifications;
+  return preferences.notificationReleases === false ? [] : releaseNotifications(entries);
 }
 
 export async function dispatchNotifications(dryRun = false): Promise<DispatchSummary> {

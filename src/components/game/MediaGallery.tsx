@@ -15,7 +15,6 @@
  */
 
 import { AnimatePresence, motion } from "motion/react";
-import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, Play, X } from "lucide-react";
 import { TrailerPlayer } from "./TrailerPlayer";
@@ -23,6 +22,7 @@ import { sizedImage } from "@/lib/games/image";
 import { useDialogFocus, useEscapeKey, useIsMobile, useLockBodyScroll } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 import type { Trailer } from "@/lib/games/types";
+import { ResilientMediaImage } from "./ResilientMediaImage";
 
 export type MediaItem =
   | { kind: "image"; src: string; caption?: string }
@@ -133,10 +133,9 @@ export function MediaGallery({
                 )}
               >
                 {poster ? (
-                  <Image
+                  <ResilientMediaImage
                     src={sizedImage(poster, index === 0 ? 1280 : 720) ?? poster}
                     alt={`${gameName} — ${captionOf(item, index)}`}
-                    fill
                     sizes={index === 0 ? "(max-width: 1024px) 100vw, 50vw" : "(max-width: 1024px) 50vw, 25vw"}
                     className="object-cover transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] fine:group-hover/tile:scale-105"
                   />
@@ -177,10 +176,9 @@ export function MediaGallery({
                 className="group/tile relative block aspect-video w-full overflow-hidden rounded-xl border border-line bg-panel transition-colors duration-300 fine:hover:border-line-strong"
               >
                 {poster ? (
-                  <Image
+                  <ResilientMediaImage
                     src={sizedImage(poster, 720) ?? poster}
                     alt={`${gameName} — ${captionOf(item, i)}`}
-                    fill
                     sizes="(max-width: 640px) 78vw, 520px"
                     className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] fine:group-hover/tile:scale-105"
                   />
@@ -243,10 +241,9 @@ export function MediaGallery({
             >
               <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
                 {active.kind === "image" ? (
-                  <Image
+                  <ResilientMediaImage
                     src={sizedImage(active.src, 1920) ?? active.src}
                     alt={`${gameName} screenshot`}
-                    fill
                     sizes="100vw"
                     priority
                     className="object-contain"

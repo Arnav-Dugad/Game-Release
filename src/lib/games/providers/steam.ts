@@ -21,11 +21,9 @@
 
 import type {
   BrowseFilters,
-  DealListing,
   GameDetail,
   GameSummary,
   Page,
-  Price,
   Ref,
   Requirement,
   Trailer,
@@ -33,9 +31,9 @@ import type {
 import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { slugify, stripHtml } from "@/lib/utils/html";
 import { DETAIL_DEFAULTS } from "../detail";
-import { DEFAULT_STEAM_REGION, isValidRegion } from "../stores-catalog";
 
 const STORE = "https://store.steampowered.com/api";
+const DEFAULT_STEAM_REGION = "us";
 
 /** Bounds how much of the storefront a browse query considers. */
 const POOL_LIMIT = 60;
@@ -117,7 +115,6 @@ interface FeaturedItem {
 }
 
 interface FeaturedCategories {
-  specials?: { items?: FeaturedItem[] };
   coming_soon?: { items?: FeaturedItem[] };
   top_sellers?: { items?: FeaturedItem[] };
   new_releases?: { items?: FeaturedItem[] };
@@ -146,15 +143,6 @@ interface AppDetails {
   platforms?: { windows?: boolean; mac?: boolean; linux?: boolean };
   metacritic?: { score?: number; url?: string };
   recommendations?: { total?: number };
-  is_free?: boolean;
-  price_overview?: {
-    final?: number;
-    initial?: number;
-    currency?: string;
-    final_formatted?: string;
-    initial_formatted?: string;
-    discount_percent?: number;
-  };
   release_date?: { coming_soon?: boolean; date?: string };
   screenshots?: { id: number; path_thumbnail?: string; path_full?: string }[];
   movies?: {
@@ -309,22 +297,6 @@ function portraitCapsule(appid: number): string {
   return `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/library_600x900.jpg`;
 }
 
-function priceOf(details: AppDetails): Price | null {
-  if (details.is_free) {
-    return { current: "Free to play", original: null, discountPercent: 0, isFree: true };
-  }
-  const overview = details.price_overview;
-  if (!overview?.final_formatted) return null;
-
-  const discount = overview.discount_percent ?? 0;
-  return {
-    current: overview.final_formatted,
-    original: discount > 0 ? overview.initial_formatted ?? null : null,
-    discountPercent: discount,
-    isFree: false,
-  };
-}
-
 function mapSummary(details: AppDetails): GameSummary | null {
   const appid = details.steam_appid;
   if (!appid || !details.name) return null;
@@ -373,7 +345,6 @@ function mapDetail(details: AppDetails): GameDetail | null {
     ...DETAIL_DEFAULTS,
     description,
     steamAppId: summary.id,
-    price: priceOf(details),
     website: https(details.website),
     developers: (details.developers ?? []).map((name, i) => ({
       id: i + 1,
@@ -417,15 +388,9 @@ function mapDetail(details: AppDetails): GameDetail | null {
 async function fetchAppDetails(
   appid: number,
   revalidate: number,
-  /**
-   * Steam prices in the currency of whichever country code it's given, so this
-   * is effectively the currency selector. Validated by the caller against the
-   * known region list before it ever reaches the URL.
-   */
-  region: string = DEFAULT_STEAM_REGION,
 ): Promise<AppDetails | null> {
   const payload = await getJson<Record<string, { success?: boolean; data?: AppDetails }>>(
-    `${STORE}/appdetails?appids=${appid}&cc=${encodeURIComponent(region)}&l=english`,
+    `${STORE}/appdetails?appids=${appid}&cc=${DEFAULT_STEAM_REGION}&l=english`,
     revalidate,
   );
   const entry = payload?.[String(appid)];
@@ -434,24 +399,6 @@ async function fetchAppDetails(
   // a release database.
   if (entry.data.type && entry.data.type !== "game") return null;
   return entry.data;
-}
-
-/**
- * Current price for one app in one region.
- *
- * Split out from the detail merge so the price can be resolved on its own,
- * without the page that shows it having to be personalised. See
- * `app/api/price/route.ts`.
- */
-export async function steamPrice(
-  appid: number,
-  region: string = DEFAULT_STEAM_REGION,
-): Promise<Price | null> {
-  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
-  // Price is the volatile part of a detail record. Keeping this on the search
-  // cache window prevents a sale ending this morning from lingering all day.
-  const details = await fetchAppDetails(appid, TTL.search, safeRegion);
-  return details ? priceOf(details) : null;
 }
 
 async function summariesFor(appids: number[], revalidate: number): Promise<GameSummary[]> {
@@ -463,17 +410,14 @@ async function summariesFor(appids: number[], revalidate: number): Promise<GameS
     .filter((game): game is GameSummary => game !== null);
 }
 
-async function fetchFeatured(
-  region: string = DEFAULT_STEAM_REGION,
-): Promise<FeaturedCategories | null> {
-  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
+async function fetchFeatured(): Promise<FeaturedCategories | null> {
   return getJson<FeaturedCategories>(
-    `${STORE}/featuredcategories?cc=${encodeURIComponent(safeRegion)}&l=english`,
+    `${STORE}/featuredcategories?cc=${DEFAULT_STEAM_REGION}&l=english`,
     TTL.search,
   );
 }
 
-type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases" | "specials";
+type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases";
 
 /**
  * Several callers (trending, top rated, upcoming, related, browse) request the
@@ -486,9 +430,8 @@ type FeaturedKey = "coming_soon" | "top_sellers" | "new_releases" | "specials";
 async function featuredAppIds(
   keys: FeaturedKey[],
   limit: number,
-  region: string = DEFAULT_STEAM_REGION,
 ): Promise<number[]> {
-  const featured = await fetchFeatured(region);
+  const featured = await fetchFeatured();
   if (!featured || typeof featured !== "object") return [];
 
   const seen = new Set<number>();
@@ -507,56 +450,6 @@ async function featuredAppIds(
     }
   }
   return out;
-}
-
-/**
- * Steam's regional specials shelf, expanded into real app records.
- *
- * The featured endpoint is the only public, supported storefront feed that
- * represents current promotions. Appdetails then verifies every discount in
- * the selected country, so stale shelf entries never become false deal cards.
- */
-export async function steamDeals(
-  limit = 36,
-  region: string = DEFAULT_STEAM_REGION,
-): Promise<DealListing[]> {
-  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
-  const bounded = Math.min(60, Math.max(1, Math.floor(limit)));
-  const appids = await featuredAppIds(["specials"], Math.min(60, bounded * 2), safeRegion);
-  if (appids.length === 0) return [];
-
-  const details = await mapWithLimit(appids, CONCURRENCY, (appid) =>
-    fetchAppDetails(appid, TTL.search, safeRegion),
-  );
-
-  return details
-    .map((entry): DealListing | null => {
-      if (!entry) return null;
-      const game = mapSummary(entry);
-      const price = priceOf(entry);
-      const appid = entry.steam_appid;
-      const amount = entry.price_overview?.final;
-      if (!game || !price || !appid || price.discountPercent <= 0 || typeof amount !== "number") {
-        return null;
-      }
-      return {
-        game,
-        canonicalSlug: null,
-        price,
-        steamAppId: appid,
-        currentAmount: amount,
-        currency: entry.price_overview?.currency ?? null,
-        storeUrl: `https://store.steampowered.com/app/${appid}/`,
-      };
-    })
-    .filter((deal): deal is DealListing => deal !== null)
-    .sort(
-      (a, b) =>
-        b.price.discountPercent - a.price.discountPercent ||
-        a.currentAmount - b.currentAmount ||
-        a.game.name.localeCompare(b.game.name),
-    )
-    .slice(0, bounded);
 }
 
 /* ---------------------------------------------------------------------------
@@ -637,7 +530,7 @@ export const steamProvider: GameProvider = {
     // over the storefront's curated lists. The pool is capped, which is why
     // `count` reports the pool size rather than "all of Steam".
     const appids = await featuredAppIds(
-      ["top_sellers", "new_releases", "coming_soon", "specials"],
+      ["top_sellers", "new_releases", "coming_soon"],
       POOL_LIMIT,
     );
     if (appids.length === 0) return null;
@@ -711,7 +604,7 @@ export const steamProvider: GameProvider = {
 
   async topRated(pageSize: number) {
     const appids = await featuredAppIds(
-      ["top_sellers", "new_releases", "specials"],
+      ["top_sellers", "new_releases"],
       POOL_LIMIT,
     );
     if (appids.length === 0) return null;
@@ -782,14 +675,10 @@ export const steamProvider: GameProvider = {
  * what Steam uniquely has. A failed or slow Steam lookup returns the original
  * untouched, so enrichment can never degrade a page that already rendered.
  */
-export async function enrichWithSteam(
-  base: GameDetail,
-  region: string = DEFAULT_STEAM_REGION,
-): Promise<GameDetail> {
+export async function enrichWithSteam(base: GameDetail): Promise<GameDetail> {
   if (!base.steamAppId) return base;
 
-  const safeRegion = isValidRegion(region) ? region : DEFAULT_STEAM_REGION;
-  const details = await fetchAppDetails(base.steamAppId, TTL.detail, safeRegion);
+  const details = await fetchAppDetails(base.steamAppId, TTL.detail);
   if (!details) return base;
 
   const steamStore = {
@@ -808,7 +697,6 @@ export async function enrichWithSteam(
     ...base,
 
     // Steam-only data — the entire point of the merge.
-    price: base.price ?? priceOf(details),
     requirements: base.requirements.length > 0 ? base.requirements : requirementsOf(details),
     stores: base.stores.some((store) => store.slug === "steam")
       ? base.stores
