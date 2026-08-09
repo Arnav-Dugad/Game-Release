@@ -20,6 +20,7 @@ import { parseAmount, priceInsight, type PricePoint } from "../src/lib/games/pri
 import type { DealListing, GameSummary } from "../src/lib/games/types";
 import { canonicalEntryHref, dealNotification, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
+import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
@@ -330,6 +331,20 @@ check("overnight quiet hours include midnight", isQuietHours(Date.parse("2026-08
 check("overnight quiet hours end cleanly", isQuietHours(Date.parse("2026-08-09T08:00:00Z"), "UTC", "22:00", "08:00"), false);
 check("daytime quiet window works", isQuietHours(Date.parse("2026-08-09T13:00:00Z"), "UTC", "12:00", "14:00"), true);
 check("invalid timezone fails open", isQuietHours(Date.now(), "Not/AZone", "22:00", "08:00"), false);
+
+console.log("\nPersonal dashboard signals");
+const dashboardNow = Date.parse("2026-08-09T12:00:00Z");
+const dashboardSnapshot = buildDashboardSnapshot([
+  notificationEntry({ gameId: 1, status: "want", released: "2026-08-25", addedAt: 10 }),
+  notificationEntry({ gameId: 2, status: "playing", released: "2025-01-01", startedAt: 30, addedAt: 20, ownedOn: ["steam"] }),
+  notificationEntry({ gameId: 3, status: "played", released: "2024-01-01", finishedAt: 40, addedAt: 30, ownedOn: ["physical"] }),
+], dashboardNow);
+check("currently playing leads the focus card", dashboardSnapshot.focus?.gameId, 2);
+check("nearest future tracked release wins", dashboardSnapshot.nextRelease?.gameId, 1);
+check("dashboard status counts are honest", [dashboardSnapshot.playing, dashboardSnapshot.played, dashboardSnapshot.wanted], [1, 1, 1]);
+check("owned count ignores wishlist-only games", dashboardSnapshot.owned, 2);
+check("thirty-day release window", dashboardSnapshot.releasesSoon, 1);
+check("release countdown is day-stable", daysUntilRelease("2026-08-25", dashboardNow), 16);
 
 console.log("\nUniversal discovery routing");
 const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({

@@ -131,7 +131,7 @@ that do not carry the cron secret.
 
 | Route | What it does |
 | --- | --- |
-| `/` | Auto-advancing featured hero, live stats, upcoming/trending/acclaimed/new rails, genre grid |
+| `/` | Cinematic hero plus a signed-in command center for current games, tracked releases, regional deal radar, taste signals and explained recommendations; live discovery rails remain for everyone |
 | `/upcoming` | Month-grouped release calendar with per-title countdowns |
 | `/browse` | Full database with genre/platform filters, sorting and pagination — all URL-driven |
 | `/game/[slug]` | Cinematic game dossier: live hero media, active section dock, editorial gallery, distinct DLC/expansion/edition poster shelves, franchise portals, structured metadata, requirements, reviews and related games |

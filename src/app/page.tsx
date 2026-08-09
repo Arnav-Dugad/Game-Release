@@ -7,8 +7,7 @@ import { Container, Section, SectionHeading } from "@/components/ui/SectionHeadi
 import { DataSourceNotice } from "@/components/ui/DataSourceNotice";
 import { Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { JoinCta } from "@/components/home/JoinCta";
-import { BecauseYouOwnRail } from "@/components/home/BecauseYouOwnRail";
-import { RecommendedRail } from "@/components/home/RecommendedRail";
+import { PersonalCommandCenter } from "@/components/home/PersonalCommandCenter";
 import { CountUp } from "@/components/motion/text";
 import { Marquee, Spotlight } from "@/components/motion/effects";
 import { cn } from "@/lib/utils/cn";
@@ -57,18 +56,13 @@ export default async function HomePage() {
         </Container>
       )}
 
+      <PersonalCommandCenter genres={genres.data} />
+
       <StatsStrip
         totalGames={totalGames}
         upcomingCount={upcoming.data.count}
         genreCount={genres.data.length}
       />
-
-      {/* Both render only when they have something genuinely personal to say,
-          so a signed-out homepage is unchanged. Ownership-anchored first: it
-          names a specific game, which is a stronger reason than an averaged
-          taste profile. */}
-      <BecauseYouOwnRail />
-      <RecommendedRail genres={genres.data} />
 
       <Section className="pt-4">
         <Container>
