@@ -14,6 +14,7 @@ import { platformKey, releaseLabel, isUnreleased } from "../src/lib/utils/format
 import { stripHtml, slugify } from "../src/lib/utils/html";
 import { classifyUrl, storeFromUrl } from "../src/lib/games/stores";
 import { buildTasteProfile, MIN_TASTE_STRENGTH } from "../src/lib/games/taste";
+import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/games/directory";
 
 let failures = 0;
 
@@ -212,6 +213,35 @@ console.log("\nTaste profile");
   check("thin evidence stays below the threshold", thin.strength < MIN_TASTE_STRENGTH, true);
 }
 check("no library yields no profile", buildTasteProfile([]).genreIds, []);
+
+console.log("\nDirectory URL parsing");
+check("defaults are stable", parseDirectorySearchParams({}), {
+  query: "",
+  page: 1,
+  order: "name",
+});
+check("search, page and descending sort", parseDirectorySearchParams({
+  q: "  CD Projekt  ",
+  page: "4",
+  sort: "desc",
+}), {
+  query: "CD Projekt",
+  page: 4,
+  order: "-name",
+});
+check("invalid page is bounded", parseDirectorySearchParams({ page: "not-a-page" }).page, 1);
+check("negative page is bounded", parseDirectorySearchParams({ page: "-20" }).page, 1);
+check("huge page is bounded", parseDirectorySearchParams({ page: "9000" }).page, 1000);
+check(
+  "directory text becomes a contains filter",
+  buildDirectoryWhere("games != null", "Final Fantasy"),
+  'games != null & name ~ *"Final Fantasy"*',
+);
+check(
+  "directory operators cannot escape the filter",
+  buildDirectoryWhere("games != null", 'Halo" | id > 0;'),
+  'games != null & name ~ *"Halo id > 0"*',
+);
 
 console.log("\nHTML handling");
 check(

@@ -35,6 +35,7 @@ import type {
   BrowseFilters,
   CharacterRef,
   CompanyRef,
+  DirectoryRef,
   GameDetail,
   GameSummary,
   LogoRef,
@@ -49,6 +50,7 @@ import type {
 import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { platformKey, type PlatformKey } from "@/lib/utils/format";
 import { storeFromUrl } from "../stores";
+import { buildDirectoryWhere, type DirectoryOrder } from "../directory";
 
 const API = "https://api.igdb.com/v4";
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
@@ -2339,6 +2341,136 @@ export async function igdbSeries(slug: string): Promise<IgdbEntity | null> {
   }
 }
 
+export interface IgdbDirectoryPage {
+  results: DirectoryRef[];
+  page: number;
+  pageSize: number;
+  /** Exact when every matching record is valid for this directory. */
+  count: number | null;
+  hasNext: boolean;
+}
+
+export interface IgdbDirectoryInput {
+  query?: string;
+  page?: number;
+  pageSize?: number;
+  order?: DirectoryOrder;
+}
+
+function directoryInput(input: IgdbDirectoryInput) {
+  const query = (input.query ?? "").trim().slice(0, 80);
+  return {
+    query,
+    // Prevent a hand-edited URL producing an unbounded offset or query size.
+    page: Math.min(Math.max(Math.trunc(input.page ?? 1), 1), 1000),
+    pageSize: Math.min(Math.max(Math.trunc(input.pageSize ?? 60), 12), 72),
+    order: input.order === "-name" ? ("-name" as const) : ("name" as const),
+  };
+}
+
+async function entityCount(
+  endpoint: "companies" | "collections",
+  where: string,
+  revalidate: number,
+) {
+  const query = queryFor(revalidate);
+  const result = await query<{ count?: number }>(`${endpoint}/count`, `where ${where};`);
+  return result.count ?? 0;
+}
+
+/** Paginated studio directory across both developers and publishers. */
+export async function igdbStudiosDirectory(
+  input: IgdbDirectoryInput = {},
+): Promise<IgdbDirectoryPage | null> {
+  if (!igdbConfigured()) return null;
+  const options = directoryInput(input);
+  const base = "slug != null & logo != null & (developed != null | published != null)";
+  const where = buildDirectoryWhere(base, options.query);
+  const offset = (options.page - 1) * options.pageSize;
+  const revalidate = options.query ? TTL.search : TTL.taxonomy;
+
+  try {
+    const query = queryFor(revalidate);
+    const [rows, count] = await Promise.all([
+      query<(IgdbCompany & { developed?: number[]; published?: number[] })[]>(
+        "companies",
+        apicalypse({
+          fields: "name,slug,logo.image_id,developed,published",
+          where,
+          sort: options.order === "-name" ? "name desc" : "name asc",
+          limit: options.pageSize + 1,
+          offset,
+        }),
+      ),
+      entityCount("companies", where, revalidate),
+    ]);
+
+    return {
+      results: rows.slice(0, options.pageSize).map((company) => ({
+        id: company.id,
+        slug: company.slug ?? String(company.id),
+        name: company.name,
+        logo: igdbImage(company.logo?.image_id, "logo_med"),
+        gameCount: new Set([...(company.developed ?? []), ...(company.published ?? [])]).size,
+      })),
+      page: options.page,
+      pageSize: options.pageSize,
+      count,
+      hasNext: offset + options.pageSize < count,
+    };
+  } catch (err) {
+    warn("studiosDirectory", err);
+    return null;
+  }
+}
+
+/** Paginated canonical Series directory backed only by IGDB Collections. */
+export async function igdbSeriesDirectory(
+  input: IgdbDirectoryInput = {},
+): Promise<IgdbDirectoryPage | null> {
+  if (!igdbConfigured()) return null;
+  const options = directoryInput(input);
+  const where = buildDirectoryWhere("slug != null & games != null", options.query);
+  const offset = (options.page - 1) * options.pageSize;
+  const revalidate = options.query ? TTL.search : TTL.taxonomy;
+
+  try {
+    const query = queryFor(revalidate);
+    const rows = await query<IgdbNamed[]>(
+      "collections",
+      apicalypse({
+        fields: "name,slug,games",
+        where,
+        sort: options.order === "-name" ? "name desc" : "name asc",
+        limit: options.pageSize + 1,
+        offset,
+      }),
+    );
+    const pageRows = rows.slice(0, options.pageSize);
+
+    return {
+      results: pageRows
+        .filter((series) => (series.games?.length ?? 0) >= 2)
+        .map((series) => ({
+          id: series.id,
+          slug: series.slug ?? String(series.id),
+          name: series.name,
+          gameCount: series.games?.length ?? 0,
+        })),
+      page: options.page,
+      pageSize: options.pageSize,
+      // IGDB cannot count "array has at least two entries" server-side, so do
+      // not present a misleading total. Pagination remains complete by raw
+      // collection offset and filters one-item records only for display.
+      count: null,
+      hasNext: rows.length > options.pageSize,
+    };
+  } catch (err) {
+    warn("seriesDirectory", err);
+    return null;
+  }
+}
+
 /**
  * The studios worth putting on an index page.
  *
@@ -2356,7 +2488,7 @@ export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
       "companies",
       apicalypse({
         fields: "name,slug,logo.image_id,developed",
-        where: "logo != null & developed != null",
+        where: "slug != null & logo != null & developed != null",
         limit: 500,
       }),
     );
@@ -2385,7 +2517,7 @@ export async function igdbTopSeries(limit = 60): Promise<Ref[] | null> {
     const query = queryFor(TTL.taxonomy);
     const rows = await query<(IgdbNamed & { games?: number[] })[]>(
       "collections",
-      apicalypse({ fields: "name,slug,games", where: "games != null", limit: 500 }),
+      apicalypse({ fields: "name,slug,games", where: "slug != null & games != null", limit: 500 }),
     );
 
     return rows

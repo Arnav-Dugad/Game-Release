@@ -62,6 +62,12 @@ export interface LogoRef extends Ref {
   logo: string | null;
 }
 
+/** A directory entry with enough context to rank and describe it. */
+export interface DirectoryRef extends Ref {
+  logo?: string | null;
+  gameCount: number;
+}
+
 /** A studio's role on a specific game. */
 export interface CompanyRef extends LogoRef {
   developer: boolean;

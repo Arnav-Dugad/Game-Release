@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Container } from "@/components/ui/SectionHeading";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { EntityDirectory } from "@/components/game/EntityDirectory";
-import { igdbTopSeries } from "@/lib/games/providers/igdb";
+import { igdbSeriesDirectory } from "@/lib/games/providers/igdb";
+import { parseDirectorySearchParams, type DirectorySearchParams } from "@/lib/games/directory";
 
 export const revalidate = 0;
 
@@ -13,19 +14,24 @@ export const metadata: Metadata = {
   description: "Browse canonical game series from IGDB Collections.",
 };
 
-export default async function SeriesDirectoryPage() {
-  const series = await igdbTopSeries(72);
+export default async function SeriesDirectoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<DirectorySearchParams>;
+}) {
+  const filters = parseDirectorySearchParams(await searchParams);
+  const directory = await igdbSeriesDirectory({ ...filters, pageSize: 60 });
 
   return (
     <>
       <PageHeader
         eyebrow="Directory"
         title="Series"
-        description="True release series, led by the collections with the most games. Franchises and genres are kept separate."
+        description="Search and browse canonical multi-game series from IGDB Collections. Franchises and genres remain separate."
       />
 
       <Container className="py-8 lg:py-12">
-        {!series || series.length === 0 ? (
+        {!directory ? (
           <EmptyState
             icon={<Layers size={24} />}
             title="Series directory unavailable"
@@ -33,7 +39,17 @@ export default async function SeriesDirectoryPage() {
             action={{ href: "/browse", label: "Browse games instead" }}
           />
         ) : (
-          <EntityDirectory items={series} kind="series" />
+          <EntityDirectory
+            key={`${filters.query}-${filters.order}-${filters.page}`}
+            items={directory.results}
+            kind="series"
+            query={filters.query}
+            order={filters.order}
+            page={directory.page}
+            pageSize={directory.pageSize}
+            count={directory.count}
+            hasNext={directory.hasNext}
+          />
         )}
       </Container>
     </>

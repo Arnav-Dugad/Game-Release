@@ -2,73 +2,163 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Building2, Layers, Search, X } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Building2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  LoaderCircle,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { hueFromString } from "@/lib/utils/format";
-import type { LogoRef, Ref } from "@/lib/games/types";
-
-type DirectoryItem = Ref & { logo?: string | null };
+import { cn } from "@/lib/utils/cn";
+import type { DirectoryRef } from "@/lib/games/types";
 
 export function EntityDirectory({
   items,
   kind,
+  query,
+  order,
+  page,
+  pageSize,
+  count,
+  hasNext,
 }: {
-  items: (Ref | LogoRef)[];
+  items: DirectoryRef[];
   kind: "studio" | "series";
+  query: string;
+  order: "name" | "-name";
+  page: number;
+  pageSize: number;
+  count: number | null;
+  hasNext: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const normalised = query.trim().toLocaleLowerCase();
-  const filtered = useMemo(
-    () =>
-      normalised
-        ? items.filter((item) => item.name.toLocaleLowerCase().includes(normalised))
-        : items,
-    [items, normalised],
-  );
+  const router = useRouter();
+  const [draft, setDraft] = useState(query);
+  const [isPending, startTransition] = useTransition();
   const isStudio = kind === "studio";
+  const basePath = isStudio ? "/studios" : "/series";
+  const label = isStudio ? "studio" : "series";
+  const first = (page - 1) * pageSize + 1;
+  const last = first + items.length - 1;
+
+  useEffect(() => {
+    const nextQuery = draft.trim();
+    if (nextQuery === query) return;
+    const timer = window.setTimeout(() => {
+      startTransition(() => {
+        router.replace(directoryHref(basePath, nextQuery, order, 1), { scroll: false });
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [basePath, draft, order, query, router]);
+
+  const updateQuery = (value: string) => {
+    setDraft(value);
+    startTransition(() => {
+      router.replace(directoryHref(basePath, value.trim(), order, 1), { scroll: false });
+    });
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="glass flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-        <label className="relative block min-w-0 flex-1 sm:max-w-xl">
-          <Search
-            aria-hidden
-            size={17}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-faint"
-          />
-          <span className="sr-only">Search {isStudio ? "studios" : "series"}</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search ${isStudio ? "studios" : "series"}…`}
-            className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-faint transition-colors hover:bg-white/[0.06] hover:text-text"
+    <div className="space-y-7" aria-busy={isPending}>
+      <div className="glass relative overflow-hidden rounded-3xl p-3 sm:p-4">
+        <div aria-hidden className="absolute -right-20 -top-28 h-56 w-56 rounded-full bg-brand/10 blur-3xl" />
+        <form
+          action={basePath}
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateQuery(draft);
+          }}
+          className="relative flex flex-col gap-3 sm:flex-row sm:items-center"
+        >
+          <label className="relative block min-w-0 flex-1">
+            <Search
+              aria-hidden
+              size={17}
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-faint"
+            />
+            <span className="sr-only">Search {isStudio ? "studios" : "series"}</span>
+            <input
+              type="search"
+              name="q"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={isStudio ? "Search every studio…" : "Search every series…"}
+              className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
+            />
+            {draft && (
+              <button
+                type="button"
+                onClick={() => updateQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-faint transition-colors hover:bg-white/[0.06] hover:text-text"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </label>
+
+          <label className="relative shrink-0">
+            <span className="sr-only">Sort directory</span>
+            <SlidersHorizontal aria-hidden size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
+            <ChevronDown aria-hidden size={14} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-faint" />
+            <select
+              name="sort"
+              value={order}
+              onChange={(event) => {
+                const nextOrder = event.target.value === "-name" ? "-name" : "name";
+                startTransition(() => {
+                  router.replace(directoryHref(basePath, draft.trim(), nextOrder, 1), { scroll: false });
+                });
+              }}
+              className="h-12 min-w-40 appearance-none rounded-xl border border-line bg-bg/55 pl-10 pr-9 text-sm font-medium text-text outline-none transition-colors hover:border-line-strong focus:border-brand"
             >
-              <X size={15} />
-            </button>
-          )}
-        </label>
-        <p aria-live="polite" className="px-2 text-xs text-muted sm:text-sm">
-          <span className="font-semibold text-text tabular-nums">{filtered.length}</span>{" "}
-          {filtered.length === 1 ? (isStudio ? "studio" : "series") : isStudio ? "studios" : "series"}
-        </p>
+              <option value="name">Name: A–Z</option>
+              <option value="-name">Name: Z–A</option>
+            </select>
+          </label>
+        </form>
+
+        <div className="relative mt-3 flex min-h-7 flex-wrap items-center justify-between gap-2 px-2 text-xs text-muted">
+          <p aria-live="polite">
+            {count !== null ? (
+              <>
+                Showing <span className="font-semibold tabular-nums text-text">{items.length > 0 ? `${first}–${last}` : "0"}</span> of{" "}
+                <span className="font-semibold tabular-nums text-text">{count.toLocaleString()}</span> {count === 1 ? label : isStudio ? "studios" : "series"}
+              </>
+            ) : (
+              <>
+                Page <span className="font-semibold tabular-nums text-text">{page}</span>
+                {query && <> for “<span className="text-text">{query}</span>”</>}
+              </>
+            )}
+          </p>
+          <span className={cn("inline-flex items-center gap-1.5 text-brand-soft transition-opacity", isPending ? "opacity-100" : "opacity-0")}>
+            <LoaderCircle size={13} className="animate-spin" /> Updating
+          </span>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           icon={isStudio ? <Building2 size={24} /> : <Layers size={24} />}
           title={`No ${isStudio ? "studios" : "series"} found`}
-          body={`Nothing here matches “${query.trim()}”. Try a shorter name or different spelling.`}
-          action={{ onClick: () => setQuery(""), label: "Clear search" }}
+          body={query ? `Nothing matches “${query}”. Try a shorter name or different spelling.` : "There are no entries on this page."}
+          action={
+            query
+              ? { onClick: () => updateQuery(""), label: "Clear search" }
+              : page > 1
+                ? { href: directoryHref(basePath, query, order, page - 1), label: "Previous page" }
+                : undefined
+          }
         />
       ) : (
         <Stagger
@@ -80,10 +170,10 @@ export function EntityDirectory({
           gap={0.025}
           onMount
         >
-          {filtered.map((item, index) => (
+          {items.map((item, index) => (
             <StaggerItem key={item.id}>
               {isStudio ? (
-                <StudioCard studio={item as DirectoryItem} priority={index < 12} />
+                <StudioCard studio={item} priority={index < 12} />
               ) : (
                 <SeriesCard series={item} index={index} />
               )}
@@ -91,11 +181,51 @@ export function EntityDirectory({
           ))}
         </Stagger>
       )}
+
+      <nav
+        aria-label={`${isStudio ? "Studio" : "Series"} directory pages`}
+        className="flex items-center justify-between gap-3 border-t border-line pt-5"
+      >
+        {page > 1 ? (
+          <Link
+            href={directoryHref(basePath, query, order, page - 1)}
+            scroll={false}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-white/[0.03] px-4 text-sm font-semibold text-muted transition-colors hover:border-line-strong hover:text-text"
+          >
+            <ChevronLeft size={16} /> Previous
+          </Link>
+        ) : (
+          <span />
+        )}
+        <span className="text-xs font-medium text-faint">
+          Page {page}{count !== null ? ` of ${Math.max(1, Math.ceil(count / pageSize))}` : ""}
+        </span>
+        {hasNext ? (
+          <Link
+            href={directoryHref(basePath, query, order, page + 1)}
+            scroll={false}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-[#090910] transition-transform hover:-translate-y-0.5"
+          >
+            Next <ChevronRight size={16} />
+          </Link>
+        ) : (
+          <span />
+        )}
+      </nav>
     </div>
   );
 }
 
-function StudioCard({ studio, priority }: { studio: DirectoryItem; priority: boolean }) {
+function directoryHref(basePath: string, query: string, order: "name" | "-name", page: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (order === "-name") params.set("sort", "desc");
+  if (page > 1) params.set("page", String(page));
+  const suffix = params.toString();
+  return suffix ? `${basePath}?${suffix}` : basePath;
+}
+
+function StudioCard({ studio, priority }: { studio: DirectoryRef; priority: boolean }) {
   return (
     <Link
       href={`/studio/${studio.slug}`}
@@ -120,11 +250,14 @@ function StudioCard({ studio, priority }: { studio: DirectoryItem; priority: boo
       <span className="line-clamp-2 text-[13px] font-semibold leading-snug transition-colors group-hover:text-brand-soft">
         {studio.name}
       </span>
+      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-faint">
+        {studio.gameCount.toLocaleString()} {studio.gameCount === 1 ? "game" : "games"}
+      </span>
     </Link>
   );
 }
 
-function SeriesCard({ series, index }: { series: Ref; index: number }) {
+function SeriesCard({ series, index }: { series: DirectoryRef; index: number }) {
   const hue = hueFromString(series.slug);
 
   return (
@@ -151,6 +284,9 @@ function SeriesCard({ series, index }: { series: Ref; index: number }) {
         </span>
         <span className="line-clamp-2 font-display text-[15px] font-bold leading-tight text-white transition-colors group-hover:text-white">
           {series.name}
+        </span>
+        <span className="mt-2 block text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
+          {series.gameCount.toLocaleString()} {series.gameCount === 1 ? "game" : "games"}
         </span>
       </span>
     </Link>
