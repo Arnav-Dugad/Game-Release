@@ -45,17 +45,6 @@ service cloud.firestore {
         allow read, write: if isOwner(uid);
       }
 
-      // --- Outbound notifications ---------------------------------------
-      // Installation identifiers and delivery receipts are written only by
-      // authenticated server routes using the Admin SDK. They must never be
-      // writable from an untrusted browser, even by the owning account.
-      match /pushSubscriptions/{subscriptionId} {
-        allow read, write: if false;
-      }
-
-      match /notificationDeliveries/{deliveryId} {
-        allow read, write: if false;
-      }
     }
 
     // --- Reviews ----------------------------------------------------------
@@ -86,8 +75,8 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
-    // World-readable, and writable by any signed-in user — observations are
     // --- Default deny -----------------------------------------------------
+    // Anything not matched above is denied outright, for reads and writes.
     match /{document=**} {
       allow read, write: if false;
     }

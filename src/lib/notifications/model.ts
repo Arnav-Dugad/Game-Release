@@ -24,41 +24,6 @@ export interface AppNotification {
 
 const DAY = 86_400_000;
 
-/** Whether a local wall-clock time falls inside a user's quiet window. */
-export function isQuietHours(
-  now: number,
-  timeZone: string,
-  start = "22:00",
-  end = "08:00",
-): boolean {
-  const parse = (value: string) => {
-    const match = /^(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return null;
-    const minutes = Number(match[1]) * 60 + Number(match[2]);
-    return minutes >= 0 && minutes < 1440 ? minutes : null;
-  };
-  const startMinutes = parse(start);
-  const endMinutes = parse(end);
-  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return false;
-
-  try {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(now));
-    const hour = Number(parts.find((part) => part.type === "hour")?.value);
-    const minute = Number(parts.find((part) => part.type === "minute")?.value);
-    const localMinutes = hour * 60 + minute;
-    return startMinutes < endMinutes
-      ? localMinutes >= startMinutes && localMinutes < endMinutes
-      : localMinutes >= startMinutes || localMinutes < endMinutes;
-  } catch {
-    return false;
-  }
-}
-
 export function canonicalEntryHref(entry: Pick<WatchlistEntry, "slug" | "name">): string {
   return /-s\d+$/.test(entry.slug)
     ? `/browse?search=${encodeURIComponent(entry.name)}`

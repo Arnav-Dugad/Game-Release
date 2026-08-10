@@ -15,7 +15,7 @@ import { stripHtml, slugify } from "../src/lib/utils/html";
 import { classifyUrl, storeFromUrl } from "../src/lib/games/stores";
 import { buildTasteProfile, MIN_TASTE_STRENGTH } from "../src/lib/games/taste";
 import { buildDirectoryWhere, parseDirectorySearchParams } from "../src/lib/games/directory";
-import { canonicalEntryHref, isQuietHours, releaseNotifications } from "../src/lib/notifications/model";
+import { canonicalEntryHref, releaseNotifications } from "../src/lib/notifications/model";
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
 import { buildLibraryStats } from "../src/lib/games/stats";
@@ -302,10 +302,6 @@ check(
   canonicalEntryHref(notificationEntry({ slug: "signal-game-s124" })),
   "/browse?search=Signal%20Game",
 );
-check("overnight quiet hours include midnight", isQuietHours(Date.parse("2026-08-09T00:30:00Z"), "UTC", "22:00", "08:00"), true);
-check("overnight quiet hours end cleanly", isQuietHours(Date.parse("2026-08-09T08:00:00Z"), "UTC", "22:00", "08:00"), false);
-check("daytime quiet window works", isQuietHours(Date.parse("2026-08-09T13:00:00Z"), "UTC", "12:00", "14:00"), true);
-check("invalid timezone fails open", isQuietHours(Date.now(), "Not/AZone", "22:00", "08:00"), false);
 
 console.log("\nPersonal dashboard signals");
 const dashboardNow = Date.parse("2026-08-09T12:00:00Z");

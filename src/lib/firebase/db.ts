@@ -154,13 +154,6 @@ export interface UserPreferences {
   /** Stable derived-notification ids already seen by this account. */
   notificationReadIds?: string[];
   notificationReleases?: boolean;
-  /** Scheduled outbound delivery channels. Both are opt-in. */
-  notificationPushEnabled?: boolean;
-  notificationEmailEnabled?: boolean;
-  /** Local quiet window in 24-hour HH:mm form and its IANA timezone. */
-  notificationQuietStart?: string;
-  notificationQuietEnd?: string;
-  notificationTimezone?: string;
   updatedAt?: number;
 }
 

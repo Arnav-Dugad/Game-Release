@@ -37,14 +37,46 @@ function storageKey(uid: string) {
   return `ludex:notifications:read:${uid}`;
 }
 
+/**
+ * How many read ids to retain.
+ *
+ * Notifications expire on their own (the window is T-14 to T+3 days), so the
+ * list only has to outlive the alerts it suppresses.
+ */
+const MAX_READ_IDS = 250;
+
+/**
+ * Account sync is debounced.
+ *
+ * Marking several notifications read in a row previously wrote the entire
+ * array to Firestore once per click. The device copy is written immediately —
+ * it is what the UI reads — and the account copy follows once the reader stops.
+ */
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
 function persistRead(uid: string, ids: Set<string>) {
-  const values = [...ids].slice(-250);
+  /*
+   * Keep the NEWEST ids.
+   *
+   * A `Set` iterates in insertion order, so `slice(-250)` kept the most
+   * recently *added* — which is right — but the previous code sliced the
+   * whole set on every write, meaning a long-lived list dropped its oldest
+   * entries first and those notifications flipped back to unread. Slicing from
+   * the end is correct; the bug was that eviction happened silently and the
+   * account copy was rewritten on every single click.
+   */
+  const values = [...ids].slice(-MAX_READ_IDS);
+
   try {
     window.localStorage.setItem(storageKey(uid), JSON.stringify(values));
   } catch {
     /* the in-memory state still works */
   }
-  void saveUserPreferences(uid, { notificationReadIds: values }).catch(() => {});
+
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    void saveUserPreferences(uid, { notificationReadIds: values }).catch(() => {});
+  }, 1200);
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {

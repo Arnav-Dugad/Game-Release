@@ -28,7 +28,6 @@ import { Container } from "@/components/ui/SectionHeading";
 import { useToast } from "@/components/ui/Toast";
 import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
-import { DeliverySettings } from "@/components/notifications/DeliverySettings";
 
 export function SettingsView() {
   return (
@@ -98,7 +97,6 @@ function NotificationCard() {
           hint="From 14 days before launch through the first three days after release."
         />
       </div>
-      <DeliverySettings />
     </SettingCard>
   );
 }
