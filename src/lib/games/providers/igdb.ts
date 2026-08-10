@@ -167,6 +167,8 @@ export class TokenError extends Error {
 
 /** Increments on every forced refresh so each retry is its own cache entry. */
 let tokenGeneration = 0;
+/** Which generation the in-flight request was built for. */
+let tokenInFlightGeneration = -1;
 
 async function getToken(forceRefresh = false): Promise<string> {
   const creds = credentials();
@@ -179,9 +181,18 @@ async function getToken(forceRefresh = false): Promise<string> {
     return tokenCache.value;
   }
 
-  // Collapse concurrent refreshes so a cold start doesn't fire one token
-  // request per in-flight render.
-  if (!tokenInFlight) {
+  /*
+   * Collapse concurrent refreshes so a cold start doesn't fire one token
+   * request per in-flight render — but only across the *same* generation.
+   *
+   * Reusing any in-flight promise meant a forced refresh after a 401 could be
+   * handed a request already in progress for the previous generation: the same
+   * revoked token that caused the 401. The retry then failed identically, and
+   * 401 is not in the retry set, so the provider degraded to Steam. That is
+   * precisely the credential-rotation case this refresh path exists to survive.
+   */
+  if (!tokenInFlight || tokenInFlightGeneration !== tokenGeneration) {
+    tokenInFlightGeneration = tokenGeneration;
     tokenInFlight = fetchToken(creds.clientId, creds.clientSecret, tokenGeneration).finally(
       () => {
         tokenInFlight = null;
@@ -433,9 +444,39 @@ let schemaPromise: Promise<{
   descriptors: string[];
 }> | null = null;
 
+/**
+ * The negotiated field set, cached across instances.
+ *
+ * `schemaPromise` alone is module-scoped, so every cold lambda paid three
+ * sequential probe round trips before its first real query — and those are the
+ * requests most likely to meet the rate limiter. Worse, a 429 during probing
+ * propagated out of `summaryFields()`, failed the provider, and dropped the
+ * whole site to the Steam fallback: the exact "everything is from Steam"
+ * symptom, reached by a different path.
+ *
+ * Sharing the negotiated result through the data cache means one instance pays
+ * for all of them, and only once a week.
+ */
+const cachedSchema = unstable_cache(
+  async () => negotiateSchema(),
+  ["igdb", "schema"],
+  { revalidate: TTL.taxonomy, tags: ["igdb"] },
+);
+
 function schema() {
   if (!schemaPromise) {
-    schemaPromise = (async () => {
+    schemaPromise = cachedSchema().catch((err) => {
+      // Never cache a rejected probe — a transient outage would otherwise
+      // permanently strip these fields for the life of the server.
+      schemaPromise = null;
+      throw err;
+    });
+  }
+  return schemaPromise;
+}
+
+function negotiateSchema() {
+  return (async () => {
       // Run these tiny cold-start probes in sequence so schema detection does
       // not consume most of the per-second request budget before the real page
       // query starts.
@@ -472,14 +513,7 @@ function schema() {
           [],
         ]);
       return { release, ageRating, descriptors };
-    })().catch((err) => {
-      // Never cache a rejected probe — a transient outage would otherwise
-      // permanently strip these fields for the life of the server.
-      schemaPromise = null;
-      throw err;
-    });
-  }
-  return schemaPromise;
+    })();
 }
 
 /* ---------------------------------------------------------------------------
@@ -1116,6 +1150,10 @@ function mapSummary(game: IgdbGame): GameSummary {
     parentPlatforms: toFamilies(game.platforms),
     genres: toRefs(game.genres),
     screenshots,
+    // Null on card-level queries and populated on detail ones, because only
+    // `detailFields()` requests `age_ratings`. That is the honest result rather
+    // than a bug: `mapDetail` builds on this, so the derivation has to live
+    // here, and a summary genuinely does not know the rating.
     esrb: ratings.find((r) => r.organization.toUpperCase().includes("ESRB"))?.rating ?? null,
     heroTrailer: toTrailers(game).at(0) ?? null,
     popScore: typeof game.popScore === "number" ? game.popScore : null,
@@ -1473,8 +1511,28 @@ async function fetchPopularGameIds(
  * Provider
  * ------------------------------------------------------------------------ */
 
-const nowSeconds = () => Math.floor(Date.now() / 1000);
-const daysFromNow = (days: number) => nowSeconds() + days * 86_400;
+/**
+ * Today at 00:00 UTC, in seconds.
+ *
+ * Every bound that goes into a *query body* must be day-aligned like this, and
+ * never a second-granular `Date.now()`. `queryFor` keys `unstable_cache` on the
+ * endpoint and the body, so a timestamp that moves every second makes the key
+ * unique on every single render — the cache hit rate for that query is then
+ * exactly zero, and each render fires a fresh IGDB request while accumulating
+ * single-use cache entries. `newReleases` sits on the home page, so that was one
+ * guaranteed uncached round trip per home-page visit.
+ *
+ * Rounding to the day keeps the key stable for 24 hours, which is exactly what
+ * these "released in the last N days" windows actually mean.
+ */
+const todayStartSeconds = () =>
+  Math.floor(Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) / 1000);
+
+/** Day-aligned offset from today, for use in cacheable query bodies. */
+const daysFromNow = (days: number) => todayStartSeconds() + days * 86_400;
+
+/** Tomorrow at 00:00 UTC — a day-stable upper bound for "already released". */
+const todayEndSeconds = () => todayStartSeconds() + 86_400;
 
 const usable = (games: IgdbGame[]) => games.filter((game) => game.status !== CANCELLED);
 
@@ -1603,16 +1661,30 @@ function sortClause(ordering: BrowseFilters["ordering"]): string | undefined {
 async function buildWhere(filters: BrowseFilters): Promise<string | null> {
   const clauses = [MAIN_GAMES];
 
-  if (filters.genres) {
-    const ids = await genreIdsForSlugs(filters.genres.split(",").filter(Boolean));
-    if (ids.length === 0) return null;
-    clauses.push(`genres = (${ids.join(",")})`);
+  /*
+   * Both taxonomy lookups start together.
+   *
+   * They are separate queries against different endpoints and neither depends
+   * on the other, but awaiting them in sequence put a filtered browse four
+   * round trips deep before its main query had even been built.
+   */
+  const [genreIds, platformIds] = await Promise.all([
+    filters.genres
+      ? genreIdsForSlugs(filters.genres.split(",").filter(Boolean))
+      : Promise.resolve(null),
+    filters.platforms
+      ? platformIdsForFamilies(filters.platforms.split(",").filter(Boolean))
+      : Promise.resolve(null),
+  ]);
+
+  if (genreIds !== null) {
+    if (genreIds.length === 0) return null;
+    clauses.push(`genres = (${genreIds.join(",")})`);
   }
 
-  if (filters.platforms) {
-    const ids = await platformIdsForFamilies(filters.platforms.split(",").filter(Boolean));
-    if (ids.length === 0) return null;
-    clauses.push(`platforms = (${ids.join(",")})`);
+  if (platformIds !== null) {
+    if (platformIds.length === 0) return null;
+    clauses.push(`platforms = (${platformIds.join(",")})`);
   }
 
   if (filters.dates) {
@@ -1811,11 +1883,20 @@ async function searchPool(term: string, where: string, limit: number, revalidate
 async function typoSearchPool(term: string, where: string, limit: number, revalidate: number) {
   const query = queryFor(revalidate);
   const { release } = await schema();
+  /*
+   * Three characters, not two.
+   *
+   * These become `name ~ *"abc"*` wildcards across ~300k rows, so the prefix
+   * length is the difference between a selective match and something close to a
+   * full-catalogue scan — against a 9s timeout, on the hottest path in the app.
+   * Three still catches the typos this pool exists for while cutting the
+   * candidate set by roughly an order of magnitude.
+   */
   const prefixes = [...new Set(
     searchQueryVariants(term)
       .flatMap((variant) => variant.split(" "))
-      .filter((part) => part.length >= 2)
-      .map((part) => part.slice(0, 2)),
+      .filter((part) => part.length >= 3)
+      .map((part) => part.slice(0, 3)),
   )].slice(0, 5);
   if (prefixes.length === 0) {
     return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
@@ -1844,10 +1925,20 @@ async function typoSearchPool(term: string, where: string, limit: number, revali
 }
 
 async function intelligentSearchPool(term: string, where: string, limit: number, revalidate: number) {
-  const direct = await searchPool(term, where, limit, revalidate);
-  // Always merge the loose pool. Returning early after eight strong matches is
-  // what hid a franchise's less-popular games from otherwise valid searches.
-  const fuzzy = await typoSearchPool(term, where, limit, revalidate);
+  /*
+   * Both pools always run, so they run together.
+   *
+   * Merging the loose pool unconditionally is deliberate — returning early
+   * after eight strong matches is what hid a franchise's less-popular games
+   * from otherwise valid searches. But that argues for *always merging*, not
+   * for waiting on the first before starting the second: awaiting them in
+   * sequence made every keystroke-driven search two full round trips deep, and
+   * the typo pool is the slowest query shape in the file.
+   */
+  const [direct, fuzzy] = await Promise.all([
+    searchPool(term, where, limit, revalidate),
+    typoSearchPool(term, where, limit, revalidate),
+  ]);
   const merged = new Map<number, GameSummary>();
   for (const game of [...direct.games, ...fuzzy.games]) merged.set(game.id, game);
   return {
@@ -2065,19 +2156,24 @@ export const igdbProvider: GameProvider = {
         };
       }
 
-      const results = await listGames(
-        {
-          where,
-          sort: sortClause(filters.ordering),
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-        },
-        revalidate,
-      );
+      // The page and its total are independent queries; awaiting them in
+      // sequence doubled the latency of every unfiltered browse.
+      const [results, count] = await Promise.all([
+        listGames(
+          {
+            where,
+            sort: sortClause(filters.ordering),
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+          },
+          revalidate,
+        ),
+        countGames(where, revalidate),
+      ]);
 
       return {
         results,
-        count: await countGames(where, revalidate),
+        count,
         hasNext: results.length >= pageSize,
         page,
       };
@@ -2093,22 +2189,26 @@ export const igdbProvider: GameProvider = {
       const base = await buildWhere(filters);
       if (base === null) return { results: [], count: 0, hasNext: false, page };
       // Calendar days begin at UTC midnight. Comparing against the current
-      // second hid every game releasing *today* after 00:00 UTC.
-      const todayStart = Math.floor(Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) / 1000);
-      const where = `${base} & first_release_date >= ${todayStart}`;
-      const results = await listGames(
-        {
-          where,
-          // Soonest-first is the only sensible default for a calendar.
-          sort: sortClause(filters.ordering ?? "released"),
-          limit: pageSize,
-          offset: (page - 1) * pageSize,
-        },
-        TTL.list,
-      );
+      // second hid every game releasing *today* after 00:00 UTC — and made the
+      // query body, and therefore its cache key, change every second.
+      const where = `${base} & first_release_date >= ${todayStartSeconds()}`;
+      // Independent queries — see `browse`.
+      const [results, count] = await Promise.all([
+        listGames(
+          {
+            where,
+            // Soonest-first is the only sensible default for a calendar.
+            sort: sortClause(filters.ordering ?? "released"),
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+          },
+          TTL.list,
+        ),
+        countGames(where, TTL.list),
+      ]);
       return {
         results,
-        count: await countGames(where, TTL.list),
+        count,
         hasNext: results.length >= pageSize,
         page,
       };
@@ -2153,7 +2253,7 @@ export const igdbProvider: GameProvider = {
 
       return await listGames(
         {
-          where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${nowSeconds()}`,
+          where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${todayEndSeconds()}`,
           sort: "total_rating_count desc",
           limit: pageSize,
         },
@@ -2188,7 +2288,7 @@ export const igdbProvider: GameProvider = {
     try {
       return await listGames(
         {
-          where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-60)} & first_release_date <= ${nowSeconds()}`,
+          where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-60)} & first_release_date <= ${todayEndSeconds()}`,
           sort: "first_release_date desc",
           limit: pageSize,
         },
@@ -2329,7 +2429,7 @@ export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
     // widely rated recent releases rather than a storefront or upcoming list.
     const recent = await listGames(
       {
-        where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${nowSeconds()}`,
+        where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${todayEndSeconds()}`,
         sort: "total_rating_count desc",
         limit,
       },

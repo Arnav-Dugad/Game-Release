@@ -308,10 +308,18 @@ export async function getTotalGames(): Promise<number | null> {
  * serves anything else on demand and caches it via ISR.
  */
 export async function popularSlugs(limit = 60): Promise<string[]> {
+  /*
+   * Each source contributes up to `limit`, not a hardcoded 30.
+   *
+   * The three lists overlap heavily, so asking each for a third of the target
+   * and then deduping reliably undershoots — `popularSlugs(200)` could never
+   * return more than 90, and the sitemap silently asked for 200.
+   */
+  const perSource = Math.max(30, Math.ceil(limit * 0.75));
   const [trending, topRated, upcoming] = await Promise.all([
-    getTrending(30),
-    getTopRated(30),
-    getUpcoming(30),
+    getTrending(perSource),
+    getTopRated(perSource),
+    getUpcoming(perSource),
   ]);
 
   const slugs = [

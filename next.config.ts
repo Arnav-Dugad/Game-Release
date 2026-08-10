@@ -36,20 +36,18 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react", "motion"],
-    // This is the build-wide worker cap. The per-process limiter below cannot
-    // protect one IGDB account when many independent workers run at once.
-    cpus: 1,
-
-    // Keep generation conservative. The IGDB limiter is process-local, so
-    // serial work inside each worker prevents that worker creating a burst.
-    staticGenerationMaxConcurrency: 1,
-
-    // Avoid splitting this small route set into extra static-generation
-    // workers, each of which would otherwise have an independent limiter.
-    staticGenerationMinPagesPerWorker: 1000,
-    // A page that still trips the limit gets another chance rather than
-    // silently shipping fallback data.
-    staticGenerationRetryCount: 2,
+    /*
+     * The static-generation throttles that used to live here are gone.
+     *
+     * `cpus: 1`, `staticGenerationMaxConcurrency: 1` and
+     * `staticGenerationMinPagesPerWorker: 1000` existed to stop parallel build
+     * workers, each with its own process-local IGDB limiter, bursting past the
+     * rate ceiling while prerendering game pages. No catalogue route is
+     * prerendered any more — every page renders per request — so they protected
+     * nothing and only serialised the build.
+     *
+     * If prerendering is ever restored, restore these with it.
+     */
   },
 };
 
