@@ -44,7 +44,25 @@ export function TrailerPlayer({
     );
   }
 
-  if (trailer.kind !== "youtube" || !trailer.youtubeId) return null;
+  /*
+   * Nothing playable.
+   *
+   * Returning null left the lightbox as an empty black 16:9 box with no
+   * explanation, because the gallery still renders a Play tile for a trailer
+   * whose URL turned out to be missing. Saying so is better than a void.
+   */
+  if (trailer.kind !== "youtube" || !trailer.youtubeId) {
+    return (
+      <div className="grid h-full w-full place-items-center bg-black px-6 text-center">
+        <div>
+          <p className="text-sm font-medium text-text">This trailer isn&rsquo;t playable</p>
+          <p className="mt-1.5 text-xs text-muted">
+            The source didn&rsquo;t provide a usable video for it.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (playing) {
     return (

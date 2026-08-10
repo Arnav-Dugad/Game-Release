@@ -121,7 +121,13 @@ export function MediaGallery({
                 key={`${item.kind}-${index}`}
                 type="button"
                 onClick={() => setOpenAt(index)}
-                aria-label={`View ${captionOf(item, index)}, image ${index + 1} of ${items.length}`}
+                // The final tile becomes a "+N more" affordance, so it must not
+                // announce itself as the Nth screenshot.
+                aria-label={
+                  more > 0
+                    ? `View all ${items.length} media items`
+                    : `View ${captionOf(item, index)}, item ${index + 1} of ${items.length}`
+                }
                 className={cn(
                   "group/tile relative min-h-0 overflow-hidden rounded-xl border border-line bg-panel text-left transition-[border-color,transform,box-shadow] duration-500 fine:hover:-translate-y-0.5 fine:hover:border-line-strong fine:hover:shadow-[0_24px_60px_-28px_rgba(124,92,255,0.65)] sm:rounded-2xl",
                   index === 0 && "col-span-2 aspect-video lg:row-span-2 lg:aspect-auto",
@@ -130,6 +136,14 @@ export function MediaGallery({
                   previewItems.length > 1 && previewItems.length <= 3 && index === 0 && "lg:col-span-3",
                   previewItems.length === 2 && index === 1 && "lg:row-span-2",
                   previewItems.length === 4 && index === 3 && "lg:col-span-2",
+                  /*
+                   * Five previews is the common case and was the only count with
+                   * no span rule: tile 0 took column 1 across both rows, tiles
+                   * 1–3 filled row 1, tile 4 landed at row 2 column 2, and row 2
+                   * columns 3–4 stayed empty inside a fixed 520px-tall grid.
+                   * Widening the last tile closes the hole.
+                   */
+                  previewItems.length === 5 && index === 4 && "lg:col-span-2",
                 )}
               >
                 {poster ? (

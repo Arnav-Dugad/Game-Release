@@ -124,9 +124,20 @@ export default async function GamePage({ params }: { params: Params }) {
     game.expansions.length || game.standaloneExpansions.length || game.editions.length ||
     game.bundles.length || game.remakes.length || game.remasters.length || game.ports.length,
   );
+  /**
+   * Whether the "Themes & modes" block has anything to say.
+   *
+   * Themes and game modes are what it leads with; tags are the fallback when
+   * IGDB has neither; keywords render as their own sub-list. Any one of them is
+   * enough — and `hasDetails` has to agree, or the dock offers a "Game details"
+   * link to a section that renders nothing.
+   */
+  const hasThemeContent = Boolean(
+    game.themes.length || game.gameModes.length || game.tags.length || game.keywords.length,
+  );
   const hasDetails = Boolean(
     game.characters.length || game.companies.length || game.platformDetails.length ||
-    game.releases.length > 1 || game.tags.length || game.keywords.length || game.requirements.length,
+    game.releases.length > 1 || hasThemeContent || game.requirements.length,
   );
   const sections: DetailSectionLink[] = [
     ...(game.description ? [{ id: "overview", label: "Overview" }] : []),
@@ -200,20 +211,26 @@ export default async function GamePage({ params }: { params: Params }) {
 
             {game.releases.length > 1 && <Reveal><h3 className="mb-5 text-2xl font-bold sm:text-3xl">Release history</h3><ReleaseTable releases={game.releases} /></Reveal>}
 
-            {(game.tags.length > 0 || game.keywords.length > 0) && <Reveal><h3 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h3>
-              <div className="flex flex-wrap gap-2">
-                {game.themes.map((theme) => (
-                  <Badge key={`theme-${theme.id}`} tone="brand">
-                    {theme.name}
-                  </Badge>
-                ))}
-                {game.gameModes.map((mode) => (
-                  <Badge key={`mode-${mode.id}`}>{mode.name}</Badge>
-                ))}
-                {game.themes.length === 0 &&
-                  game.gameModes.length === 0 &&
-                  game.tags.map((tag) => <Badge key={tag.id}>{tag.name}</Badge>)}
-              </div>
+            {/* Gated on what this block actually renders. It previously tested
+                `tags`/`keywords` while rendering `themes`/`gameModes`, so a game
+                with themes but no tags showed nothing, and a game with only
+                keywords rendered an empty row above the tag list. */}
+            {hasThemeContent && <Reveal><h3 className="mb-4 text-2xl font-bold sm:text-3xl">Themes & modes</h3>
+              {(game.themes.length > 0 || game.gameModes.length > 0 || game.tags.length > 0) && (
+                <div className="flex flex-wrap gap-2">
+                  {game.themes.map((theme) => (
+                    <Badge key={`theme-${theme.id}`} tone="brand">
+                      {theme.name}
+                    </Badge>
+                  ))}
+                  {game.gameModes.map((mode) => (
+                    <Badge key={`mode-${mode.id}`}>{mode.name}</Badge>
+                  ))}
+                  {game.themes.length === 0 &&
+                    game.gameModes.length === 0 &&
+                    game.tags.map((tag) => <Badge key={tag.id}>{tag.name}</Badge>)}
+                </div>
+              )}
 
               {game.keywords.length > 0 && (
                 <div className="mt-5">
@@ -253,7 +270,14 @@ export default async function GamePage({ params }: { params: Params }) {
             <SectionHeading
               eyebrow="More like this"
               title="Related games"
-              href={`/browse?genres=${game.genres.map((g) => g.slug).join(",")}`}
+              // Without genres the link would be a bare `?genres=`, which browses
+              // nothing — so the CTA is dropped rather than pointing at an empty
+              // filter.
+              href={
+                game.genres.length > 0
+                  ? `/browse?genres=${game.genres.map((g) => g.slug).join(",")}`
+                  : undefined
+              }
               linkLabel="Browse genre"
             />
           </Container>

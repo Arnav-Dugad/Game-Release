@@ -46,10 +46,16 @@ export function GameDetailDock({
       if (navigator.share) {
         await navigator.share(data);
         setShared(true);
-      } else {
+      } else if (navigator.clipboard?.writeText) {
+        // `navigator.clipboard` is undefined on insecure origins and older
+        // Safari, so calling it unguarded threw a TypeError and the reader saw
+        // "Could not share" rather than the URL they could copy themselves.
         await navigator.clipboard.writeText(window.location.href);
         setShared(true);
         toast("Game link copied", "success");
+      } else {
+        toast("Copy this page's address to share it", "info");
+        return;
       }
       window.setTimeout(() => setShared(false), 1800);
     } catch (error) {

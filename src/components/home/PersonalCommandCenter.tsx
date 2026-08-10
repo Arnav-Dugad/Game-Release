@@ -227,8 +227,24 @@ function firstName(name: string | null): string {
   return name?.trim().split(/\s+/)[0] || "Player";
 }
 
+/**
+ * `"none"` needs its own wording.
+ *
+ * It previously fell through to the "Want to play" default, so a game the
+ * reader had merely followed showed a "Want to play" chip directly beneath a
+ * "Recently tracked" eyebrow — two labels contradicting each other on one card.
+ */
 function statusLabel(status: WatchlistEntry["status"]): string {
-  return status === "playing" ? "Currently playing" : status === "played" ? "Completed" : "Want to play";
+  switch (status) {
+    case "playing":
+      return "Currently playing";
+    case "played":
+      return "Completed";
+    case "want":
+      return "Want to play";
+    default:
+      return "Following";
+  }
 }
 
 function formatDate(value: string | null): string {

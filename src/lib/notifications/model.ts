@@ -92,7 +92,19 @@ export function releaseNotifications(
       }
 
       if (notification) out.push({
-        id: `${notification.kind}:${entry.gameId}:${entry.released}`,
+        /*
+         * `days` is part of the identity for the countdown kind.
+         *
+         * The title embeds the day count ("arrives in 6 days") but the id did
+         * not, so the first `release-soon` a reader saw permanently suppressed
+         * every later one — they might get "in 13 days" and then nothing until
+         * launch day. Including `days` makes each step its own notification;
+         * the other kinds fire once by nature and are unaffected.
+         */
+        id:
+          notification.kind === "release-soon"
+            ? `${notification.kind}:${entry.gameId}:${entry.released}:${days}`
+            : `${notification.kind}:${entry.gameId}:${entry.released}`,
         ...notification,
         href: canonicalEntryHref(entry),
         gameName: entry.name,
@@ -137,7 +149,9 @@ export function releaseNotifications(
         kind: relatedKind,
         title: relatedTitle,
         body: relatedBody,
-        href: `/game/${related.slug}`,
+        // Same guard the parent uses: a Steam-derived slug ends in `-s<appid>`
+        // and has no game page, so linking it directly 404s.
+        href: canonicalEntryHref({ slug: related.slug, name: related.name }),
         gameName: entry.name,
         image: related.image ?? entry.image,
         imageFallback: related.imageFallback ?? entry.imageFallback,

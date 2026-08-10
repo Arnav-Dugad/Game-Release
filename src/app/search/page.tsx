@@ -22,6 +22,7 @@ import {
   type SearchHit,
   type SearchKind,
 } from "@/lib/games/search";
+import { SOURCE_LABELS, type DataSource } from "@/lib/games/types";
 import { cn } from "@/lib/utils/cn";
 
 export const revalidate = 300;
@@ -48,7 +49,9 @@ const FULL_LIMITS = {
 export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {
   const query = (first((await searchParams).q) ?? "").trim().slice(0, 80);
   let hits: SearchHit[] = [];
-  let source = "unavailable";
+  // Typed rather than inferred: a bare string literal widens to `string`, which
+  // then can't index the shared label map.
+  let source: DataSource = "unavailable";
 
   if (query.length >= 2 && igdbConfigured()) {
     hits = await igdbSearchAll(query, FULL_LIMITS);
@@ -102,7 +105,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
             <Reveal delay={0.18} className="mt-5 flex flex-wrap items-center gap-2 text-xs text-muted">
               <span className="rounded-full border border-line bg-white/[0.035] px-3 py-1.5"><strong className="text-text tabular-nums">{hits.length}</strong> direct matches</span>
               <span className="rounded-full border border-line bg-white/[0.035] px-3 py-1.5"><strong className="text-text tabular-nums">{populatedKinds.length}</strong> entity types</span>
-              <span className="rounded-full border border-line bg-white/[0.035] px-3 py-1.5">Source: {source === "igdb" ? "IGDB" : source}</span>
+              {/* `SOURCE_LABELS` is the shared human wording. Interpolating the
+                  raw union leaked internal values like "unavailable" to readers. */}
+              <span className="rounded-full border border-line bg-white/[0.035] px-3 py-1.5">Source: {SOURCE_LABELS[source]}</span>
             </Reveal>
           )}
         </Container>

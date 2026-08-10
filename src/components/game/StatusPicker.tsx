@@ -59,9 +59,13 @@ export function StatusPicker({
       return;
     }
 
+    // Checked before the busy flag: re-selecting the active state is a no-op,
+    // and flagging it first disabled the whole group for a render tick while
+    // doing nothing.
+    if (current === value) return;
+
     setBusy(value);
     try {
-      if (current === value) return;
       await ensure(game);
       await setStatus(game.id, value);
       toast(

@@ -68,12 +68,16 @@ export function EntityPage({
                       : "aspect-[3/4] w-32 sm:w-44",
                   )}
                 >
+                  {/*
+                    `fill` for both kinds. A company logo previously rendered at
+                    its intrinsic 180px inside a 128/160px `overflow-hidden` box,
+                    so every studio mark was cropped; `fill` + `object-contain`
+                    scales it to the box instead.
+                  */}
                   <Image
                     src={entity.image!}
                     alt={entity.name}
-                    fill={kind !== "company"}
-                    width={kind === "company" ? 180 : undefined}
-                    height={kind === "company" ? 180 : undefined}
+                    fill
                     sizes="176px"
                     unoptimized={isIgdbImage(entity.image)}
                     className={kind === "company" ? "object-contain p-1" : "object-cover"}

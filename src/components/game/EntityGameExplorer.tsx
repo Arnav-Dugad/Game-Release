@@ -9,6 +9,9 @@ import { fuzzyMatches } from "@/lib/games/fuzzy-search";
 
 type EntitySort = "featured" | "newest" | "oldest" | "name" | "critic" | "audience" | "anticipated";
 
+/** How many games one page of the explorer shows, and one "load more" adds. */
+const PAGE_STEP = 60;
+
 export function EntityGameExplorer({
   games,
   kind,
@@ -20,8 +23,26 @@ export function EntityGameExplorer({
   const [sort, setSort] = useState<EntitySort>(
     kind === "franchise" ? "newest" : "featured",
   );
-  const [visibleCount, setVisibleCount] = useState(60);
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP);
   const normalised = query.trim();
+
+  /*
+   * Narrowing the list resets how much of it is shown.
+   *
+   * Without this, "Load 60 more" stayed in effect across a new search — so a
+   * query matching three games still rendered against a 180-item budget, and
+   * the "load more" affordance vanished for the next search that needed it.
+   *
+   * Adjusted during render rather than in an effect: React re-renders with the
+   * corrected value before touching the DOM, so there is no flash of the stale
+   * count and no second commit.
+   */
+  const filterKey = `${normalised}|${sort}`;
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey);
+    setVisibleCount(PAGE_STEP);
+  }
 
   const filtered = useMemo(() => {
     const matches = normalised
@@ -52,10 +73,14 @@ export function EntityGameExplorer({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            // Three kinds reach this component; a character page previously
+            // read "Search this franchise…".
             placeholder={
               kind === "company"
                 ? "Search this studio’s games…"
-                : "Search this franchise…"
+                : kind === "character"
+                  ? "Search this character’s games…"
+                  : "Search this franchise…"
             }
             className="h-12 w-full rounded-xl border border-line bg-bg/55 py-2 pl-11 pr-11 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-strong focus:border-brand"
           />
@@ -102,7 +127,7 @@ export function EntityGameExplorer({
           {visible.length < filtered.length && (
             <div className="mt-8 flex flex-col items-center gap-3 rounded-3xl border border-line bg-white/[0.025] p-5 text-center">
               <p className="text-xs text-muted"><span className="font-semibold text-text tabular-nums">{filtered.length - visible.length}</span> more games remain in this complete catalogue.</p>
-              <button type="button" onClick={() => setVisibleCount((count) => count + 60)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-5 text-sm font-bold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Load 60 more <ChevronDown size={15} /></button>
+              <button type="button" onClick={() => setVisibleCount((count) => count + PAGE_STEP)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-5 text-sm font-bold text-brand-soft transition-colors hover:border-brand/50 hover:text-white">Load {PAGE_STEP} more <ChevronDown size={15} /></button>
             </div>
           )}
         </>

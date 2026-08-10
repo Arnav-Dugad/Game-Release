@@ -655,6 +655,16 @@ async function detailFields(): Promise<string> {
  * across revisions, rather than the `category` enum which has not.
  */
 const MAIN_GAMES = "parent_game = null & version_parent = null";
+
+/**
+ * Keeps collection ids from colliding with franchise ids in search results.
+ *
+ * They come from two different IGDB tables that both surface as
+ * `kind: "franchise"`, and their id spaces overlap. Large enough to clear any
+ * real id, and only ever used for React keys and cursor identity — never sent
+ * back to the API.
+ */
+const SERIES_ID_OFFSET = 1_000_000_000;
 /** Search includes DLC and expansions; alternate editions remain separate. */
 const SEARCHABLE_GAMES = "version_parent = null";
 
@@ -1968,7 +1978,16 @@ export async function igdbSearchAll(
         releaseWindow: game.releaseWindow,
         tba: game.tba,
       })),
-      ...[...franchises, ...series]
+      /*
+       * Franchises and collections ("series") are separate IGDB tables whose
+       * ids overlap, but both surface here as `kind: "franchise"`. Carrying the
+       * raw id meant two different entities could collide on
+       * `franchise-<id>` — duplicate React keys, and `activeIndex` matching the
+       * wrong row so Enter opened a result the reader hadn't highlighted.
+       * Offsetting the collection ids keeps them distinct without changing the
+       * slug, which is what actually drives routing.
+       */
+      ...[...franchises, ...series.map((entry) => ({ ...entry, id: entry.id + SERIES_ID_OFFSET }))]
         .filter((entry, index, all) => all.findIndex((candidate) =>
           (candidate.slug ?? candidate.name.toLowerCase()) === (entry.slug ?? entry.name.toLowerCase()),
         ) === index)
@@ -2708,38 +2727,96 @@ export async function igdbStudiosDirectory(
 }
 
 /**
+ * A pool of currently-popular games, expanded far enough to read their credits.
+ *
+ * Shared by the studio and franchise directories, which both want the same
+ * thing: "who and what is behind the games people actually play right now".
+ * One cached query serves both.
+ */
+interface CreditPoolGame {
+  id: number;
+  involved_companies?: { developer?: boolean; publisher?: boolean; company?: IgdbCompany }[];
+  franchises?: IgdbNamed[];
+  collections?: IgdbNamed[];
+}
+
+async function fetchCreditPool(): Promise<CreditPoolGame[]> {
+  // 450 keeps the id list inside one request; IGDB caps `limit` at 500.
+  const popularIds = await fetchPopularGameIds(450, POPULARITY.playing);
+  if (popularIds.length === 0) return [];
+
+  const query = queryFor(TTL.taxonomy);
+  return query<CreditPoolGame[]>(
+    "games",
+    apicalypse({
+      fields: [
+        "involved_companies.developer",
+        "involved_companies.publisher",
+        "involved_companies.company.name",
+        "involved_companies.company.slug",
+        "involved_companies.company.logo.image_id",
+        "franchises.name",
+        "franchises.slug",
+        "collections.name",
+        "collections.slug",
+      ].join(","),
+      where: `id = (${popularIds.join(",")})`,
+      limit: popularIds.length,
+    }),
+  );
+}
+
+/**
  * The studios worth putting on an index page.
  *
- * Ordered by how much they have actually shipped, which is the only ranking
- * IGDB supports here and happens to be the right one: a browsable index should
- * open on names people recognise, not on the alphabetical accident of "1C
- * Company". Filtered to companies with a logo so the grid reads as a wall of
- * marks rather than a list of initials.
+ * Ranked by how many currently-popular games a studio is credited on, so the
+ * directory opens on names people recognise.
+ *
+ * The previous implementation asked for `limit 500` with **no sort clause**.
+ * APICalypse returns id order in that case, so it fetched the 500 *oldest*
+ * company records and ranked those locally — the exact "alphabetical accident"
+ * this function exists to avoid, and it fed the sitemap too. IGDB cannot sort
+ * by the length of an array field, so there is no query-level fix; ranking has
+ * to come from something scalar, and popularity is both scalar and meaningful.
  */
 export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
   if (!igdbConfigured()) return null;
   try {
-    const query = queryFor(TTL.taxonomy);
-    const rows = await query<(IgdbCompany & { developed?: number[] })[]>(
-      "companies",
-      apicalypse({
-        fields: "name,slug,logo.image_id,developed",
-        where: "slug != null & logo != null & developed != null",
-        limit: 500,
-      }),
-    );
+    const pool = await fetchCreditPool();
 
-    return rows
-      .map((company) => ({
-        id: company.id,
-        slug: company.slug ?? String(company.id),
-        name: company.name,
-        logo: igdbImage(company.logo?.image_id, "logo_med"),
-        count: company.developed?.length ?? 0,
-      }))
-      .sort((a, b) => b.count - a.count)
+    const tally = new Map<number, { ref: LogoRef; count: number }>();
+    for (const game of pool) {
+      // One credit per studio per game, so a company listed as both developer
+      // and publisher doesn't count twice.
+      const seen = new Set<number>();
+      for (const entry of game.involved_companies ?? []) {
+        const company = entry.company;
+        if (!company?.logo?.image_id || seen.has(company.id)) continue;
+        seen.add(company.id);
+
+        const existing = tally.get(company.id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          tally.set(company.id, {
+            count: 1,
+            ref: {
+              id: company.id,
+              slug: company.slug ?? String(company.id),
+              name: company.name,
+              logo: igdbImage(company.logo.image_id, "logo_med"),
+            },
+          });
+        }
+      }
+    }
+
+    const ranked = [...tally.values()]
+      .sort((a, b) => b.count - a.count || a.ref.name.localeCompare(b.ref.name))
       .slice(0, limit)
-      .map(({ id, slug, name, logo }) => ({ id, slug, name, logo }));
+      .map((entry) => entry.ref);
+
+    return ranked.length > 0 ? ranked : null;
   } catch (err) {
     warn("topStudios", err);
     return null;
@@ -2750,23 +2827,35 @@ export async function igdbTopStudios(limit = 60): Promise<LogoRef[] | null> {
 export async function igdbTopFranchises(limit = 60): Promise<Ref[] | null> {
   if (!igdbConfigured()) return null;
   try {
-    const query = queryFor(TTL.taxonomy);
-    const rows = await query<(IgdbNamed & { games?: number[] })[]>(
-      "franchises",
-      apicalypse({ fields: "name,slug,games", where: "slug != null & games != null", limit: 500 }),
-    );
+    // Same reasoning as `igdbTopStudios`: the old unsorted `limit 500` returned
+    // id order, i.e. the oldest franchise records rather than the biggest.
+    const pool = await fetchCreditPool();
 
-    return rows
-      .map((franchise) => ({
-        id: franchise.id,
-        slug: franchise.slug ?? String(franchise.id),
-        name: franchise.name,
-        count: franchise.games?.length ?? 0,
-      }))
-      .filter((franchise) => franchise.count >= 2)
-      .sort((a, b) => b.count - a.count)
+    const tally = new Map<string, { ref: Ref; count: number }>();
+    for (const game of pool) {
+      // A game frequently belongs to both a franchise and an identically-named
+      // collection; key on slug so the two don't double-count.
+      const seen = new Set<string>();
+      for (const entry of [...(game.franchises ?? []), ...(game.collections ?? [])]) {
+        const slug = entry.slug ?? String(entry.id);
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+
+        const existing = tally.get(slug);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          tally.set(slug, { count: 1, ref: { id: entry.id, slug, name: entry.name } });
+        }
+      }
+    }
+
+    const ranked = [...tally.values()]
+      .sort((a, b) => b.count - a.count || a.ref.name.localeCompare(b.ref.name))
       .slice(0, limit)
-      .map(({ id, slug, name }) => ({ id, slug, name }));
+      .map((entry) => entry.ref);
+
+    return ranked.length > 0 ? ranked : null;
   } catch (err) {
     warn("topFranchises", err);
     return null;

@@ -50,6 +50,22 @@ export function EntityDirectory({
   const first = (page - 1) * pageSize + 1;
   const last = first + items.length - 1;
 
+  /*
+   * Follow the URL when it changes underneath us.
+   *
+   * `draft` seeds from `query` once, so a back/forward navigation updated the
+   * results while leaving the previous term sitting in the input — the box and
+   * the list disagreed about what was being searched.
+   *
+   * Adjusted during render rather than in an effect, so the input never paints
+   * the stale term first.
+   */
+  const [lastQuery, setLastQuery] = useState(query);
+  if (query !== lastQuery) {
+    setLastQuery(query);
+    setDraft(query);
+  }
+
   useEffect(() => {
     const nextQuery = draft.trim();
     if (nextQuery === query) return;

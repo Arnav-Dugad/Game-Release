@@ -26,6 +26,8 @@ const MARGIN = 12;
 interface Position {
   top: number;
   left: number;
+  /** Actual rendered width after clamping to the viewport. */
+  width: number;
   /** Set when the popover had to flip above the anchor to stay on screen. */
   above: boolean;
 }
@@ -62,14 +64,25 @@ export function Popover({
     const spaceBelow = window.innerHeight - rect.bottom;
     const above = spaceBelow < panelHeight + GAP + MARGIN && rect.top > panelHeight + GAP;
 
+    /*
+     * Clamp the width before positioning.
+     *
+     * A fixed pixel width wider than the viewport can't be rescued by shifting
+     * `left` — it just overflows the right edge, and `html { overflow-x: clip }`
+     * then truncates it silently instead of allowing a scroll. The 340px
+     * subscription picker did exactly that below ~364px.
+     */
+    const clampedWidth = Math.min(width, window.innerWidth - MARGIN * 2);
+
     // Keep the panel inside the viewport horizontally rather than letting it
     // run off the right edge on narrow screens.
-    const maxLeft = window.innerWidth - width - MARGIN;
+    const maxLeft = window.innerWidth - clampedWidth - MARGIN;
     const left = Math.max(MARGIN, Math.min(rect.left, maxLeft));
 
     setPosition({
       top: above ? rect.top - panelHeight - GAP : rect.bottom + GAP,
       left,
+      width: clampedWidth,
       above,
     });
   }, [anchorRef, width]);
@@ -130,7 +143,8 @@ export function Popover({
           style={{
             top: position?.top ?? -9999,
             left: position?.left ?? -9999,
-            width,
+            // The measured width, not the requested one — see `place()`.
+            width: position?.width ?? width,
             // Hidden until measured, so it never flashes at the fallback spot.
             visibility: position ? "visible" : "hidden",
           }}
