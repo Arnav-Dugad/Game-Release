@@ -81,7 +81,7 @@ export default async function HomePage() {
           <SectionHeading
             eyebrow="Momentum"
             title="Trending right now"
-            description="The titles players are adding to their libraries fastest."
+            description="Ranked from IGDB's worldwide playing-now signal, refreshed as player attention moves."
             href="/browse?ordering=-added"
           />
         </Container>

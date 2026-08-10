@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { Check, ChevronRight, Cloud, Gamepad2, Sparkles, X } from "lucide-react";
+import { BrandIcon } from "@/components/brand/BrandIcon";
 import { useRouter } from "next/navigation";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
@@ -14,19 +15,20 @@ import { cn } from "@/lib/utils/cn";
 interface Service {
   slug: string;
   name: string;
+  icon: string;
   platforms: string[];
 }
 
 const SERVICES: Service[] = [
-  { slug: "game-pass", name: "Game Pass", platforms: ["xbox", "pc", "cloud"] },
-  { slug: "playstation-plus", name: "PlayStation Plus", platforms: ["playstation", "cloud"] },
-  { slug: "ea-play", name: "EA Play", platforms: ["pc", "xbox", "playstation"] },
-  { slug: "ubisoft-plus", name: "Ubisoft+", platforms: ["pc", "xbox", "playstation", "cloud"] },
-  { slug: "nintendo-switch-online", name: "Nintendo Switch Online", platforms: ["nintendo"] },
-  { slug: "apple-arcade", name: "Apple Arcade", platforms: ["mobile", "mac"] },
-  { slug: "netflix-games", name: "Netflix Games", platforms: ["mobile"] },
-  { slug: "amazon-luna", name: "Amazon Luna", platforms: ["cloud"] },
-  { slug: "geforce-now", name: "GeForce NOW", platforms: ["cloud", "pc"] },
+  { slug: "game-pass", name: "Game Pass", icon: "xbox", platforms: ["xbox", "pc", "cloud"] },
+  { slug: "playstation-plus", name: "PlayStation Plus", icon: "playstation", platforms: ["playstation", "cloud"] },
+  { slug: "ea-play", name: "EA Play", icon: "ea", platforms: ["pc", "xbox", "playstation"] },
+  { slug: "ubisoft-plus", name: "Ubisoft+", icon: "ubisoft", platforms: ["pc", "xbox", "playstation", "cloud"] },
+  { slug: "nintendo-switch-online", name: "Nintendo Switch Online", icon: "nintendo", platforms: ["nintendo"] },
+  { slug: "apple-arcade", name: "Apple Arcade", icon: "applearcade", platforms: ["mobile", "mac"] },
+  { slug: "netflix-games", name: "Netflix Games", icon: "netflix", platforms: ["mobile"] },
+  { slug: "amazon-luna", name: "Amazon Luna", icon: "amazonluna", platforms: ["cloud"] },
+  { slug: "geforce-now", name: "GeForce NOW", icon: "nvidia", platforms: ["cloud", "pc"] },
 ];
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -42,6 +44,10 @@ const PLATFORM_LABELS: Record<string, string> = {
 export function subscriptionServiceName(slug: string): string {
   return SERVICES.find((service) => service.slug === slug)?.name
     ?? slug.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function subscriptionServiceIcon(slug: string): string | null {
+  return SERVICES.find((service) => service.slug === slug)?.icon ?? null;
 }
 
 export function SubscriptionAccessPicker({
@@ -140,7 +146,11 @@ export function SubscriptionAccessPicker({
           <ul className="space-y-1 border-b border-line p-2">
             {access.map((item) => (
               <li key={`${item.service}:${item.platform}`} className="flex items-center gap-2 rounded-xl bg-white/[0.045] px-3 py-2.5 text-sm">
-                {item.platform === "cloud" ? <Cloud size={14} className="text-neon" /> : <Gamepad2 size={14} className="text-brand-soft" />}
+                {subscriptionServiceIcon(item.service)
+                  ? <BrandIcon name={subscriptionServiceIcon(item.service)!} size={15} title={null} tinted />
+                  : item.platform === "cloud"
+                    ? <Cloud size={14} className="text-neon" />
+                    : <Gamepad2 size={14} className="text-brand-soft" />}
                 <span className="min-w-0 flex-1 truncate"><strong>{subscriptionServiceName(item.service)}</strong><span className="text-faint"> · {PLATFORM_LABELS[item.platform] ?? item.platform}</span></span>
                 <button type="button" onClick={() => remove(item)} disabled={busy} aria-label={`Remove ${subscriptionServiceName(item.service)} on ${PLATFORM_LABELS[item.platform] ?? item.platform}`} className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-white/10 hover:text-text"><X size={13} /></button>
               </li>
@@ -154,7 +164,7 @@ export function SubscriptionAccessPicker({
               {SERVICES.map((item) => (
                 <li key={item.slug}>
                   <button type="button" onClick={() => setService(item)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-muted transition-colors hover:bg-white/6 hover:text-text">
-                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-brand/10 text-brand-soft"><Sparkles size={14} /></span>
+                    <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/8 bg-black/25"><BrandIcon name={item.icon} size={16} title={null} tinted /></span>
                     <span className="flex-1 font-medium">{item.name}</span>
                     <ChevronRight size={14} className="text-faint" />
                   </button>

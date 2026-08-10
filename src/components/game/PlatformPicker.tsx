@@ -1,48 +1,23 @@
 "use client";
 
-/**
- * Records which platform the user plays a tracked game on.
- *
- * Only offers platforms the game actually released on — asking someone whether
- * they played a PlayStation exclusive on Xbox is noise. When the game's
- * platform list is unknown, it falls back to the full family set rather than
- * showing an empty control.
- */
+/** Records the exact launcher, console, mobile store, or cloud service used. */
 
 import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Monitor } from "lucide-react";
 import { BrandIcon } from "@/components/brand/BrandIcon";
-import { brandIcon } from "@/components/brand/brand-icons";
-import { Monitor } from "lucide-react";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
+import { PLAYING_LOCATIONS, playingLocation } from "@/lib/games/stores-catalog";
 import { cn } from "@/lib/utils/cn";
-import { platformKeys, type PlatformKey } from "@/lib/utils/format";
-
-const ALL: PlatformKey[] = ["pc", "playstation", "xbox", "nintendo", "mac", "linux", "mobile"];
-
-const LABELS: Record<PlatformKey, string> = {
-  pc: "PC",
-  playstation: "PlayStation",
-  xbox: "Xbox",
-  nintendo: "Nintendo",
-  mac: "macOS",
-  linux: "Linux",
-  mobile: "Mobile",
-  web: "Browser",
-};
 
 export function PlatformPicker({
   gameId,
   gameName,
-  available,
   value,
   className,
 }: {
   gameId: number;
   gameName: string;
-  /** Platform slugs the game released on. */
-  available: string[];
   value: string | null;
   className?: string;
 }) {
@@ -50,34 +25,32 @@ export function PlatformPicker({
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-
-  const derived = platformKeys(available.map((slug) => ({ slug })));
-  const options = derived.length > 0 ? derived : ALL;
+  const selected = value ? playingLocation(value) : null;
+  const groups = [...new Set(PLAYING_LOCATIONS.map((location) => location.group))];
 
   const choose = async (platform: string | null) => {
     setOpen(false);
     setBusy(true);
     try {
       await setPlatform(gameId, platform);
+      toast(platform ? "Play location updated" : "Play location cleared", "success");
     } catch {
-      toast("Couldn't save that platform.", "error");
+      toast("Couldn't save that play location.", "error");
     } finally {
       setBusy(false);
     }
   };
 
-  const selected = value as PlatformKey | null;
-
   return (
     <div className={cn("relative", className)}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen((value) => !value)}
         disabled={busy}
         aria-expanded={open}
-        aria-label={`Platform played for ${gameName}`}
+        aria-label={`Where ${gameName} is played`}
         className={cn(
-          "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors",
+          "inline-flex min-h-9 max-w-[min(16rem,65vw)] items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors",
           selected
             ? "border-brand/40 bg-brand/12 text-text"
             : "border-line bg-white/[0.04] text-faint hover:text-muted",
@@ -86,18 +59,17 @@ export function PlatformPicker({
       >
         {selected ? (
           <>
-            <Glyph platform={selected} />
-            {LABELS[selected]}
+            <Glyph icon={selected.icon} />
+            <span className="truncate">{selected.name}</span>
           </>
         ) : (
-          "Set platform"
+          "Set play location"
         )}
-        <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
+        <ChevronDown size={12} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
       </button>
 
       {open && (
         <>
-          {/* Click-away layer; cheaper and more reliable here than a listener. */}
           <button
             type="button"
             aria-hidden
@@ -105,18 +77,25 @@ export function PlatformPicker({
             className="fixed inset-0 z-20 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <ul className="glass glass-blur absolute left-0 top-[calc(100%+6px)] z-30 w-44 overflow-hidden rounded-xl p-1">
-            {options.map((platform) => (
-              <li key={platform}>
-                <button
-                  type="button"
-                  onClick={() => choose(platform)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-muted transition-colors hover:bg-white/8 hover:text-text"
-                >
-                  <Glyph platform={platform} />
-                  <span className="flex-1">{LABELS[platform]}</span>
-                  {selected === platform && <Check size={13} className="text-brand-soft" />}
-                </button>
+          <ul className="glass glass-blur absolute left-0 top-[calc(100%+6px)] z-30 max-h-[min(24rem,65vh)] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-xl p-1">
+            {groups.map((group, groupIndex) => (
+              <li key={group} className={cn(groupIndex > 0 && "mt-1 border-t border-line pt-1")}>
+                <p className="px-3 pb-1 pt-2 text-[9px] font-bold uppercase tracking-[0.16em] text-faint">{group}</p>
+                <ul>
+                  {PLAYING_LOCATIONS.filter((location) => location.group === group).map((location) => (
+                    <li key={location.slug}>
+                      <button
+                        type="button"
+                        onClick={() => choose(location.slug)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-muted transition-colors hover:bg-white/8 hover:text-text"
+                      >
+                        <Glyph icon={location.icon} />
+                        <span className="min-w-0 flex-1 truncate">{location.name}</span>
+                        {selected?.slug === location.slug && <Check size={13} className="text-brand-soft" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
             {selected && (
@@ -126,7 +105,7 @@ export function PlatformPicker({
                   onClick={() => choose(null)}
                   className="w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-faint transition-colors hover:bg-white/8 hover:text-text"
                 >
-                  Clear
+                  Clear play location
                 </button>
               </li>
             )}
@@ -137,9 +116,7 @@ export function PlatformPicker({
   );
 }
 
-function Glyph({ platform }: { platform: PlatformKey }) {
-  if (platform !== "pc" && platform !== "web" && brandIcon(platform)) {
-    return <BrandIcon name={platform} size={13} title={null} />;
-  }
+function Glyph({ icon }: { icon: string | null }) {
+  if (icon) return <BrandIcon name={icon} size={13} title={null} tinted />;
   return <Monitor size={13} aria-hidden />;
 }

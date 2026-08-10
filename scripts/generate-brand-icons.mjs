@@ -42,6 +42,13 @@ const ICONS = [
   ["humble", "siHumblebundle", latest, "Humble"],
   ["googleplay", "siGoogleplay", latest, "Google Play"],
   ["appstore", "siAppstore", latest, "App Store"],
+  ["amazon", "siAmazon", legacy, "Amazon"],
+  ["amazonluna", "siAmazonluna", legacy, "Amazon Luna"],
+  ["applearcade", "siApplearcade", latest, "Apple Arcade"],
+  ["netflix", "siNetflix", latest, "Netflix"],
+  ["nvidia", "siNvidia", latest, "NVIDIA"],
+  ["rockstar", "siRockstargames", latest, "Rockstar Games"],
+  ["riot", "siRiotgames", latest, "Riot Games"],
 
   // Social / reference
   ["youtube", "siYoutube", latest, "YouTube"],
@@ -69,6 +76,10 @@ const COLOUR_OVERRIDES = {
   mac: "#ffffff",
   xbox: "#107c10",
   nintendo: "#e60012",
+  amazon: "#ff9900",
+  amazonluna: "#9146ff",
+  netflix: "#e50914",
+  nvidia: "#76b900",
 };
 
 const rows = [];

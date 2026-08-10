@@ -33,6 +33,7 @@ import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { OWNERSHIP_PLATFORMS, ownershipPlatform } from "@/lib/games/stores-catalog";
 import { cn } from "@/lib/utils/cn";
+import { fuzzyMatches } from "@/lib/games/fuzzy-search";
 import type { WatchlistEntry, WatchStatus } from "@/lib/firebase/db";
 
 type SortKey = "added" | "name" | "score" | "released";
@@ -46,6 +47,7 @@ const SORTS: { value: SortKey; label: string }[] = [
 
 const STATUS_FILTERS: { value: WatchStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "none", label: "No status" },
   { value: "want", label: "Want to play" },
   { value: "playing", label: "Playing" },
   { value: "played", label: "Played" },
@@ -86,12 +88,12 @@ export function LibraryView() {
   }, [owned]);
 
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const term = query.trim();
 
     const filtered = owned.filter((entry) => {
       if (store !== "all" && !(entry.ownedOn ?? []).includes(store)) return false;
       if (status !== "all" && entry.status !== status) return false;
-      if (term && !entry.name.toLowerCase().includes(term)) return false;
+      if (term && !fuzzyMatches(entry.name, term)) return false;
       return true;
     });
 
@@ -301,6 +303,7 @@ export function LibraryView() {
 /* -------------------------------------------------------------------------- */
 
 const STATUS_LABELS: Record<WatchStatus, string> = {
+  none: "No status",
   want: "Want to play",
   playing: "Playing",
   played: "Played",

@@ -29,12 +29,22 @@ export interface LibraryStats {
   wanted: number;
   playing: number;
   played: number;
+  releasedCompleted: number;
+  noStatus: number;
+  releasedGames: number;
+  unreleasedGames: number;
+  statusCoverage: number;
+  accessCoverage: number;
+  criticCoverage: number;
   completionRate: number;
+  completionBase: number;
   completedHours: number;
   backlogHours: number;
   averageCritic: number | null;
   highScorers: number;
   completedLast90Days: number;
+  completionStreakMonths: number;
+  averageDaysToFinish: number | null;
   collectionAgeDays: number;
   platforms: RankedStat[];
   subscriptions: RankedStat[];
@@ -85,7 +95,7 @@ export function dedupeLibrary(entries: WatchlistEntry[]): WatchlistEntry[] {
 
 export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref[] = []): LibraryStats {
   const games = dedupeLibrary(entries);
-  const status = { want: 0, playing: 0, played: 0 } satisfies Record<WatchStatus, number>;
+  const status = { none: 0, want: 0, playing: 0, played: 0 } satisfies Record<WatchStatus, number>;
   const platformCounts = new Map<string, number>();
   const subscriptionCounts = new Map<string, number>();
   const playedPlatformCounts = new Map<string, number>();
@@ -99,6 +109,9 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
   let criticTotal = 0;
   let criticCount = 0;
   let subscriptionAccesses = 0;
+  let finishDurationDays = 0;
+  let finishDurationCount = 0;
+  const today = new Date().toISOString().slice(0, 10);
 
   for (const game of games) {
     status[game.status]++;
@@ -126,9 +139,16 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
         decadeCounts.set(decade, (decadeCounts.get(decade) ?? 0) + 1);
       }
     }
+    if (game.startedAt && game.finishedAt && game.finishedAt >= game.startedAt) {
+      finishDurationDays += (game.finishedAt - game.startedAt) / 86_400_000;
+      finishDurationCount++;
+    }
     const hours = Math.max(0, game.playtime ?? 0);
     if (game.status === "played") completedHours += hours;
-    else backlogHours += hours;
+    else if (
+      (game.status === "want" || game.status === "playing")
+      && Boolean(game.released && game.released <= today)
+    ) backlogHours += hours;
   }
 
   const now = new Date();
@@ -148,6 +168,20 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     .map(([key, value]) => ({ key, label: humanise(key), value }))
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
 
+  const releasedGames = games.filter((game) => Boolean(game.released && game.released <= today)).length;
+  const unreleasedGames = games.length - releasedGames;
+  const releasedCompleted = games.filter((game) =>
+    game.status === "played" && Boolean(game.released && game.released <= today),
+  ).length;
+  const statusTrackedReleased = games.filter((game) =>
+    game.status !== "none" && Boolean(game.released && game.released <= today),
+  ).length;
+  let completionStreakMonths = 0;
+  for (let index = timeline.length - 1; index >= 0; index--) {
+    if (timeline[index].completed === 0) break;
+    completionStreakMonths++;
+  }
+
   return {
     games,
     uniqueGames: games.length,
@@ -158,17 +192,35 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     subscriptionGames: games.filter((game) => (game.subscriptionAccess ?? []).length > 0).length,
     subscriptionAccesses,
     accessibleGames: games.filter((game) => (game.ownedOn ?? []).length > 0 || (game.subscriptionAccess ?? []).length > 0).length,
-    unplayedOwned: games.filter((game) => (game.ownedOn ?? []).length > 0 && game.status !== "played").length,
-    upcomingFollowed: games.filter((game) => game.following && game.released && Date.parse(game.released) > Date.now()).length,
+    unplayedOwned: games.filter((game) =>
+      (game.ownedOn ?? []).length > 0
+      && (game.status === "want" || game.status === "playing")
+      && Boolean(game.released && game.released <= today),
+    ).length,
+    upcomingFollowed: games.filter((game) =>
+      game.following && (!game.released || game.released > today),
+    ).length,
     wanted: status.want,
     playing: status.playing,
     played: status.played,
-    completionRate: games.length ? Math.round((status.played / games.length) * 100) : 0,
+    releasedCompleted,
+    noStatus: status.none,
+    releasedGames,
+    unreleasedGames,
+    statusCoverage: games.length ? Math.round(((games.length - status.none) / games.length) * 100) : 0,
+    accessCoverage: games.length ? Math.round((games.filter((game) =>
+      (game.ownedOn ?? []).length > 0 || (game.subscriptionAccess ?? []).length > 0,
+    ).length / games.length) * 100) : 0,
+    criticCoverage: games.length ? Math.round((criticCount / games.length) * 100) : 0,
+    completionRate: statusTrackedReleased ? Math.round((releasedCompleted / statusTrackedReleased) * 100) : 0,
+    completionBase: statusTrackedReleased,
     completedHours,
     backlogHours,
     averageCritic: criticCount ? Math.round(criticTotal / criticCount) : null,
     highScorers: games.filter((game) => (game.metacritic ?? 0) >= 85).length,
     completedLast90Days: games.filter((game) => game.finishedAt && game.finishedAt >= Date.now() - 90 * 86_400_000).length,
+    completionStreakMonths,
+    averageDaysToFinish: finishDurationCount ? Math.round(finishDurationDays / finishDurationCount) : null,
     collectionAgeDays: games.length ? Math.max(0, Math.floor((Date.now() - Math.min(...games.map((game) => game.addedAt))) / 86_400_000)) : 0,
     platforms: rank(platformCounts),
     subscriptions: rank(subscriptionCounts),

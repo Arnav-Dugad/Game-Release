@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Where the reader is with a game: want to play, playing, or played.
+ * Where the reader is with a game: no status, want to play, playing, or played.
  *
- * A segmented control rather than a dropdown, because there are exactly three
- * mutually-exclusive states and showing all of them makes the current one
+ * A segmented control rather than a dropdown, because showing the small set of
+ * mutually-exclusive states makes the current one
  * readable at a glance — which is the point on a page you land on to remember
  * what you were doing.
  *
@@ -15,15 +15,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, Check, Gamepad2, Loader2 } from "lucide-react";
+import { Bookmark, Check, CircleOff, Gamepad2, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import type { WatchStatus } from "@/lib/firebase/db";
 import type { GameSummary } from "@/lib/games/types";
+import { isUnreleased } from "@/lib/utils/format";
 
 const OPTIONS: { value: WatchStatus; label: string; icon: typeof Bookmark }[] = [
+  { value: "none", label: "No status", icon: CircleOff },
   { value: "want", label: "Want to play", icon: Bookmark },
   { value: "playing", label: "Playing", icon: Gamepad2 },
   { value: "played", label: "Played", icon: Check },
@@ -43,6 +45,9 @@ export function StatusPicker({
 
   const [busy, setBusy] = useState<WatchStatus | null>(null);
   const current = statusOf(game.id);
+  const options = isUnreleased(game)
+    ? OPTIONS.filter((option) => option.value === "none" || option.value === "want")
+    : OPTIONS;
 
   const choose = async (value: WatchStatus) => {
     if (!enabled) {
@@ -59,7 +64,12 @@ export function StatusPicker({
       if (current === value) return;
       await ensure(game);
       await setStatus(game.id, value);
-      toast(`Marked as ${OPTIONS.find((o) => o.value === value)?.label.toLowerCase()}`, "success");
+      toast(
+        value === "none"
+          ? "Play status cleared"
+          : `Marked as ${OPTIONS.find((o) => o.value === value)?.label.toLowerCase()}`,
+        "success",
+      );
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save that.", "error");
     } finally {
@@ -76,8 +86,8 @@ export function StatusPicker({
         className,
       )}
     >
-      {OPTIONS.map((option) => {
-        const active = current === option.value;
+      {options.map((option) => {
+        const active = (current ?? "none") === option.value;
         const Icon = busy === option.value ? Loader2 : option.icon;
         return (
           <button
@@ -95,7 +105,7 @@ export function StatusPicker({
             )}
           >
             <Icon size={14} className={cn(busy === option.value && "animate-spin")} />
-            <span className="hidden sm:inline">{option.label}</span>
+            <span className={cn(option.value === "none" ? "sr-only sm:not-sr-only" : "hidden sm:inline")}>{option.label}</span>
           </button>
         );
       })}

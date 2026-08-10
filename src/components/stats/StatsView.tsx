@@ -6,14 +6,18 @@ import {
   BarChart3,
   BellRing,
   BookOpenCheck,
+  CalendarClock,
   Cloud,
   Clock3,
   Copy,
   Gamepad2,
   Layers3,
   LibraryBig,
+  Orbit,
+  ShieldCheck,
   Sparkles,
   Star,
+  Target,
   Trophy,
   Zap,
 } from "lucide-react";
@@ -66,6 +70,17 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
     : null;
   const maxTimeline = Math.max(1, ...stats.timeline.flatMap((month) => [month.added, month.completed]));
   const recent = stats.games.slice(0, 5);
+  const followCoverage = stats.uniqueGames
+    ? Math.round((stats.followedGames / stats.uniqueGames) * 100)
+    : 0;
+  const nextCompletionMilestone = Math.max(5, Math.ceil((stats.played + 1) / 5) * 5);
+  const archetype = stats.completionRate >= 70 && stats.completionBase >= 5
+    ? { title: "The Finisher", detail: "You turn intent into completed journeys." }
+    : stats.platforms.length >= 4
+      ? { title: "The Multiverse Collector", detail: "Your library crosses ecosystems without inflating the game count." }
+      : stats.genres.length >= 8
+        ? { title: "The Genre Voyager", detail: "Range, curiosity, and discovery define this collection." }
+        : { title: "The Curated Explorer", detail: "A focused library with room for the next obsession." };
 
   return (
     <Container className="space-y-5 py-8 lg:space-y-7 lg:py-12">
@@ -76,25 +91,25 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
             <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-6xl">Your gaming life,<br /><span className="text-gradient">beautifully measured.</span></h2>
             <p className="mt-5 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">Every headline counts unique games. Extra platform copies are preserved as their own insight—never allowed to inflate your library total.</p>
           </div>
-          <div className="flex items-center gap-5 rounded-3xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl">
+          <div className="flex min-w-0 flex-col items-start gap-5 rounded-3xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl min-[420px]:flex-row min-[420px]:items-center">
             <ProgressRing value={stats.completionRate} />
-            <div><p className="font-display text-xl font-black">Completion arc</p><p className="mt-1 text-xs leading-relaxed text-muted">{stats.played} of {stats.uniqueGames} tracked games completed</p></div>
+            <div className="min-w-0"><p className="font-display text-xl font-black">Completion arc</p><p className="mt-1 break-words text-xs leading-relaxed text-muted">{stats.completionBase ? `${stats.releasedCompleted} completed across ${stats.completionBase} classified released games` : "Classify a released game to begin the arc"}</p></div>
           </div>
         </div>
       </Reveal>
 
-      <Stagger className="grid grid-cols-2 gap-3 lg:grid-cols-4" onMount gap={0.04}>
+      <Stagger className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4" onMount gap={0.04}>
         <Metric icon={<LibraryBig size={18} />} label="Unique games" value={stats.uniqueGames} tone="brand" />
         <Metric icon={<Layers3 size={18} />} label="Owned games" value={stats.ownedGames} note={stats.platformCopies > stats.ownedGames ? `${stats.platformCopies} platform copies` : undefined} tone="mint" />
         <Metric icon={<Trophy size={18} />} label="Completed" value={stats.played} tone="gold" />
         <Metric icon={<Gamepad2 size={18} />} label="Playing now" value={stats.playing} tone="neon" />
       </Stagger>
 
-      <Stagger className="grid grid-cols-2 gap-3 lg:grid-cols-4" onMount gap={0.04}>
+      <Stagger className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4" onMount gap={0.04}>
         <Metric icon={<BellRing size={18} />} label="Games followed" value={stats.followedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} upcoming` : "Release + DLC alerts"} tone="brand" />
         <Metric icon={<Cloud size={18} />} label="Via subscription" value={stats.subscriptionGames} note={stats.subscriptionAccesses > stats.subscriptionGames ? `${stats.subscriptionAccesses} service/platform records` : undefined} tone="neon" />
         <Metric icon={<Copy size={18} />} label="Extra copies" value={stats.extraCopies} note="Never inflate game count" tone="gold" />
-        <Metric icon={<Zap size={18} />} label="Completed in 90 days" value={stats.completedLast90Days} note={stats.collectionAgeDays ? `${stats.collectionAgeDays} days of history` : undefined} tone="mint" />
+        <Metric icon={<CalendarClock size={18} />} label="Unreleased games" value={stats.unreleasedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} followed` : "Separate from backlog"} tone="mint" />
       </Stagger>
 
       <Reveal className="grid gap-3 rounded-[1.75rem] border border-line bg-[linear-gradient(135deg,rgba(124,92,255,0.08),rgba(34,211,238,0.035))] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
@@ -104,13 +119,40 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
         <Insight label="Known backlog" value={stats.backlogHours ? `${stats.backlogHours}h` : "—"} detail="Estimated time across unfinished records" />
       </Reveal>
 
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+        <Reveal className="noise relative isolate min-w-0 overflow-hidden rounded-[1.75rem] border border-brand/25 bg-[radial-gradient(circle_at_20%_0%,rgba(124,92,255,.24),transparent_48%),linear-gradient(145deg,rgba(16,16,32,.96),rgba(6,6,14,.98))] p-5 sm:p-7">
+          <div className="relative z-10">
+            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-soft"><Orbit size={16} /> Collection identity</p>
+            <p className="mt-5 font-display text-3xl font-black leading-none tracking-[-0.04em] sm:text-4xl">{archetype.title}</p>
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">{archetype.detail}</p>
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              <MiniFact icon={<Target size={14} />} value={`${stats.played}/${nextCompletionMilestone}`} label="Next completion milestone" />
+              <MiniFact icon={<Zap size={14} />} value={stats.completionStreakMonths ? `${stats.completionStreakMonths} mo` : "—"} label="Completion streak" />
+              <MiniFact icon={<Clock3 size={14} />} value={stats.averageDaysToFinish !== null ? `${stats.averageDaysToFinish}d` : "—"} label="Average finish journey" />
+              <MiniFact icon={<Layers3 size={14} />} value={stats.genres.length} label="Genre signals detected" />
+            </div>
+          </div>
+        </Reveal>
+
+        <Reveal delay={0.04} className="glass min-w-0 rounded-[1.75rem] p-5 sm:p-7">
+          <PanelHeading icon={<ShieldCheck size={17} />} eyebrow="Data confidence" title="Your intelligence coverage" />
+          <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted">A stronger record produces better recommendations and more honest statistics. None of these percentages inflate your unique-game count.</p>
+          <div className="mt-7 grid gap-5 sm:grid-cols-2">
+            <CoverageRow label="Play status" value={stats.statusCoverage} detail={`${stats.noStatus} intentionally unclassified`} tone="from-brand to-brand-soft" />
+            <CoverageRow label="Playable access" value={stats.accessCoverage} detail={`${stats.accessibleGames} owned or subscription games`} tone="from-mint to-neon" />
+            <CoverageRow label="Critic signal" value={stats.criticCoverage} detail={stats.averageCritic !== null ? `${stats.averageCritic} average score` : "No critic data yet"} tone="from-gold to-flare" />
+            <CoverageRow label="Release following" value={followCoverage} detail={`${stats.followedGames} release + DLC feeds`} tone="from-neon to-brand" />
+          </div>
+        </Reveal>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
         <Reveal className="glass rounded-[1.75rem] p-5 sm:p-7">
           <PanelHeading icon={<BarChart3 size={17} />} eyebrow="Twelve-month signal" title="Collection momentum" />
-          <div className="mt-8 overflow-x-auto pb-2 no-scrollbar">
-          <div className="flex h-56 min-w-[680px] items-end gap-3" role="img" aria-label="Games added and completed over the last twelve months">
-            {stats.timeline.map((month) => (
-              <div key={month.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+          <div className="mt-8 min-w-0 pb-2">
+          <div className="flex h-56 min-w-0 items-end gap-1.5 sm:gap-3" role="img" aria-label="Games added and completed over the last twelve months">
+            {stats.timeline.map((month, index) => (
+              <div key={month.key} className={cn("min-w-0 flex-1 flex-col items-center gap-2", index < 6 ? "hidden sm:flex" : "flex")}>
                 <div className="flex h-44 w-full items-end justify-center gap-1.5">
                   <span title={`${month.added} added`} className="w-[38%] min-w-2 rounded-t-lg bg-gradient-to-t from-brand/35 to-brand" style={{ height: `${Math.max(month.added ? 10 : 2, (month.added / maxTimeline) * 100)}%` }} />
                   <span title={`${month.completed} completed`} className="w-[38%] min-w-2 rounded-t-lg bg-gradient-to-t from-mint/30 to-mint" style={{ height: `${Math.max(month.completed ? 10 : 2, (month.completed / maxTimeline) * 100)}%` }} />
@@ -129,6 +171,7 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
             <StatusBar label="Want to play" value={stats.wanted} total={stats.uniqueGames} tone="bg-brand" />
             <StatusBar label="Playing" value={stats.playing} total={stats.uniqueGames} tone="bg-neon" />
             <StatusBar label="Completed" value={stats.played} total={stats.uniqueGames} tone="bg-mint" />
+            <StatusBar label="No status" value={stats.noStatus} total={stats.uniqueGames} tone="bg-white/25" />
           </div>
           <div className="mt-7 grid grid-cols-2 gap-3 border-t border-line pt-5">
             <MiniFact icon={<Clock3 size={14} />} value={stats.completedHours ? `${stats.completedHours}h` : "—"} label="Known hours finished" />
@@ -158,7 +201,7 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
           {recent.map((game) => (
             <Link key={game.gameId} href={canonicalEntryHref(game)} className="group flex gap-3 bg-bg-elev p-4 transition-colors hover:bg-panel sm:flex-col">
               <span className="relative aspect-[3/4] w-16 shrink-0 overflow-hidden rounded-xl border border-line sm:w-full"><GameCover name={game.name} slug={game.slug} image={game.image} imageFallback={game.imageFallback} width={360} sizes="(max-width:640px) 64px, 18vw" /></span>
-              <span className="min-w-0"><span className="line-clamp-2 text-sm font-bold leading-snug transition-colors group-hover:text-brand-soft">{game.name}</span><span className="mt-1 block text-[10px] uppercase tracking-[0.12em] text-faint">{game.status === "played" ? "Completed" : game.status === "playing" ? "Playing" : "Want to play"}</span></span>
+              <span className="min-w-0"><span className="line-clamp-2 text-sm font-bold leading-snug transition-colors group-hover:text-brand-soft">{game.name}</span><span className="mt-1 block text-[10px] uppercase tracking-[0.12em] text-faint">{game.status === "played" ? "Completed" : game.status === "playing" ? "Playing" : game.status === "want" ? "Want to play" : "No status"}</span></span>
             </Link>
           ))}
         </div>
@@ -178,7 +221,7 @@ function ProgressRing({ value }: { value: number }) {
 
 function Metric({ icon, label, value, note, tone }: { icon: React.ReactNode; label: string; value: number; note?: string; tone: "brand" | "mint" | "gold" | "neon" }) {
   const colors = { brand: "bg-brand/10 text-brand-soft", mint: "bg-mint/10 text-mint", gold: "bg-gold/10 text-gold", neon: "bg-neon/10 text-neon" };
-  return <StaggerItem><div className="glass h-full rounded-3xl p-5 sm:p-6"><span className={cn("grid h-10 w-10 place-items-center rounded-2xl", colors[tone])}>{icon}</span><p className="mt-5 font-display text-3xl font-black tabular-nums sm:text-4xl">{value}</p><p className="mt-1 text-xs text-muted">{label}</p>{note && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.11em] text-faint">{note}</p>}</div></StaggerItem>;
+  return <StaggerItem><div className="glass h-full min-w-0 rounded-3xl p-5 sm:p-6"><span className={cn("grid h-10 w-10 place-items-center rounded-2xl", colors[tone])}>{icon}</span><p className="mt-5 font-display text-3xl font-black tabular-nums sm:text-4xl">{value}</p><p className="mt-1 text-xs text-muted">{label}</p>{note && <p className="mt-2 break-words text-[10px] font-semibold uppercase tracking-[0.11em] text-faint">{note}</p>}</div></StaggerItem>;
 }
 
 function PanelHeading({ icon, eyebrow, title }: { icon: React.ReactNode; eyebrow: string; title: string }) {
@@ -195,7 +238,23 @@ function StatusBar({ label, value, total, tone }: { label: string; value: number
 function MiniFact({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) { return <div><span className="text-brand-soft">{icon}</span><p className="mt-2 font-display text-lg font-black tabular-nums">{value}</p><p className="mt-0.5 text-[10px] leading-tight text-faint">{label}</p></div>; }
 
 function Insight({ label, value, detail }: { label: string; value: string | number; detail: string }) {
-  return <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-faint">{label}</p><p className="mt-2 font-display text-2xl font-black tabular-nums">{value}</p><p className="mt-1 text-[11px] leading-relaxed text-muted">{detail}</p></div>;
+  return <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/20 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-faint">{label}</p><p className="mt-2 font-display text-2xl font-black tabular-nums">{value}</p><p className="mt-1 break-words text-[11px] leading-relaxed text-muted">{detail}</p></div>;
+}
+
+function CoverageRow({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
+  const clamped = Math.min(100, Math.max(0, value));
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+        <span className="min-w-0 truncate font-semibold">{label}</span>
+        <span className="shrink-0 font-display font-black tabular-nums">{clamped}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className={cn("h-full rounded-full bg-gradient-to-r", tone)} style={{ width: `${clamped}%` }} />
+      </div>
+      <p className="mt-2 break-words text-[10px] leading-relaxed text-faint">{detail}</p>
+    </div>
+  );
 }
 
 function RankPanel({ title, eyebrow, items, empty }: { title: string; eyebrow: string; items: RankedStat[]; empty: string }) {
@@ -203,4 +262,4 @@ function RankPanel({ title, eyebrow, items, empty }: { title: string; eyebrow: s
   return <Reveal className="glass rounded-[1.75rem] p-5 sm:p-7"><PanelHeading icon={<Layers3 size={17} />} eyebrow={eyebrow} title={title} /><div className="mt-6 space-y-4">{items.length ? items.slice(0, 6).map((item, index) => <div key={item.key} className="grid grid-cols-[24px_minmax(0,1fr)_28px] items-center gap-3"><span className="font-mono text-[10px] text-faint">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0"><div className="mb-1.5 truncate text-xs font-semibold">{item.label}</div><div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-brand to-neon" style={{ width: `${Math.max(5, (item.value / max) * 100)}%` }} /></div></div><span className="text-right text-xs font-bold tabular-nums">{item.value}</span></div>) : <p className="rounded-2xl border border-dashed border-line p-5 text-sm leading-relaxed text-muted">{empty}</p>}</div></Reveal>;
 }
 
-function StatsSkeleton() { return <Container className="space-y-5 py-10"><Skeleton className="h-96 rounded-[2rem]" /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-40 rounded-3xl" />)}</div><div className="grid gap-5 lg:grid-cols-2"><Skeleton className="h-80 rounded-[1.75rem]" /><Skeleton className="h-80 rounded-[1.75rem]" /></div></Container>; }
+function StatsSkeleton() { return <Container className="space-y-5 py-10"><Skeleton className="h-96 rounded-[2rem]" /><div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-40 rounded-3xl" />)}</div><div className="grid gap-5 lg:grid-cols-2"><Skeleton className="h-80 rounded-[1.75rem]" /><Skeleton className="h-80 rounded-[1.75rem]" /></div></Container>; }

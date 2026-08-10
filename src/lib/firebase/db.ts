@@ -31,7 +31,7 @@ import {
 import { getDb } from "./config";
 import type { GameDetail, GameSummary } from "@/lib/games/types";
 
-export type WatchStatus = "want" | "playing" | "played";
+export type WatchStatus = "none" | "want" | "playing" | "played";
 
 export interface SubscriptionAccess {
   /** Stable service slug, for example `game-pass` or `playstation-plus`. */
@@ -330,7 +330,7 @@ export function watchlistEntryFromGame(
 export async function ensureWatchlistEntry(
   uid: string,
   game: GameSummary,
-  status: WatchStatus = "want",
+  status: WatchStatus = "none",
 ): Promise<void> {
   const db = requireDb();
   const ref = doc(db, "users", uid, "watchlist", String(game.id));
@@ -348,7 +348,7 @@ export async function setGameFollowing(
   const db = requireDb();
   const ref = doc(db, "users", uid, "watchlist", String(game.id));
   if (!exists) {
-    await setDoc(ref, watchlistEntryFromGame(game, "want", following));
+    await setDoc(ref, watchlistEntryFromGame(game, "none", following));
     return;
   }
   const followedReleases = followedReleasesFromGame(game);
@@ -453,6 +453,9 @@ export function subscribeWatchlist(
           // Legacy watchlist records represented follows. Preserve that intent
           // while all new personal records opt in explicitly.
           following: data.following ?? true,
+          status: ["none", "want", "playing", "played"].includes(data.status)
+            ? data.status
+            : "none",
           releaseWindow: data.releaseWindow ?? null,
           imageFallback: data.imageFallback ?? null,
           platform: data.platform ?? null,

@@ -10,6 +10,7 @@ import { GameCover } from "@/components/game/GameCover";
 import { cn } from "@/lib/utils/cn";
 import type { SearchHit, SearchKind } from "@/lib/games/search";
 import { ResilientMediaImage } from "@/components/game/ResilientMediaImage";
+import { isUnreleased } from "@/lib/utils/format";
 
 const ICONS: Record<SearchKind, typeof Gamepad2> = {
   game: Gamepad2,
@@ -40,6 +41,11 @@ export function SearchHitVisual({
   const dimensions = size === "card" ? "h-24 w-20 rounded-2xl" : "h-14 w-11 rounded-xl";
 
   if (hit.kind === "game") {
+    const upcoming = hit.released !== undefined && isUnreleased({
+      released: hit.released ?? null,
+      releaseWindow: hit.releaseWindow ?? null,
+      tba: hit.tba ?? false,
+    });
     return (
       <span className={cn("relative shrink-0 overflow-hidden border border-white/10", dimensions)}>
         <GameCover
@@ -50,6 +56,11 @@ export function SearchHitVisual({
           width={size === "card" ? 200 : 96}
           sizes={size === "card" ? "80px" : "44px"}
         />
+        {upcoming && (
+          <span className="absolute inset-x-1 bottom-1 rounded-md bg-brand/90 px-1 py-0.5 text-center text-[8px] font-black uppercase tracking-[0.1em] text-white">
+            Upcoming
+          </span>
+        )}
       </span>
     );
   }

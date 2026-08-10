@@ -101,7 +101,13 @@ export function PersonalCommandCenter({ genres }: { genres: Ref[] }) {
 
   const currentRecommendations = recommendations?.key === recommendationKey ? recommendations : null;
   const focus = snapshot.focus!;
-  const focusLabel = focus.status === "playing" ? "Continue your run" : focus.status === "want" ? "Up next" : "Revisit your library";
+  const focusLabel = focus.status === "playing"
+    ? "Continue your run"
+    : focus.status === "want"
+      ? "Up next"
+      : focus.status === "played"
+        ? "Revisit your library"
+        : "Recently tracked";
 
   return (
     <section aria-labelledby="command-center-title" className="relative py-8 sm:py-11 lg:py-14">

@@ -195,13 +195,13 @@ export function BrowseControls({
           {pending && <Loader2 size={13} className="animate-spin text-faint" />}
         </p>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 min-[380px]:w-auto">
           {/* Touch: one button, sheet behind it. */}
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
             className={cn(
-              "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors fine:hidden",
+              "inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors fine:hidden min-[380px]:flex-none min-[380px]:px-4",
               filterCount > 0
                 ? "border-brand/50 bg-brand/15 text-white"
                 : "border-line bg-white/[0.04] text-muted",
@@ -386,7 +386,7 @@ function SortSelect({
   options: SortOption[];
 }) {
   return (
-    <div className="relative">
+    <div className="relative min-w-0 flex-1 min-[380px]:flex-none">
       <ArrowUpDown
         size={14}
         className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
@@ -397,7 +397,7 @@ function SortSelect({
         value={value}
         onChange={(e) => onChange(e.target.value as SortKey)}
         aria-label="Sort games"
-        className="min-h-11 appearance-none rounded-full border border-line bg-white/[0.04] py-2 pl-9 pr-9 text-sm text-text outline-none transition-colors hover:border-line-strong focus-visible:border-brand"
+        className="min-h-11 w-full min-w-0 appearance-none rounded-full border border-line bg-white/[0.04] py-2 pl-9 pr-8 text-sm text-text outline-none transition-colors hover:border-line-strong focus-visible:border-brand min-[380px]:w-auto min-[380px]:pr-9"
       >
         {options.map((sort) => (
           <option key={sort.value} value={sort.value} className="bg-panel text-text">
@@ -407,7 +407,7 @@ function SortSelect({
       </select>
       <span
         aria-hidden
-        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-faint"
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-faint min-[380px]:right-4"
       >
         ▾
       </span>

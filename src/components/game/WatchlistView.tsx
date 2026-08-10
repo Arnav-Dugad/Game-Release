@@ -32,16 +32,19 @@ import {
 } from "@/components/ui/PosterSizeToggle";
 import { cn } from "@/lib/utils/cn";
 import { releaseLabel } from "@/lib/utils/format";
+import { fuzzyMatches } from "@/lib/games/fuzzy-search";
 import type { WatchStatus } from "@/lib/firebase/db";
 
 const FILTERS: { value: WatchStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "none", label: "No status" },
   { value: "want", label: "Want to play" },
   { value: "playing", label: "Playing" },
   { value: "played", label: "Played" },
 ];
 
 const STATUS_LABEL: Record<WatchStatus, string> = {
+  none: "No status",
   want: "Want to play",
   playing: "Playing",
   played: "Played",
@@ -69,17 +72,17 @@ export function WatchlistView() {
   );
 
   const counts = useMemo(() => {
-    const base: Record<string, number> = { all: entries.length, want: 0, playing: 0, played: 0 };
+    const base: Record<string, number> = { all: entries.length, none: 0, want: 0, playing: 0, played: 0 };
     for (const entry of entries) base[entry.status] = (base[entry.status] ?? 0) + 1;
     return base;
   }, [entries]);
 
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const term = query.trim();
     const list = entries.filter((entry) => {
       if (filter !== "all" && entry.status !== filter) return false;
       if (ownedOnly && (entry.ownedOn ?? []).length === 0) return false;
-      if (term && !entry.name.toLowerCase().includes(term)) return false;
+      if (term && !fuzzyMatches(entry.name, term)) return false;
       return true;
     });
 
@@ -331,11 +334,10 @@ export function WatchlistView() {
                     </select>
 
                     {/* Only meaningful once they're actually playing it. */}
-                    {entry.status !== "want" && (
+                    {(entry.status === "playing" || entry.status === "played") && (
                       <PlatformPicker
                         gameId={entry.gameId}
                         gameName={entry.name}
-                        available={entry.platformSlugs ?? []}
                         value={entry.platform ?? null}
                       />
                     )}

@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
   try {
     if (igdbConfigured()) {
-      const hits = await igdbSearchAll(query);
+      const hits = await igdbSearchAll(query, { games: 18, franchises: 5, companies: 5 });
       if (hits.length > 0) {
         return NextResponse.json({ hits, source: "igdb" }, { headers });
       }
@@ -45,6 +45,9 @@ export async function GET(request: Request) {
           slug: game.slug,
           subtitle: game.genres[0]?.name ?? null,
           image: game.image,
+          released: game.released,
+          releaseWindow: game.releaseWindow,
+          tba: game.tba,
         })),
         source,
       },

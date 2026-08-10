@@ -23,6 +23,7 @@
  */
 
 import Link from "next/link";
+import { CalendarClock } from "lucide-react";
 import { TiltCard } from "@/components/motion/TiltCard";
 import { GameCover } from "./GameCover";
 import { OwnedBadge } from "./OwnedBadge";
@@ -30,7 +31,7 @@ import { OwnershipPicker } from "./OwnershipPicker";
 import { WatchButton } from "./WatchButton";
 import { ScorePill } from "@/components/ui/ScoreRing";
 import { cn } from "@/lib/utils/cn";
-import { isUnreleased } from "@/lib/utils/format";
+import { isUnreleased, releaseLabel } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
 
 interface GameCardProps {
@@ -96,12 +97,21 @@ export function GameCard({
             <div className="ml-auto flex flex-col items-end gap-1.5">
               <ScorePill score={game.metacritic} />
               {upcoming && (
-                <span className="rounded-md bg-brand/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white backdrop-blur-sm">
-                  Soon
+                <span className="rounded-md bg-brand/90 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.11em] text-white backdrop-blur-sm">
+                  Upcoming
                 </span>
               )}
             </div>
           </div>
+
+          {upcoming && (
+            <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-[#090916] via-[#090916]/95 to-transparent px-3 pb-3 pt-10">
+              <CalendarClock size={13} className="shrink-0 text-brand-soft" />
+              <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.11em] text-white/90">
+                {releaseLabel(game)}
+              </span>
+            </div>
+          )}
 
           {/* Hover-only inner glow ring. */}
           <span

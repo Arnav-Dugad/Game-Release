@@ -19,6 +19,7 @@ import { canonicalEntryHref, isQuietHours, releaseNotifications } from "../src/l
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
 import { buildLibraryStats } from "../src/lib/games/stats";
+import { fuzzyMatches, normaliseSearch, searchQueryVariants } from "../src/lib/games/fuzzy-search";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
@@ -329,6 +330,22 @@ const libraryStats = buildLibraryStats([
 check("duplicate records merge by game id", libraryStats.uniqueGames, 2);
 check("multi-platform ownership counts once", libraryStats.ownedGames, 2);
 check("platform copies remain a separate metric", libraryStats.platformCopies, 4);
+const statusStats = buildLibraryStats([
+  notificationEntry({ gameId: 20, status: "none", released: "2025-01-01" }),
+  notificationEntry({ gameId: 21, status: "played", released: "2025-01-01" }),
+  notificationEntry({ gameId: 22, status: "want", released: "2030-01-01" }),
+]);
+check("no-status games remain deliberately unclassified", statusStats.noStatus, 1);
+check("unreleased games stay outside the completion base", [statusStats.unreleasedGames, statusStats.completionBase], [1, 1]);
+check("released completion rate remains honest", statusStats.completionRate, 100);
+
+console.log("\nHuman-friendly game search");
+check("accents and Roman sequels normalise", normaliseSearch("Pokémon II"), "pokemon 2");
+check("GTA abbreviation expands", searchQueryVariants("gta 5").includes("grand theft auto 5"), true);
+check("abbreviation finds the full game title", fuzzyMatches("Grand Theft Auto V", "gta 5"), true);
+check("transposed typo finds Cyberpunk", fuzzyMatches("Cyberpunk 2077", "cybperunk 2077"), true);
+check("word-order changes still match", fuzzyMatches("The Legend of Zelda: Breath of the Wild", "zelda wild breath"), true);
+check("unrelated titles stay out", fuzzyMatches("Stardew Valley", "cyberpunk"), false);
 
 console.log("\nUniversal discovery routing");
 const searchHit = (kind: SearchHit["kind"], slug: string): SearchHit => ({

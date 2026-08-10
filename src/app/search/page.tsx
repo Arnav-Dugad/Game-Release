@@ -36,7 +36,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
 const FULL_LIMITS = {
-  games: 24,
+  games: 120,
   series: 10,
   franchises: 10,
   companies: 12,
@@ -65,6 +65,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
       slug: game.slug,
       subtitle: game.genres.slice(0, 2).map((genre) => genre.name).join(" · ") || "Game",
       image: game.image,
+      released: game.released,
+      releaseWindow: game.releaseWindow,
+      tba: game.tba,
     }));
   }
 

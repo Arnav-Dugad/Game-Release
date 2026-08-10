@@ -35,7 +35,9 @@ export function buildDashboardSnapshot(
   const played = byRecency("played");
 
   return {
-    focus: playing[0] ?? wanted[0] ?? played[0] ?? null,
+    focus: playing[0] ?? wanted[0] ?? played[0]
+      ?? [...entries].sort((a, b) => b.addedAt - a.addedAt)[0]
+      ?? null,
     nextRelease: upcoming[0] ?? null,
     upcoming,
     owned: entries.filter((entry) => (entry.ownedOn ?? []).length > 0).length,

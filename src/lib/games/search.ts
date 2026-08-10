@@ -13,6 +13,10 @@ export interface SearchHit {
   slug: string;
   subtitle: string | null;
   image: string | null;
+  /** Game-only release metadata; absent for every other entity kind. */
+  released?: string | null;
+  releaseWindow?: string | null;
+  tba?: boolean;
 }
 
 export const SEARCH_KIND_LABELS: Record<SearchKind, string> = {

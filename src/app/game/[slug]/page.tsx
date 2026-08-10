@@ -44,7 +44,6 @@ import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { SubscriptionAccessPicker } from "@/components/game/SubscriptionAccessPicker";
 import { StatusPicker } from "@/components/game/StatusPicker";
 import { WatchButton } from "@/components/game/WatchButton";
-import { WhereToPlayButton } from "@/components/game/WhereToPlayButton";
 import { ScorePill, ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -441,9 +440,6 @@ function GameHero({ game }: { game: GameDetail }) {
           <StatusPicker game={game} />
           <OwnershipPicker game={game} />
           <SubscriptionAccessPicker game={game} />
-          {(game.steamAppId || game.stores.length > 0) && (
-            <WhereToPlayButton />
-          )}
           {game.website && (
             <Button
               href={game.website}
@@ -649,7 +645,7 @@ function GameSidebar({ game }: { game: GameDetail }) {
   ];
 
   return (
-    <aside id="where-to-play" tabIndex={-1} className="scroll-mt-28 space-y-5 outline-none lg:sticky lg:top-28 lg:self-start">
+    <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
       {(game.metacritic !== null || game.rating > 0) && (
         <Reveal className="glass flex items-center gap-5 rounded-2xl p-5">
           {game.metacritic !== null && <ScoreRing score={game.metacritic} />}

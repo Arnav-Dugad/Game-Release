@@ -69,15 +69,6 @@ test("global search traps and restores keyboard focus", async ({ page }) => {
   await expect(trigger).toBeFocused();
 });
 
-test("where to play moves focus to the destination panel", async ({ page }) => {
-  await page.goto(DETAIL_ROUTE, { waitUntil: "domcontentloaded" });
-  const button = page.getByRole("button", { name: "Where to play" });
-  if (await button.count() === 0) return;
-  await button.click();
-  await expect(page.locator("#where-to-play")).toBeFocused();
-  await expect(page).toHaveURL(/#where-to-play$/);
-});
-
 test("mobile navigation remains thumb-reachable and opens search", async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -99,6 +90,52 @@ test("mobile navigation remains thumb-reachable and opens search", async ({ brow
     await expect(page.getByRole("dialog", { name: "Search all of LUDEX" })).toBeHidden();
   } finally {
     await context.close();
+  }
+});
+
+test("premium layouts stay inside a 320px mobile viewport", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 320, height: 720 },
+    userAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36",
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    for (const route of ["/stats", "/search?q=cyberpuk", "/browse?search=elden%20rng", "/upcoming", DETAIL_ROUTE]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      const overflow = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        page: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        offenders: [...document.body.querySelectorAll<HTMLElement>("*")]
+          .map((element) => {
+            const box = element.getBoundingClientRect();
+            return {
+              tag: element.tagName.toLowerCase(),
+              className: typeof element.className === "string" ? element.className.slice(0, 140) : "",
+              left: Math.round(box.left),
+              right: Math.round(box.right),
+              width: Math.round(box.width),
+            };
+          })
+          .filter((box) => box.left < -1 || box.right > document.documentElement.clientWidth + 1)
+          .slice(0, 8),
+      }));
+      expect(overflow.page, `${route} document overflowed: ${JSON.stringify(overflow)}`).toBeLessThanOrEqual(overflow.viewport + 1);
+      expect(overflow.body, `${route} body overflowed: ${JSON.stringify(overflow)}`).toBeLessThanOrEqual(overflow.viewport + 1);
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test("typo search returns the intended game before entity detours", async ({ request }) => {
+  const response = await request.get("/api/search?q=cyberpuk");
+  expect(response.ok()).toBe(true);
+  const payload = await response.json() as { source?: string; hits?: { kind: string; name: string }[] };
+  if (payload.source === "igdb") {
+    expect(payload.hits?.some((hit) => hit.kind === "game" && /cyberpunk/i.test(hit.name))).toBe(true);
   }
 });
 

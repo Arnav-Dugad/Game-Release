@@ -5,6 +5,7 @@ import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { GameGrid } from "./GameGrid";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { GameSummary } from "@/lib/games/types";
+import { fuzzyMatches } from "@/lib/games/fuzzy-search";
 
 type EntitySort = "featured" | "newest" | "oldest" | "name" | "critic" | "audience" | "anticipated";
 
@@ -20,11 +21,11 @@ export function EntityGameExplorer({
     kind === "franchise" ? "newest" : "featured",
   );
   const [visibleCount, setVisibleCount] = useState(60);
-  const normalised = query.trim().toLocaleLowerCase();
+  const normalised = query.trim();
 
   const filtered = useMemo(() => {
     const matches = normalised
-      ? games.filter((game) => game.name.toLocaleLowerCase().includes(normalised))
+      ? games.filter((game) => fuzzyMatches(game.name, normalised))
       : [...games];
 
     if (sort === "name") return matches.sort((a, b) => a.name.localeCompare(b.name));

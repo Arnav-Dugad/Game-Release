@@ -52,6 +52,7 @@ import { platformKey, type PlatformKey } from "@/lib/utils/format";
 import { storeFromUrl } from "../stores";
 import { buildDirectoryWhere, type DirectoryOrder } from "../directory";
 import type { SearchHit } from "../search";
+import { searchQueryVariants } from "../fuzzy-search";
 
 const API = "https://api.igdb.com/v4";
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
@@ -654,6 +655,8 @@ async function detailFields(): Promise<string> {
  * across revisions, rather than the `category` enum which has not.
  */
 const MAIN_GAMES = "parent_game = null & version_parent = null";
+/** Search includes DLC and expansions; alternate editions remain separate. */
+const SEARCHABLE_GAMES = "version_parent = null";
 
 /* ---------------------------------------------------------------------------
  * Payload shapes
@@ -1798,18 +1801,25 @@ async function searchPool(term: string, where: string, limit: number, revalidate
 async function typoSearchPool(term: string, where: string, limit: number, revalidate: number) {
   const query = queryFor(revalidate);
   const { release } = await schema();
-  const token = normalise(term).split(" ").find((part) => part.length >= 3);
-  if (!token) return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
-  // Two stable leading characters are broad enough to survive a missing or
-  // transposed third letter while still keeping the official IGDB pool bounded.
-  const prefix = token.slice(0, 2);
+  const prefixes = [...new Set(
+    searchQueryVariants(term)
+      .flatMap((variant) => variant.split(" "))
+      .filter((part) => part.length >= 2)
+      .map((part) => part.slice(0, 2)),
+  )].slice(0, 5);
+  if (prefixes.length === 0) {
+    return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
+  }
+  // Several stable prefixes survive missing letters, swapped words and common
+  // abbreviations while one bounded query still respects IGDB's rate limit.
+  const nameCandidates = prefixes.map((prefix) => `name ~ *"${prefix}"*`).join(" | ");
   const rows = await query<IgdbGame[]>(
     "games",
     apicalypse({
       fields: [...CORE_SUMMARY, ...release, "alternative_names.name"].join(","),
-      where: `${where} & name ~ *"${prefix}"*`,
+      where: `${where} & (${nameCandidates})`,
       sort: "total_rating_count desc",
-      limit: Math.min(500, Math.max(limit, 160)),
+      limit: Math.min(500, Math.max(limit, 240)),
     }),
   );
   const usableRows = usable(rows);
@@ -1825,14 +1835,8 @@ async function typoSearchPool(term: string, where: string, limit: number, revali
 
 async function intelligentSearchPool(term: string, where: string, limit: number, revalidate: number) {
   const direct = await searchPool(term, where, limit, revalidate);
-  const bestDirect = Math.min(
-    99,
-    ...direct.games.flatMap((game) =>
-      [game.name, ...(direct.altNames.get(game.id) ?? [])].map((name) => fuzzyTitleScore(name, term)),
-    ),
-  );
-  if (bestDirect <= 4 && direct.games.length >= Math.min(limit, 8)) return direct;
-
+  // Always merge the loose pool. Returning early after eight strong matches is
+  // what hid a franchise's less-popular games from otherwise valid searches.
   const fuzzy = await typoSearchPool(term, where, limit, revalidate);
   const merged = new Map<number, GameSummary>();
   for (const game of [...direct.games, ...fuzzy.games]) merged.set(game.id, game);
@@ -1891,14 +1895,14 @@ export async function igdbSearchAll(
   const nameWhere = (base: string) => buildDirectoryWhere(base, safeTerm);
   const block = (endpoint: string, name: string, body: string) =>
     `query ${endpoint} "${name}" {\n${body}\n};`;
-  const gamePoolLimit = Math.min(120, Math.max(limits.games * 5, limits.games));
+  const gamePoolLimit = Math.min(300, Math.max(limits.games * 5, 120));
 
   try {
     // IGDB's native `search` statement is not executed inside Multi-Query.
     // Keep the relevance-ranked game search as one direct request and batch
     // every name-indexed entity into one second request.
     const [gameSearch, response] = await Promise.all([
-      intelligentSearchPool(safeTerm, MAIN_GAMES, gamePoolLimit, TTL.search).catch((err) => {
+      intelligentSearchPool(safeTerm, SEARCHABLE_GAMES, gamePoolLimit, TTL.search).catch((err) => {
         warn("search.games", err);
         return { games: [] as GameSummary[], altNames: new Map<number, string[]>() };
       }),
@@ -1960,6 +1964,9 @@ export async function igdbSearchAll(
         kind: "game", id: game.id, name: game.name, slug: game.slug,
         subtitle: game.genres.slice(0, 2).map((genre) => genre.name).join(" · ") || "Game",
         image: game.image,
+        released: game.released,
+        releaseWindow: game.releaseWindow,
+        tba: game.tba,
       })),
       ...[...franchises, ...series]
         .filter((entry, index, all) => all.findIndex((candidate) =>
@@ -2024,7 +2031,7 @@ export const igdbProvider: GameProvider = {
         const overFetch = Math.min(500, Math.max(pageSize * 4, page * pageSize * 2));
         const { games: pool, altNames } = await intelligentSearchPool(
           term,
-          where,
+          where.replace(MAIN_GAMES, SEARCHABLE_GAMES),
           overFetch,
           revalidate,
         );
@@ -2270,49 +2277,21 @@ export const igdbProvider: GameProvider = {
  * quietly served from Steam is a row of static PC capsules, which is precisely
  * the "why does this look like a storefront?" failure this avoids.
  *
- * Ordered by PopScore so the shelf reflects what people are actually looking at
- * today, and filtered to records that genuinely have a trailer, since a hero
- * slide with nothing to play is the one case the design can't absorb.
+ * Ordered directly from IGDB's worldwide "Playing" popularity primitive. Art
+ * is required, but trailers are not: refusing a genuinely trending game just
+ * because its trailer is absent would corrupt the ranking the hero promises.
  */
 export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
   if (!igdbConfigured()) return null;
 
-  const withTrailer = (games: GameSummary[]) =>
-    games.filter((game) => game.heroTrailer && game.image);
-
   try {
-    /*
-     * Worldwide popularity, blended from three global signals rather than one.
-     *
-     * No single list is a good hero on its own: "Want to Play" is all unreleased
-     * hype, "Playing" is dominated by the same handful of live-service giants
-     * every week, and Steam concurrents ignore consoles entirely. Interleaving
-     * them by rank means the carousel reflects what the world is collectively
-     * anticipating, playing and buying, and it visibly changes as any of the
-     * three move.
-     */
-    const [wanted, playing, steamHot] = await Promise.all(
-      [POPULARITY.wantToPlay, POPULARITY.playing, POPULARITY.steamPeak].map((type) =>
-        fetchPopularGameIds(limit * 4, type).catch((err) => {
-          warn("spotlight.popularity", err);
-          return [] as number[];
-        }),
-      ),
-    );
-
-    // Round-robin so each signal contributes its top entries before any one of
-    // them contributes its long tail.
-    const popularIds: number[] = [];
-    const seen = new Set<number>();
-    for (let i = 0; i < limit * 4; i++) {
-      for (const list of [wanted, playing, steamHot]) {
-        const id = list[i];
-        if (typeof id === "number" && !seen.has(id)) {
-          seen.add(id);
-          popularIds.push(id);
-        }
-      }
-    }
+    // Preserve the upstream rank exactly. Re-sorting by rating or release date
+    // would turn this back into a featured shelf instead of a trending hero.
+    const popularIds = await fetchPopularGameIds(limit * 8, POPULARITY.playing)
+      .catch((err) => {
+        warn("spotlight.popularity", err);
+        return [] as number[];
+      });
 
     if (popularIds.length > 0) {
       const games = await listGames(
@@ -2320,23 +2299,24 @@ export async function igdbSpotlight(limit = 6): Promise<GameSummary[] | null> {
         TTL.list,
       );
       const rank = new Map(popularIds.map((id, index) => [id, index]));
-      const ordered = withTrailer(games)
+      const ordered = games
+        .filter((game) => game.image || game.screenshots.length > 0)
         .sort((a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999))
         .slice(0, limit);
       if (ordered.length > 0) return ordered;
     }
 
-    // Nothing popular had a trailer — fall back to the most anticipated
-    // upcoming titles, which almost always do.
-    const anticipated = await listGames(
+    // IGDB-only resilience: if the popularity feed is temporarily empty, show
+    // widely rated recent releases rather than a storefront or upcoming list.
+    const recent = await listGames(
       {
-        where: `${MAIN_GAMES} & hypes > 0 & first_release_date > ${nowSeconds()}`,
-        sort: "hypes desc",
-        limit: limit * 4,
+        where: `${MAIN_GAMES} & first_release_date > ${daysFromNow(-365)} & first_release_date < ${nowSeconds()}`,
+        sort: "total_rating_count desc",
+        limit,
       },
       TTL.list,
     );
-    return withTrailer(anticipated).slice(0, limit);
+    return recent.slice(0, limit);
   } catch (err) {
     warn("spotlight", err);
     return null;

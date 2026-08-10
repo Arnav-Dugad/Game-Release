@@ -43,6 +43,7 @@ export interface TasteProfile {
 }
 
 const STATUS_WEIGHT: Record<WatchStatus, number> = {
+  none: 0.25,
   played: 3,
   playing: 2,
   want: 1,
