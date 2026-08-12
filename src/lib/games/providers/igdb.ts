@@ -1552,7 +1552,7 @@ async function listGames(parts: Omit<QueryParts, "fields">, revalidate: number) 
  * prolific studios can exceed that, so relationship ids must be chunked
  * instead of silently slicing the catalogue to a UI-sized number.
  */
-async function listGamesByIds(
+export async function listGamesByIds(
   rawIds: number[],
   order: "release-desc" | "popularity" = "release-desc",
 ): Promise<GameSummary[]> {

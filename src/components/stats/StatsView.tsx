@@ -109,7 +109,7 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
         <Metric icon={<BellRing size={18} />} label="Games followed" value={stats.followedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} upcoming` : "Release + DLC alerts"} tone="brand" />
         <Metric icon={<Cloud size={18} />} label="Via subscription" value={stats.subscriptionGames} note={stats.subscriptionAccesses > stats.subscriptionGames ? `${stats.subscriptionAccesses} service/platform records` : undefined} tone="neon" />
         <Metric icon={<Copy size={18} />} label="Extra copies" value={stats.extraCopies} note="Never inflate game count" tone="gold" />
-        <Metric icon={<CalendarClock size={18} />} label="Unreleased games" value={stats.unreleasedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} followed` : "Separate from backlog"} tone="mint" />
+        <Metric icon={<CalendarClock size={18} />} label="Upcoming games" value={stats.unreleasedGames} note={stats.unknownReleaseGames ? `${stats.unknownReleaseGames} dates still unknown` : "Confirmed future releases"} tone="mint" />
       </Stagger>
 
       <Reveal className="grid gap-3 rounded-[1.75rem] border border-line bg-[linear-gradient(135deg,rgba(124,92,255,0.08),rgba(34,211,238,0.035))] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">

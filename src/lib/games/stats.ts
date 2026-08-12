@@ -1,5 +1,6 @@
 import type { WatchlistEntry, WatchStatus } from "@/lib/firebase/db";
 import type { Ref } from "./types";
+import { releaseState, type ReleaseState } from "./release-state";
 
 export interface RankedStat {
   key: string;
@@ -33,6 +34,7 @@ export interface LibraryStats {
   noStatus: number;
   releasedGames: number;
   unreleasedGames: number;
+  unknownReleaseGames: number;
   statusCoverage: number;
   accessCoverage: number;
   criticCoverage: number;
@@ -81,6 +83,7 @@ export function dedupeLibrary(entries: WatchlistEntry[]): WatchlistEntry[] {
       subscriptionAccess: [...new Map([...(previous.subscriptionAccess ?? []), ...(entry.subscriptionAccess ?? [])].map((item) => [`${item.service}:${item.platform}`, item])).values()],
       followedReleases: [...new Map([...(previous.followedReleases ?? []), ...(entry.followedReleases ?? [])].map((item) => [item.gameId, item])).values()],
       following: previous.following || entry.following,
+      watchlisted: previous.watchlisted || entry.watchlisted,
       genreIds: [...new Set([...(previous.genreIds ?? []), ...(entry.genreIds ?? [])])],
       genres: [...(previous.genres ?? []), ...(entry.genres ?? [])].filter(
         (genre, index, all) => all.findIndex((candidate) => candidate.id === genre.id) === index,
@@ -94,7 +97,13 @@ export function dedupeLibrary(entries: WatchlistEntry[]): WatchlistEntry[] {
 }
 
 export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref[] = []): LibraryStats {
-  const games = dedupeLibrary(entries);
+  const games = dedupeLibrary(entries.filter((entry) =>
+    entry.watchlisted
+    || entry.following
+    || entry.status !== "none"
+    || (entry.ownedOn ?? []).length > 0
+    || (entry.subscriptionAccess ?? []).length > 0,
+  ));
   const status = { none: 0, want: 0, playing: 0, played: 0 } satisfies Record<WatchStatus, number>;
   const platformCounts = new Map<string, number>();
   const subscriptionCounts = new Map<string, number>();
@@ -111,7 +120,8 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
   let subscriptionAccesses = 0;
   let finishDurationDays = 0;
   let finishDurationCount = 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const stateOf = (game: WatchlistEntry): ReleaseState =>
+    game.status === "playing" || game.status === "played" ? "released" : releaseState(game);
 
   for (const game of games) {
     status[game.status]++;
@@ -147,7 +157,7 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     if (game.status === "played") completedHours += hours;
     else if (
       (game.status === "want" || game.status === "playing")
-      && Boolean(game.released && game.released <= today)
+      && stateOf(game) === "released"
     ) backlogHours += hours;
   }
 
@@ -168,13 +178,14 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     .map(([key, value]) => ({ key, label: humanise(key), value }))
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
 
-  const releasedGames = games.filter((game) => Boolean(game.released && game.released <= today)).length;
-  const unreleasedGames = games.length - releasedGames;
+  const releasedGames = games.filter((game) => stateOf(game) === "released").length;
+  const unreleasedGames = games.filter((game) => stateOf(game) === "upcoming").length;
+  const unknownReleaseGames = games.length - releasedGames - unreleasedGames;
   const releasedCompleted = games.filter((game) =>
-    game.status === "played" && Boolean(game.released && game.released <= today),
+    game.status === "played" && stateOf(game) === "released",
   ).length;
   const statusTrackedReleased = games.filter((game) =>
-    game.status !== "none" && Boolean(game.released && game.released <= today),
+    game.status !== "none" && stateOf(game) === "released",
   ).length;
   let completionStreakMonths = 0;
   for (let index = timeline.length - 1; index >= 0; index--) {
@@ -195,10 +206,10 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     unplayedOwned: games.filter((game) =>
       (game.ownedOn ?? []).length > 0
       && (game.status === "want" || game.status === "playing")
-      && Boolean(game.released && game.released <= today),
+      && stateOf(game) === "released",
     ).length,
     upcomingFollowed: games.filter((game) =>
-      game.following && (!game.released || game.released > today),
+      game.following && stateOf(game) === "upcoming",
     ).length,
     wanted: status.want,
     playing: status.playing,
@@ -207,6 +218,7 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     noStatus: status.none,
     releasedGames,
     unreleasedGames,
+    unknownReleaseGames,
     statusCoverage: games.length ? Math.round(((games.length - status.none) / games.length) * 100) : 0,
     accessCoverage: games.length ? Math.round((games.filter((game) =>
       (game.ownedOn ?? []).length > 0 || (game.subscriptionAccess ?? []).length > 0,

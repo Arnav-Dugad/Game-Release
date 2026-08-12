@@ -25,6 +25,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   where,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -32,6 +33,7 @@ import { getDb } from "./config";
 import type { GameDetail, GameSummary } from "@/lib/games/types";
 
 export type WatchStatus = "none" | "want" | "playing" | "played";
+export const LIBRARY_SCHEMA_VERSION = 3;
 
 export interface SubscriptionAccess {
   /** Stable service slug, for example `game-pass` or `playstation-plus`. */
@@ -67,6 +69,11 @@ export interface WatchlistEntry {
   metacritic: number | null;
   /** Following controls release/DLC notifications; it never owns the record. */
   following: boolean;
+  /** Explicit membership in the saved-games watchlist. Independent from alerts and ownership. */
+  watchlisted: boolean;
+  /** Versioned catalogue snapshot metadata, refreshed from IGDB in the background. */
+  metadataVersion: number;
+  metadataUpdatedAt: number;
   /** Main-story completion time in hours when the provider knows it. */
   playtime?: number;
   status: WatchStatus;
@@ -102,6 +109,15 @@ export interface WatchlistEntry {
   followedReleases: FollowedRelease[];
   /** Epoch ms. Written client-side so the list can sort before the server timestamp lands. */
   addedAt: number;
+}
+
+/** A Firestore document may remain as a harmless tombstone after its last signal is cleared. */
+export function hasPersonalGameData(entry: WatchlistEntry): boolean {
+  return entry.watchlisted
+    || entry.following
+    || entry.status !== "none"
+    || (entry.ownedOn ?? []).length > 0
+    || (entry.subscriptionAccess ?? []).length > 0;
 }
 
 export interface Review {
@@ -280,18 +296,15 @@ function followedReleasesFromGame(game: GameSummary): FollowedRelease[] {
   });
 }
 
-export function watchlistEntryFromGame(
-  game: GameSummary,
-  status: WatchStatus,
-  following = false,
-): WatchlistEntry {
+/** Catalogue-owned fields only. Never include personal state in this patch. */
+export function gameMetadataPatch(game: GameSummary): Partial<WatchlistEntry> {
   const steamSlugMatch = game.slug.match(/-s(\d+)$/);
-  const steamAppId =
-    "steamAppId" in game && typeof game.steamAppId === "number"
-      ? game.steamAppId
-      : steamSlugMatch?.[1]
-        ? Number(steamSlugMatch[1])
-        : null;
+  const steamAppId = "steamAppId" in game && typeof game.steamAppId === "number"
+    ? game.steamAppId
+    : steamSlugMatch?.[1] ? Number(steamSlugMatch[1]) : null;
+  const hasRelatedReleases = "dlcs" in game
+    || "expansions" in game
+    || "standaloneExpansions" in game;
   return {
     gameId: game.id,
     steamAppId,
@@ -303,7 +316,38 @@ export function watchlistEntryFromGame(
     releaseWindow: game.releaseWindow,
     tba: game.tba,
     metacritic: game.metacritic,
+    playtime: game.playtime,
+    genreIds: game.genres.map((genre) => genre.id),
+    genres: game.genres.map(({ id, slug, name }) => ({ id, slug, name })),
+    platformSlugs: game.parentPlatforms.map((platform) => platform.slug),
+    // Summary responses do not contain DLC relationships. Omitting this field
+    // preserves a richer snapshot written from the detail page.
+    ...(hasRelatedReleases ? { followedReleases: followedReleasesFromGame(game) } : {}),
+    metadataVersion: LIBRARY_SCHEMA_VERSION,
+    metadataUpdatedAt: Date.now(),
+  };
+}
+
+export function watchlistEntryFromGame(
+  game: GameSummary,
+  status: WatchStatus,
+  following = false,
+): WatchlistEntry {
+  return {
+    ...gameMetadataPatch(game),
+    gameId: game.id,
+    slug: game.slug,
+    name: game.name,
+    image: game.image,
+    imageFallback: game.imageFallback,
+    released: game.released,
+    releaseWindow: game.releaseWindow,
+    tba: game.tba,
+    metacritic: game.metacritic,
     following,
+    watchlisted: status === "want",
+    metadataVersion: LIBRARY_SCHEMA_VERSION,
+    metadataUpdatedAt: Date.now(),
     playtime: game.playtime,
     status,
     platform: null,
@@ -329,6 +373,7 @@ export async function ensureWatchlistEntry(
   const ref = doc(db, "users", uid, "watchlist", String(game.id));
   const snap = await getDoc(ref);
   if (!snap.exists()) await setDoc(ref, watchlistEntryFromGame(game, status, false));
+  else await setDoc(ref, gameMetadataPatch(game), { merge: true });
 }
 
 /** Following is independent from ownership and progress, so unfollowing is lossless. */
@@ -344,11 +389,26 @@ export async function setGameFollowing(
     await setDoc(ref, watchlistEntryFromGame(game, "none", following));
     return;
   }
-  const followedReleases = followedReleasesFromGame(game);
-  await updateDoc(ref, {
+  await setDoc(ref, {
+    ...gameMetadataPatch(game),
     following,
-    ...(followedReleases.length > 0 ? { followedReleases } : {}),
-  });
+  }, { merge: true });
+}
+
+export async function setGameWatchlisted(
+  uid: string,
+  game: GameSummary,
+  watchlisted: boolean,
+  exists: boolean,
+): Promise<void> {
+  const db = requireDb();
+  const ref = doc(db, "users", uid, "watchlist", String(game.id));
+  if (!exists) {
+    const entry = watchlistEntryFromGame(game, "none", false);
+    await setDoc(ref, { ...entry, watchlisted });
+    return;
+  }
+  await setDoc(ref, { ...gameMetadataPatch(game), watchlisted }, { merge: true });
 }
 
 export async function addToWatchlist(uid: string, entry: WatchlistEntry): Promise<void> {
@@ -358,7 +418,9 @@ export async function addToWatchlist(uid: string, entry: WatchlistEntry): Promis
 
 export async function removeFromWatchlist(uid: string, gameId: number): Promise<void> {
   const db = requireDb();
-  await deleteDoc(doc(db, "users", uid, "watchlist", String(gameId)));
+  await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), {
+    watchlisted: false,
+  });
 }
 
 /**
@@ -374,7 +436,10 @@ export async function setWatchStatus(
   current?: WatchlistEntry,
 ): Promise<void> {
   const db = requireDb();
-  const patch: Record<string, unknown> = { status };
+  const patch: Record<string, unknown> = {
+    status,
+    ...(status === "want" ? { watchlisted: true } : {}),
+  };
   if (status === "playing" && !current?.startedAt) patch.startedAt = Date.now();
   if (status === "played" && !current?.finishedAt) patch.finishedAt = Date.now();
   await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), patch);
@@ -420,6 +485,22 @@ export async function setWatchPlatform(
   await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), { platform });
 }
 
+/** Repairs stale catalogue snapshots while preserving every personal field. */
+export async function syncWatchlistMetadata(uid: string, games: GameSummary[]): Promise<void> {
+  const db = requireDb();
+  for (let offset = 0; offset < games.length; offset += 400) {
+    const batch = writeBatch(db);
+    for (const game of games.slice(offset, offset + 400)) {
+      batch.set(
+        doc(db, "users", uid, "watchlist", String(game.id)),
+        gameMetadataPatch(game),
+        { merge: true },
+      );
+    }
+    await batch.commit();
+  }
+}
+
 /** Live watchlist. Returns a no-op unsubscribe when Firebase is unconfigured. */
 export function subscribeWatchlist(
   uid: string,
@@ -446,6 +527,9 @@ export function subscribeWatchlist(
           // Legacy watchlist records represented follows. Preserve that intent
           // while all new personal records opt in explicitly.
           following: data.following ?? true,
+          watchlisted: data.watchlisted ?? true,
+          metadataVersion: data.metadataVersion ?? 0,
+          metadataUpdatedAt: data.metadataUpdatedAt ?? 0,
           status: ["none", "want", "playing", "played"].includes(data.status)
             ? data.status
             : "none",
@@ -461,7 +545,7 @@ export function subscribeWatchlist(
           followedReleases: data.followedReleases ?? [],
           platformSlugs: data.platformSlugs ?? [],
         };
-      });
+      }).filter(hasPersonalGameData);
       entries.sort((a, b) => b.addedAt - a.addedAt);
       onChange(entries);
     },

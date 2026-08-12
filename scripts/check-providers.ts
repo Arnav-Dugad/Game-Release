@@ -19,6 +19,7 @@ import { canonicalEntryHref, releaseNotifications } from "../src/lib/notificatio
 import { groupSearchHits, hrefForSearchHit, type SearchHit } from "../src/lib/games/search";
 import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashboard";
 import { buildLibraryStats } from "../src/lib/games/stats";
+import { releaseState } from "../src/lib/games/release-state";
 import { fuzzyMatches, normaliseSearch, searchQueryVariants } from "../src/lib/games/fuzzy-search";
 import type { WatchlistEntry } from "../src/lib/firebase/db";
 
@@ -142,14 +143,29 @@ check(
   "Date TBA",
 );
 check(
-  "a window counts as unreleased",
-  isUnreleased({ released: null, releaseWindow: "Q4 2026", tba: false }),
+  "a future window counts as unreleased",
+  isUnreleased({ released: null, releaseWindow: "Q4 2099", tba: false }),
   true,
 );
 check(
   "a past date is released",
   isUnreleased({ released: "2020-01-01", releaseWindow: null, tba: false }),
   false,
+);
+check(
+  "missing provider dates stay unknown, not upcoming",
+  releaseState({ released: null, releaseWindow: null, tba: true }, new Date("2026-08-12T12:00:00Z")),
+  "unknown",
+);
+check(
+  "an expired release window is released",
+  releaseState({ released: null, releaseWindow: "Q4 2020", tba: false }, new Date("2026-08-12T12:00:00Z")),
+  "released",
+);
+check(
+  "a confirmed future quarter is upcoming",
+  releaseState({ released: null, releaseWindow: "Q4 2026", tba: false }, new Date("2026-08-12T12:00:00Z")),
+  "upcoming",
 );
 
 console.log("\nStore/link classification");
@@ -261,6 +277,9 @@ const notificationEntry = (overrides: Partial<WatchlistEntry> = {}): WatchlistEn
   releaseWindow: null,
   tba: false,
   metacritic: null,
+  watchlisted: true,
+  metadataVersion: 3,
+  metadataUpdatedAt: 0,
   status: "want",
   platform: null,
   startedAt: null,
@@ -334,6 +353,18 @@ const statusStats = buildLibraryStats([
 check("no-status games remain deliberately unclassified", statusStats.noStatus, 1);
 check("unreleased games stay outside the completion base", [statusStats.unreleasedGames, statusStats.completionBase], [1, 1]);
 check("released completion rate remains honest", statusStats.completionRate, 100);
+const repairedReleaseStats = buildLibraryStats([
+  notificationEntry({ gameId: 30, status: "none", released: null, releaseWindow: null, tba: true }),
+  notificationEntry({ gameId: 31, status: "played", released: null, releaseWindow: null, tba: true }),
+]);
+check("unknown dates never inflate upcoming", repairedReleaseStats.unreleasedGames, 0);
+check("unknown dates are reported separately", repairedReleaseStats.unknownReleaseGames, 1);
+check("played history proves a stale undated record is released", repairedReleaseStats.releasedGames, 1);
+check(
+  "cleared personal records do not inflate statistics",
+  buildLibraryStats([notificationEntry({ watchlisted: false, following: false, status: "none" })]).uniqueGames,
+  0,
+);
 
 console.log("\nHuman-friendly game search");
 check("accents and Roman sequels normalise", normaliseSearch("Pokémon II"), "pokemon 2");

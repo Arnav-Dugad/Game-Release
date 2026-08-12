@@ -44,6 +44,7 @@ import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { SubscriptionAccessPicker } from "@/components/game/SubscriptionAccessPicker";
 import { StatusPicker } from "@/components/game/StatusPicker";
 import { WatchButton } from "@/components/game/WatchButton";
+import { SaveButton } from "@/components/game/SaveButton";
 import { ScorePill, ScoreRing } from "@/components/ui/ScoreRing";
 import { Badge, Chip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -460,6 +461,7 @@ function GameHero({ game }: { game: GameDetail }) {
               things worth recording, side by side. The segmented control also
               starts tracking the game, so no separate watchlist button is
               needed here. */}
+          <SaveButton game={game} />
           <WatchButton game={game} variant="full" />
           <StatusPicker game={game} />
           <OwnershipPicker game={game} />

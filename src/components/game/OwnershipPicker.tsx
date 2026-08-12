@@ -121,11 +121,16 @@ export function OwnershipPicker({
         <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
           Where do you own it?
         </p>
-        <ul className="max-h-[min(60vh,18rem)] overflow-y-auto overscroll-contain">
-          {OWNERSHIP_PLATFORMS.map((platform) => {
+        <ul className="max-h-[min(68vh,24rem)] overflow-y-auto overscroll-contain">
+          {OWNERSHIP_PLATFORMS.map((platform, index) => {
             const active = owned.includes(platform.slug);
             return (
               <li key={platform.slug}>
+                {(index === 0 || OWNERSHIP_PLATFORMS[index - 1]?.group !== platform.group) && (
+                  <p className="sticky top-0 z-10 bg-panel/95 px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-faint backdrop-blur-xl">
+                    {platform.group}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => choose(platform.slug)}

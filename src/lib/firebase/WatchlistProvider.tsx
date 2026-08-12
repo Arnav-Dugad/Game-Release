@@ -17,6 +17,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -25,11 +26,14 @@ import {
   ensureWatchlistEntry,
   removeFromWatchlist,
   setGameFollowing,
+  setGameWatchlisted,
   setOwnedOn,
   setSubscriptionAccess,
   setWatchPlatform,
   setWatchStatus,
   subscribeWatchlist,
+  syncWatchlistMetadata,
+  LIBRARY_SCHEMA_VERSION,
   type SubscriptionAccess,
   type WatchStatus,
   type WatchlistEntry,
@@ -41,10 +45,12 @@ interface WatchlistContextValue {
   loading: boolean;
   isWatched: (gameId: number) => boolean;
   isFollowed: (gameId: number) => boolean;
+  isWatchlisted: (gameId: number) => boolean;
   statusOf: (gameId: number) => WatchStatus | null;
   ensure: (game: GameSummary) => Promise<void>;
   /** Returns the new explicit follow state. */
   toggleFollow: (game: GameSummary) => Promise<boolean>;
+  toggleWatchlist: (game: GameSummary) => Promise<boolean>;
   syncFollow: (game: GameSummary) => Promise<void>;
   setStatus: (gameId: number, status: WatchStatus) => Promise<void>;
   /** Records which platform the user is playing on. */
@@ -62,9 +68,12 @@ const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [entries, setEntries] = useState<WatchlistEntry[]>([]);
+  const [entriesOwnerUid, setEntriesOwnerUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   /** Follow writes are optimistic; personal records remain server-backed. */
   const [pendingFollowing, setPendingFollowing] = useState<Map<number, boolean>>(new Map());
+  const [pendingWatchlisted, setPendingWatchlisted] = useState<Map<number, boolean>>(new Map());
+  const metadataAttempted = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!user) {
@@ -72,7 +81,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       // write out of the effect body.
       const frame = requestAnimationFrame(() => {
         setEntries([]);
+        setEntriesOwnerUid(null);
         setPendingFollowing(new Map());
+        setPendingWatchlisted(new Map());
         setLoading(false);
       });
       return () => cancelAnimationFrame(frame);
@@ -81,18 +92,58 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       user.uid,
       (next) => {
         setEntries(next);
+        setEntriesOwnerUid(user.uid);
         setPendingFollowing(new Map());
+        setPendingWatchlisted(new Map());
         setLoading(false);
       },
       (err) => {
         console.error("[watchlist] subscription failed", err);
+        setEntriesOwnerUid(user.uid);
         setLoading(false);
       },
     );
     return unsubscribe;
   }, [user]);
 
-  const serverIds = useMemo(() => new Set(entries.map((e) => e.gameId)), [entries]);
+  useEffect(() => {
+    metadataAttempted.current.clear();
+  }, [user?.uid]);
+
+  // Never expose or refresh the previous account's snapshot during an auth switch.
+  const activeEntries = useMemo(
+    () => entriesOwnerUid === user?.uid ? entries : [],
+    [entriesOwnerUid, user?.uid, entries],
+  );
+  const activeLoading = loading || Boolean(user && entriesOwnerUid !== user.uid);
+
+  useEffect(() => {
+    if (!user || activeEntries.length === 0) return;
+    const staleBefore = Date.now() - 7 * 86_400_000;
+    const stale = activeEntries.filter((entry) =>
+      !/-s\d+$/.test(entry.slug)
+      && !metadataAttempted.current.has(entry.gameId)
+      && (entry.metadataVersion < LIBRARY_SCHEMA_VERSION || entry.metadataUpdatedAt < staleBefore),
+    );
+    if (stale.length === 0) return;
+    for (const entry of stale) metadataAttempted.current.add(entry.gameId);
+
+    void (async () => {
+      for (let offset = 0; offset < stale.length; offset += 100) {
+        const ids = stale.slice(offset, offset + 100).map((entry) => entry.gameId);
+        const response = await fetch("/api/library/metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!response.ok) continue;
+        const payload = await response.json() as { games?: GameSummary[] };
+        if (payload.games?.length) await syncWatchlistMetadata(user.uid, payload.games);
+      }
+    })().catch((error) => console.warn("[library] metadata refresh failed", error));
+  }, [activeEntries, user]);
+
+  const serverIds = useMemo(() => new Set(activeEntries.map((e) => e.gameId)), [activeEntries]);
 
   const isWatched = useCallback(
     (gameId: number) => serverIds.has(gameId),
@@ -101,22 +152,31 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const isFollowed = useCallback(
     (gameId: number) => pendingFollowing.get(gameId)
-      ?? entries.find((entry) => entry.gameId === gameId)?.following
+      ?? activeEntries.find((entry) => entry.gameId === gameId)?.following
       ?? false,
-    [entries, pendingFollowing],
+    [activeEntries, pendingFollowing],
+  );
+
+  const isWatchlisted = useCallback(
+    (gameId: number) => pendingWatchlisted.get(gameId)
+      ?? activeEntries.find((entry) => entry.gameId === gameId)?.watchlisted
+      ?? false,
+    [activeEntries, pendingWatchlisted],
   );
 
   const statusOf = useCallback(
-    (gameId: number) => entries.find((e) => e.gameId === gameId)?.status ?? null,
-    [entries],
+    (gameId: number) => activeEntries.find((e) => e.gameId === gameId)?.status ?? null,
+    [activeEntries],
   );
 
   const ensure = useCallback(
     async (game: GameSummary) => {
       if (!user) throw new Error("Sign in to save games.");
-      if (!isWatched(game.id)) await ensureWatchlistEntry(user.uid, game);
+      // Existing records also need the current catalogue snapshot. The write
+      // merges metadata only, so no personal state can be overwritten.
+      await ensureWatchlistEntry(user.uid, game);
     },
-    [user, isWatched],
+    [user],
   );
 
   const toggleFollow = useCallback(
@@ -145,10 +205,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     async (gameId: number, status: WatchStatus) => {
       if (!user) throw new Error("Sign in to use your watchlist.");
       // Pass the current entry so first-transition timestamps aren't rewritten.
-      const current = entries.find((entry) => entry.gameId === gameId);
+      const current = activeEntries.find((entry) => entry.gameId === gameId);
       await setWatchStatus(user.uid, gameId, status, current);
     },
-    [user, entries],
+    [user, activeEntries],
   );
 
   const setOwnership = useCallback(
@@ -160,8 +220,28 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 
   const ownershipOf = useCallback(
-    (gameId: number) => entries.find((entry) => entry.gameId === gameId)?.ownedOn ?? [],
-    [entries],
+    (gameId: number) => activeEntries.find((entry) => entry.gameId === gameId)?.ownedOn ?? [],
+    [activeEntries],
+  );
+
+  const toggleWatchlist = useCallback(
+    async (game: GameSummary) => {
+      if (!user) throw new Error("Sign in to save games.");
+      const next = !isWatchlisted(game.id);
+      setPendingWatchlisted((previous) => new Map(previous).set(game.id, next));
+      try {
+        await setGameWatchlisted(user.uid, game, next, isWatched(game.id));
+        return next;
+      } catch (error) {
+        setPendingWatchlisted((previous) => {
+          const rolled = new Map(previous);
+          rolled.delete(game.id);
+          return rolled;
+        });
+        throw error;
+      }
+    },
+    [user, isWatchlisted, isWatched],
   );
 
   const syncFollow = useCallback(
@@ -181,8 +261,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   );
 
   const accessOf = useCallback(
-    (gameId: number) => entries.find((entry) => entry.gameId === gameId)?.subscriptionAccess ?? [],
-    [entries],
+    (gameId: number) => activeEntries.find((entry) => entry.gameId === gameId)?.subscriptionAccess ?? [],
+    [activeEntries],
   );
 
   const setPlatform = useCallback(
@@ -203,13 +283,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WatchlistContextValue>(
     () => ({
-      entries,
-      loading,
+      entries: activeEntries,
+      loading: activeLoading,
       isWatched,
       isFollowed,
+      isWatchlisted,
       statusOf,
       ensure,
       toggleFollow,
+      toggleWatchlist,
       syncFollow,
       setStatus,
       setPlatform,
@@ -219,7 +301,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       accessOf,
       remove,
     }),
-    [entries, loading, isWatched, isFollowed, statusOf, ensure, toggleFollow, syncFollow, setStatus, setPlatform, setOwnership, ownershipOf, setAccess, accessOf, remove],
+    [activeEntries, activeLoading, isWatched, isFollowed, isWatchlisted, statusOf, ensure, toggleFollow, toggleWatchlist, syncFollow, setStatus, setPlatform, setOwnership, ownershipOf, setAccess, accessOf, remove],
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

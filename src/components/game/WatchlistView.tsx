@@ -11,8 +11,8 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowUpDown, BookmarkX, Library, Search, Trash2, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowUpDown, BellRing, BookmarkX, CalendarClock, CircleHelp, Library, Search, X } from "lucide-react";
 import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
 import { PlatformPicker } from "./PlatformPicker";
@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { releaseLabel } from "@/lib/utils/format";
 import { fuzzyMatches } from "@/lib/games/fuzzy-search";
+import { releaseState, type ReleaseState } from "@/lib/games/release-state";
 import type { WatchStatus } from "@/lib/firebase/db";
 
 const FILTERS: { value: WatchStatus | "all"; label: string }[] = [
@@ -51,6 +52,7 @@ const STATUS_LABEL: Record<WatchStatus, string> = {
 };
 
 type WatchSort = "upcoming" | "added" | "name" | "score";
+type ReleaseFilter = ReleaseState | "all";
 
 const SORTS: { value: WatchSort; label: string }[] = [
   { value: "upcoming", label: "Releasing soonest" },
@@ -66,27 +68,36 @@ export function WatchlistView() {
   const [sort, setSort] = useState<WatchSort>("upcoming");
   const [query, setQuery] = useState("");
   const [ownedOnly, setOwnedOnly] = useState(false);
+  const [releaseFilter, setReleaseFilter] = useState<ReleaseFilter>("all");
   const { size: posterSize, setSize: setPosterSize } = usePosterSize(
     "ludex:watchlist-size",
     "list",
   );
 
+  const saved = useMemo(() => entries.filter((entry) => entry.watchlisted), [entries]);
+
   const counts = useMemo(() => {
-    const base: Record<string, number> = { all: entries.length, none: 0, want: 0, playing: 0, played: 0 };
-    for (const entry of entries) base[entry.status] = (base[entry.status] ?? 0) + 1;
+    const base: Record<string, number> = { all: saved.length, none: 0, want: 0, playing: 0, played: 0 };
+    for (const entry of saved) base[entry.status] = (base[entry.status] ?? 0) + 1;
     return base;
-  }, [entries]);
+  }, [saved]);
+
+  const releaseCounts = useMemo(() => {
+    const result: Record<ReleaseState, number> = { released: 0, upcoming: 0, unknown: 0 };
+    for (const entry of saved) result[releaseState(entry)]++;
+    return result;
+  }, [saved]);
 
   const visible = useMemo(() => {
     const term = query.trim();
-    const list = entries.filter((entry) => {
+    const list = saved.filter((entry) => {
       if (filter !== "all" && entry.status !== filter) return false;
+      if (releaseFilter !== "all" && releaseState(entry) !== releaseFilter) return false;
       if (ownedOnly && (entry.ownedOn ?? []).length === 0) return false;
       if (term && !fuzzyMatches(entry.name, term)) return false;
       return true;
     });
 
-    const today = new Date().toISOString().slice(0, 10);
     const sorted = [...list];
 
     switch (sort) {
@@ -99,18 +110,18 @@ export function WatchlistView() {
       default:
         return sorted.sort((a, b) => {
           // Upcoming, soonest first; then released, newest first; undated last.
-          const rank = (released: string | null, tba: boolean) => {
-            if (tba || !released) return 2;
-            return released >= today ? 0 : 1;
+          const rank = (entry: typeof a) => {
+            const state = releaseState(entry);
+            return state === "upcoming" ? 0 : state === "released" ? 1 : 2;
           };
-          const [ra, rb] = [rank(a.released, a.tba), rank(b.released, b.tba)];
+          const [ra, rb] = [rank(a), rank(b)];
           if (ra !== rb) return ra - rb;
           if (ra === 0) return (a.released ?? "").localeCompare(b.released ?? "");
           if (ra === 1) return (b.released ?? "").localeCompare(a.released ?? "");
           return b.addedAt - a.addedAt;
         });
     }
-  }, [entries, filter, sort, query, ownedOnly]);
+  }, [saved, filter, releaseFilter, sort, query, ownedOnly]);
 
   if (loading) {
     return (
@@ -124,7 +135,7 @@ export function WatchlistView() {
     );
   }
 
-  if (entries.length === 0) {
+  if (saved.length === 0) {
     return (
       <Container className="flex flex-col items-center justify-center py-24 text-center">
         <span className="grid h-16 w-16 place-items-center rounded-2xl border border-line bg-white/[0.04]">
@@ -147,6 +158,12 @@ export function WatchlistView() {
 
   return (
     <Container className="py-8 lg:py-12">
+      <div className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <WatchMetric icon={<Library size={16} />} label="Saved games" value={saved.length} />
+        <WatchMetric icon={<CalendarClock size={16} />} label="Coming next" value={releaseCounts.upcoming} tone="brand" />
+        <WatchMetric icon={<BellRing size={16} />} label="Alerts on" value={saved.filter((entry) => entry.following).length} tone="mint" />
+        <WatchMetric icon={<CircleHelp size={16} />} label="Date unknown" value={releaseCounts.unknown} />
+      </div>
       <div className="mb-6 space-y-4 rounded-2xl border border-line bg-panel/40 p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1">
@@ -236,6 +253,30 @@ export function WatchlistView() {
             Owned only
           </button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+          {([
+            ["all", "Any release", saved.length],
+            ["upcoming", "Upcoming", releaseCounts.upcoming],
+            ["released", "Released", releaseCounts.released],
+            ["unknown", "Date unknown", releaseCounts.unknown],
+          ] as const).map(([value, label, count]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setReleaseFilter(value)}
+              aria-pressed={releaseFilter === value}
+              className={cn(
+                "min-h-9 rounded-full border px-3.5 text-xs font-medium transition-colors",
+                releaseFilter === value
+                  ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                  : "border-line bg-white/[0.025] text-muted hover:text-text",
+              )}
+            >
+              {label} <span className="ml-1 tabular-nums opacity-60">{count}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {visible.length === 0 ? (
@@ -303,7 +344,7 @@ export function WatchlistView() {
 
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 text-[11px] text-muted sm:text-xs">
                     <span>{releaseLabel(entry)}</span>
-                    {entry.released && (
+                    {entry.released && releaseState(entry) === "upcoming" && (
                       <span className="text-brand-soft">
                         <CountdownInline date={entry.released} />
                       </span>
@@ -349,7 +390,7 @@ export function WatchlistView() {
                   onClick={async () => {
                     try {
                       await remove(entry.gameId);
-                      toast(`${entry.name} removed`, "info");
+                      toast(`${entry.name} removed from your watchlist. Ownership and play history were kept.`, "info");
                     } catch {
                       toast("Couldn't remove that game.", "error");
                     }
@@ -357,7 +398,7 @@ export function WatchlistView() {
                   aria-label={`Remove ${entry.name} from watchlist`}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-flare/10 hover:text-flare"
                 >
-                  <Trash2 size={16} />
+                  <BookmarkX size={16} />
                 </button>
               </motion.li>
             ))}
@@ -365,5 +406,31 @@ export function WatchlistView() {
         </ul>
       )}
     </Container>
+  );
+}
+
+function WatchMetric({
+  icon,
+  label,
+  value,
+  tone = "neutral",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone?: "neutral" | "brand" | "mint";
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-line bg-panel/45 p-3.5 sm:p-4">
+      <div className={cn(
+        "mb-3 grid h-8 w-8 place-items-center rounded-xl bg-white/[0.05] text-muted",
+        tone === "brand" && "bg-brand/15 text-brand-soft",
+        tone === "mint" && "bg-mint/10 text-mint",
+      )}>
+        {icon}
+      </div>
+      <p className="font-display text-2xl font-bold tabular-nums sm:text-3xl">{value}</p>
+      <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.12em] text-faint">{label}</p>
+    </div>
   );
 }

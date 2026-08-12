@@ -14,6 +14,7 @@ export interface OwnershipPlatform {
   name: string;
   /** Brand icon key, when one exists in the generated set. */
   icon: string | null;
+  group?: string;
 }
 
 /**
@@ -21,20 +22,34 @@ export interface OwnershipPlatform {
  * answer is never buried.
  */
 export const OWNERSHIP_PLATFORMS: OwnershipPlatform[] = [
-  { slug: "steam", name: "Steam", icon: "steam" },
-  { slug: "playstation", name: "PlayStation", icon: "playstation" },
-  { slug: "xbox", name: "Xbox", icon: "xbox" },
-  { slug: "nintendo", name: "Nintendo", icon: "nintendo" },
-  { slug: "epic", name: "Epic Games", icon: "epic" },
-  { slug: "gog", name: "GOG", icon: "gog" },
-  { slug: "battlenet", name: "Battle.net", icon: "battlenet" },
-  { slug: "ea", name: "EA App", icon: "ea" },
-  { slug: "ubisoft", name: "Ubisoft Connect", icon: "ubisoft" },
-  { slug: "itch", name: "itch.io", icon: "itch" },
-  { slug: "googleplay", name: "Google Play", icon: "googleplay" },
-  { slug: "appstore", name: "App Store", icon: "appstore" },
-  { slug: "physical", name: "Physical copy", icon: null },
-  { slug: "other", name: "Other", icon: null },
+  { slug: "steam", name: "PC · Steam", icon: "steam", group: "PC stores" },
+  { slug: "epic", name: "PC · Epic Games", icon: "epic", group: "PC stores" },
+  { slug: "gog", name: "PC · GOG", icon: "gog", group: "PC stores" },
+  { slug: "xbox-pc", name: "PC · Xbox app", icon: "xbox", group: "PC stores" },
+  { slug: "battlenet", name: "PC · Battle.net", icon: "battlenet", group: "PC stores" },
+  { slug: "ea", name: "PC · EA app", icon: "ea", group: "PC stores" },
+  { slug: "ubisoft", name: "PC · Ubisoft Connect", icon: "ubisoft", group: "PC stores" },
+  { slug: "itch", name: "PC · itch.io", icon: "itch", group: "PC stores" },
+  { slug: "amazon-games", name: "PC · Amazon Games", icon: "amazon", group: "PC stores" },
+  { slug: "rockstar", name: "PC · Rockstar Launcher", icon: "rockstar", group: "PC stores" },
+  { slug: "direct-pc", name: "PC · Direct / standalone", icon: null, group: "PC stores" },
+  { slug: "ps5", name: "PlayStation 5", icon: "playstation", group: "Console platforms" },
+  { slug: "ps4", name: "PlayStation 4", icon: "playstation", group: "Console platforms" },
+  { slug: "ps3", name: "PlayStation 3", icon: "playstation", group: "Console platforms" },
+  { slug: "xbox-series", name: "Xbox Series X|S", icon: "xbox", group: "Console platforms" },
+  { slug: "xbox-one", name: "Xbox One", icon: "xbox", group: "Console platforms" },
+  { slug: "xbox-360", name: "Xbox 360", icon: "xbox", group: "Console platforms" },
+  { slug: "switch-2", name: "Nintendo Switch 2", icon: "nintendo", group: "Console platforms" },
+  { slug: "switch", name: "Nintendo Switch", icon: "nintendo", group: "Console platforms" },
+  { slug: "steam-deck", name: "Steam Deck", icon: "steam", group: "Console platforms" },
+  { slug: "googleplay", name: "Android · Google Play", icon: "googleplay", group: "Mobile & other" },
+  { slug: "appstore", name: "iPhone/iPad · App Store", icon: "appstore", group: "Mobile & other" },
+  { slug: "physical", name: "Physical copy", icon: null, group: "Mobile & other" },
+  { slug: "other", name: "Another store / platform", icon: null, group: "Mobile & other" },
+  // Kept so existing Firebase values remain editable after the exact-platform migration.
+  { slug: "playstation", name: "PlayStation · generation not set", icon: "playstation", group: "Legacy choices" },
+  { slug: "xbox", name: "Xbox · generation not set", icon: "xbox", group: "Legacy choices" },
+  { slug: "nintendo", name: "Nintendo · system not set", icon: "nintendo", group: "Legacy choices" },
 ];
 
 const OWNERSHIP_BY_SLUG = new Map(OWNERSHIP_PLATFORMS.map((p) => [p.slug, p]));

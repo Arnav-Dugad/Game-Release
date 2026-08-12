@@ -15,8 +15,8 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowUpDown, Library, PackageOpen, Search, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowUpDown, CalendarClock, Layers3, Library, PackageOpen, Search, Trophy, X } from "lucide-react";
 import { BrandIcon } from "@/components/brand/BrandIcon";
 import { GameCover } from "@/components/game/GameCover";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -29,14 +29,18 @@ import {
   usePosterSize,
 } from "@/components/ui/PosterSizeToggle";
 import { PosterTile } from "@/components/game/PosterTile";
+import { OwnershipPicker } from "@/components/game/OwnershipPicker";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { OWNERSHIP_PLATFORMS, ownershipPlatform } from "@/lib/games/stores-catalog";
 import { cn } from "@/lib/utils/cn";
 import { fuzzyMatches } from "@/lib/games/fuzzy-search";
+import { releaseState, type ReleaseState } from "@/lib/games/release-state";
 import type { WatchlistEntry, WatchStatus } from "@/lib/firebase/db";
+import type { GameSummary } from "@/lib/games/types";
 
 type SortKey = "added" | "name" | "score" | "released";
+type ReleaseFilter = ReleaseState | "all";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "added", label: "Recently added" },
@@ -59,6 +63,7 @@ export function LibraryView() {
 
   const [store, setStore] = useState<string | "all">("all");
   const [status, setStatus] = useState<WatchStatus | "all">("all");
+  const [release, setRelease] = useState<ReleaseFilter>("all");
   const [sort, setSort] = useState<SortKey>("added");
   const [query, setQuery] = useState("");
   const { size: posterSize, setSize: setPosterSize } = usePosterSize("ludex:library-size");
@@ -93,6 +98,7 @@ export function LibraryView() {
     const filtered = owned.filter((entry) => {
       if (store !== "all" && !(entry.ownedOn ?? []).includes(store)) return false;
       if (status !== "all" && entry.status !== status) return false;
+      if (release !== "all" && releaseState(entry) !== release) return false;
       if (term && !fuzzyMatches(entry.name, term)) return false;
       return true;
     });
@@ -109,9 +115,14 @@ export function LibraryView() {
       default:
         return sorted.sort((a, b) => b.addedAt - a.addedAt);
     }
-  }, [owned, store, status, query, sort]);
+  }, [owned, store, status, release, query, sort]);
 
-  const activeFilters = (store !== "all" ? 1 : 0) + (status !== "all" ? 1 : 0) + (query ? 1 : 0);
+  const activeFilters = (store !== "all" ? 1 : 0) + (status !== "all" ? 1 : 0) + (release !== "all" ? 1 : 0) + (query ? 1 : 0);
+  const collection = useMemo(() => ({
+    copies: owned.reduce((sum, entry) => sum + new Set(entry.ownedOn ?? []).size, 0),
+    completed: owned.filter((entry) => entry.status === "played").length,
+    upcoming: owned.filter((entry) => releaseState(entry) === "upcoming").length,
+  }), [owned]);
 
   if (!user) {
     return (
@@ -145,22 +156,12 @@ export function LibraryView() {
 
   return (
     <div className="mt-6 space-y-6">
-      {/* Summary */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.04] px-4 py-2 text-sm">
-          <Library size={15} className="text-mint" />
-          <span className="font-semibold tabular-nums">{owned.length}</span>
-          <span className="text-muted">{owned.length === 1 ? "game" : "games"}</span>
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.04] px-4 py-2 text-sm">
-          <span className="font-semibold tabular-nums">{stores.length}</span>
-          <span className="text-muted">{stores.length === 1 ? "store" : "stores"}</span>
-        </span>
-        {activeFilters > 0 && (
-          <span className="text-sm text-muted">
-            Showing <span className="font-semibold text-text tabular-nums">{visible.length}</span>
-          </span>
-        )}
+      {/* One game stays one game even when several owned copies exist. */}
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <LibraryMetric icon={<Library size={16} />} label="Unique games" value={owned.length} tone="mint" />
+        <LibraryMetric icon={<Layers3 size={16} />} label="Owned copies" value={collection.copies} />
+        <LibraryMetric icon={<Trophy size={16} />} label="Completed" value={collection.completed} tone="gold" />
+        <LibraryMetric icon={<CalendarClock size={16} />} label="Not released yet" value={collection.upcoming} tone="brand" />
       </div>
 
       {/* Controls */}
@@ -242,6 +243,24 @@ export function LibraryView() {
 
         <div>
           <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
+            Release state
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", "Any release"],
+              ["released", "Released"],
+              ["upcoming", "Upcoming"],
+              ["unknown", "Date unknown"],
+            ] as const).map(([value, label]) => (
+              <Chip key={value} active={release === value} onClick={() => setRelease(value)}>
+                {label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-faint">
             Status
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -256,6 +275,12 @@ export function LibraryView() {
             ))}
           </div>
         </div>
+
+        {activeFilters > 0 && (
+          <p className="border-t border-line pt-3 text-xs text-muted">
+            Showing <span className="font-semibold text-text tabular-nums">{visible.length}</span> of {owned.length} unique games
+          </p>
+        )}
       </div>
 
       {/* Results */}
@@ -268,6 +293,7 @@ export function LibraryView() {
             onClick={() => {
               setStore("all");
               setStatus("all");
+              setRelease("all");
               setQuery("");
             }}
             className="mt-4 text-xs font-medium text-brand-soft underline underline-offset-2"
@@ -311,13 +337,11 @@ const STATUS_LABELS: Record<WatchStatus, string> = {
 
 function LibraryRow({ entry }: { entry: WatchlistEntry }) {
   const owned = entry.ownedOn ?? [];
+  const game = entryAsGame(entry);
 
   return (
-    <Link
-      href={`/game/${entry.slug}`}
-      className="flex items-center gap-3.5 rounded-2xl border border-line bg-panel/50 p-3 transition-all duration-300 fine:hover:border-line-strong fine:hover:bg-panel"
-    >
-      <span className="relative h-16 w-12 shrink-0 overflow-hidden rounded-lg">
+    <div className="flex items-center gap-3 rounded-2xl border border-line bg-panel/50 p-3 transition-all duration-300 fine:hover:border-line-strong fine:hover:bg-panel sm:gap-3.5">
+      <Link href={`/game/${entry.slug}`} className="relative h-16 w-12 shrink-0 overflow-hidden rounded-lg">
         <GameCover
           name={entry.name}
           slug={entry.slug}
@@ -326,10 +350,10 @@ function LibraryRow({ entry }: { entry: WatchlistEntry }) {
           width={160}
           sizes="48px"
         />
-      </span>
+      </Link>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold">{entry.name}</span>
+        <Link href={`/game/${entry.slug}`} className="block truncate text-sm font-semibold hover:text-brand-soft">{entry.name}</Link>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-[11px] uppercase tracking-[0.08em] text-faint">
             {STATUS_LABELS[entry.status]}
@@ -354,8 +378,59 @@ function LibraryRow({ entry }: { entry: WatchlistEntry }) {
         </span>
       </span>
 
-      <ScorePill score={entry.metacritic} />
-    </Link>
+      <ScorePill score={entry.metacritic} className="hidden sm:inline-flex" />
+      <OwnershipPicker game={game} variant="icon" />
+    </div>
+  );
+}
+
+function entryAsGame(entry: WatchlistEntry): GameSummary {
+  return {
+    id: entry.gameId,
+    slug: entry.slug,
+    name: entry.name,
+    released: entry.released,
+    releaseWindow: entry.releaseWindow,
+    tba: entry.tba,
+    image: entry.image,
+    imageFallback: entry.imageFallback,
+    rating: 0,
+    ratingsCount: 0,
+    metacritic: entry.metacritic,
+    platforms: [],
+    parentPlatforms: (entry.platformSlugs ?? []).map((slug, index) => ({ id: -(index + 1), slug, name: slug })),
+    genres: entry.genres ?? [],
+    screenshots: [],
+    esrb: null,
+    popScore: null,
+    heroTrailer: null,
+    playtime: entry.playtime ?? 0,
+    added: 0,
+  };
+}
+
+function LibraryMetric({
+  icon,
+  label,
+  value,
+  tone = "neutral",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone?: "neutral" | "brand" | "mint" | "gold";
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-line bg-panel/45 p-3.5 sm:p-4">
+      <div className={cn(
+        "mb-3 grid h-8 w-8 place-items-center rounded-xl bg-white/[0.05] text-muted",
+        tone === "brand" && "bg-brand/15 text-brand-soft",
+        tone === "mint" && "bg-mint/10 text-mint",
+        tone === "gold" && "bg-amber-400/10 text-amber-300",
+      )}>{icon}</div>
+      <p className="font-display text-2xl font-bold tabular-nums sm:text-3xl">{value}</p>
+      <p className="mt-0.5 truncate text-[11px] uppercase tracking-[0.12em] text-faint">{label}</p>
+    </div>
   );
 }
 

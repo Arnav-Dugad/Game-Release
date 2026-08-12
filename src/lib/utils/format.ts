@@ -1,3 +1,5 @@
+import { releaseState } from "@/lib/games/release-state";
+
 /**
  * Presentation helpers shared by server and client components. Everything here
  * must be deterministic across the server/client boundary — hydration mismatches
@@ -89,17 +91,10 @@ export function releaseLabelLong(game: ReleaseLike, fallback = "Date to be annou
   return fallback;
 }
 
-/** True when the title has not shipped: future-dated, windowed, or undated. */
+/** True only for a confirmed future release; missing data stays unknown. */
 export function isUnreleased(game: ReleaseLike, now: Date = new Date()): boolean {
-  if (game.tba || game.releaseWindow) return true;
-  if (!game.released) return true;
-  return game.released > isoToday(now);
+  return releaseState(game, now) === "upcoming";
 }
-
-const isoToday = (now: Date) =>
-  `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
-    now.getUTCDate(),
-  ).padStart(2, "0")}`;
 
 /** "in 3 months" / "yesterday" / "2 years ago". */
 export function relativeRelease(iso: string | null | undefined, now: Date = new Date()): string {
