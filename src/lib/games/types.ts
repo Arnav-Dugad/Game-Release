@@ -290,6 +290,8 @@ export interface BrowseFilters {
    * and buries the releases anyone is actually waiting for.
    */
   notableOnly?: boolean;
+  /** Dated calendar or a dedicated, honestly undated/TBA view. */
+  releaseTiming?: "dated" | "tba";
 }
 
 /**

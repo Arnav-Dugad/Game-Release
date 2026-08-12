@@ -12,7 +12,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowUpDown, BellRing, BookmarkX, CalendarClock, CircleHelp, Library, Search, X } from "lucide-react";
+import { ArrowUpDown, BellRing, BookmarkX, CalendarClock, Check, CircleHelp, Library, PencilLine, Search, X } from "lucide-react";
 import { GameCover } from "./GameCover";
 import { CountdownInline } from "./Countdown";
 import { PlatformPicker } from "./PlatformPicker";
@@ -35,6 +35,7 @@ import { releaseLabel } from "@/lib/utils/format";
 import { fuzzyMatches } from "@/lib/games/fuzzy-search";
 import { releaseState, type ReleaseState } from "@/lib/games/release-state";
 import type { WatchStatus } from "@/lib/firebase/db";
+import { BatchEditPanel } from "@/components/library/BatchEditPanel";
 
 const FILTERS: { value: WatchStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -69,6 +70,8 @@ export function WatchlistView() {
   const [query, setQuery] = useState("");
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [releaseFilter, setReleaseFilter] = useState<ReleaseFilter>("all");
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const { size: posterSize, setSize: setPosterSize } = usePosterSize(
     "ludex:watchlist-size",
     "list",
@@ -158,6 +161,11 @@ export function WatchlistView() {
 
   return (
     <Container className="py-8 lg:py-12">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs leading-relaxed text-muted">Saving, alerts, ownership, access, and status remain independent.</p>
+        <button type="button" onClick={() => { setBatchMode((value) => !value); setSelected(new Set()); }} aria-pressed={batchMode} className={cn("inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors", batchMode ? "border-brand/45 bg-brand/15 text-white" : "border-line bg-white/[0.035] text-muted hover:text-text")}><PencilLine size={15} />{batchMode ? "Exit batch edit" : "Batch edit"}</button>
+      </div>
+      {batchMode && <BatchEditPanel gameIds={[...selected]} onDone={() => setSelected(new Set())} onClose={() => { setBatchMode(false); setSelected(new Set()); }} />}
       <div className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <WatchMetric icon={<Library size={16} />} label="Saved games" value={saved.length} />
         <WatchMetric icon={<CalendarClock size={16} />} label="Coming next" value={releaseCounts.upcoming} tone="brand" />
@@ -277,6 +285,7 @@ export function WatchlistView() {
             </button>
           ))}
         </div>
+        {batchMode && <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4 text-xs"><button type="button" onClick={() => setSelected(new Set(visible.map((entry) => entry.gameId)))} className="font-semibold text-brand-soft hover:text-white">Select all {visible.length} visible</button><button type="button" onClick={() => setSelected(new Set())} className="font-semibold text-faint hover:text-text">Clear selection</button><span className="ml-auto tabular-nums text-muted">{selected.size} selected</span></div>}
       </div>
 
       {visible.length === 0 ? (
@@ -292,7 +301,8 @@ export function WatchlistView() {
            which is what someone scanning covers is heading for anyway. */
         <ul className={cn("grid gap-3", posterGridClass(posterSize))}>
           {visible.map((entry, index) => (
-            <li key={entry.gameId}>
+            <li key={entry.gameId} className="relative">
+              {batchMode && <SelectionToggle selected={selected.has(entry.gameId)} name={entry.name} onToggle={() => setSelected(toggleSelected(selected, entry.gameId))} />}
               <Reveal delay={Math.min(index, 10) * 0.025} blur={false} onMount>
                 <PosterTile
                   entry={entry}
@@ -314,8 +324,9 @@ export function WatchlistView() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="group flex items-center gap-3 rounded-2xl border border-line bg-panel/50 p-2.5 transition-colors fine:hover:border-line-strong sm:gap-4 sm:p-3"
+                className="group relative flex items-center gap-3 rounded-2xl border border-line bg-panel/50 p-2.5 transition-colors fine:hover:border-line-strong sm:gap-4 sm:p-3"
               >
+                {batchMode && <SelectionToggle selected={selected.has(entry.gameId)} name={entry.name} onToggle={() => setSelected(toggleSelected(selected, entry.gameId))} />}
                 <Link
                   href={`/game/${entry.slug}`}
                   className="relative h-[70px] w-[52px] shrink-0 overflow-hidden rounded-xl sm:h-20 sm:w-16"
@@ -367,7 +378,9 @@ export function WatchlistView() {
                       }}
                       className="min-h-9 rounded-full border border-line bg-white/[0.04] px-3 text-[12px] text-muted outline-none transition-colors focus-visible:border-brand"
                     >
-                      {(Object.keys(STATUS_LABEL) as WatchStatus[]).map((status) => (
+                      {(Object.keys(STATUS_LABEL) as WatchStatus[]).filter((status) =>
+                        releaseState(entry) !== "upcoming" || status === "none" || status === "want",
+                      ).map((status) => (
                         <option key={status} value={status} className="bg-panel text-text">
                           {STATUS_LABEL[status]}
                         </option>
@@ -407,6 +420,17 @@ export function WatchlistView() {
       )}
     </Container>
   );
+}
+
+function toggleSelected(selected: Set<number>, gameId: number): Set<number> {
+  const next = new Set(selected);
+  if (next.has(gameId)) next.delete(gameId);
+  else next.add(gameId);
+  return next;
+}
+
+function SelectionToggle({ selected, name, onToggle }: { selected: boolean; name: string; onToggle: () => void }) {
+  return <button type="button" onClick={onToggle} aria-label={`${selected ? "Deselect" : "Select"} ${name}`} aria-pressed={selected} className={cn("absolute inset-0 z-30 rounded-2xl p-2 text-left transition-shadow", selected && "ring-2 ring-inset ring-brand")}><span className={cn("grid h-10 w-10 place-items-center rounded-full border shadow-xl backdrop-blur-xl transition-colors", selected ? "border-brand/60 bg-brand text-white" : "border-white/20 bg-black/75 text-white hover:bg-black")}><Check size={16} className={cn(!selected && "opacity-0")} /></span></button>;
 }
 
 function WatchMetric({

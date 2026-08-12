@@ -207,7 +207,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
               ) : results.length === 0 && !loading ? (
                 <div className="px-6 py-16 text-center sm:py-20">
                   <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-line bg-white/[0.04] text-faint"><Search size={22} /></span>
-                  <p className="mt-5 font-display text-lg font-bold">No direct matches for “{query.trim()}”</p>
+                  <p className="mt-5 max-w-full break-words font-display text-lg font-bold [overflow-wrap:anywhere]">No direct matches for “{query.trim()}”</p>
                   <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">Try a shorter spelling, or search the complete games catalogue for looser title matches.</p>
                   <button type="button" onClick={openFullSearch} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-bg">
                     Open full search <ArrowRight size={15} />
@@ -234,11 +234,11 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                                     href={hrefForSearchHit(hit)}
                                     onClick={onClose}
                                     onPointerEnter={() => setCursor(index)}
-                                    className={cn("flex items-center gap-3 rounded-2xl p-2 pr-24 transition-[background-color,transform]", index === activeIndex ? "bg-white/[0.09]" : "hover:bg-white/[0.05]")}
+                                    className={cn("flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl p-2 pr-24 transition-[background-color,transform]", index === activeIndex ? "bg-white/[0.09]" : "hover:bg-white/[0.05]")}
                                   >
                                     <SearchHitVisual hit={hit} />
                                     <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-sm font-semibold">{hit.name}</span>
+                                      <span className="block max-w-full truncate text-sm font-semibold">{hit.name}</span>
                                       {hit.subtitle && <span className="mt-1 block truncate text-xs text-faint">{hit.subtitle}</span>}
                                     </span>
                                     {index === activeIndex && <CornerDownLeft size={14} className="hidden shrink-0 text-faint fine:block" />}

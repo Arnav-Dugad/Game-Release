@@ -53,6 +53,7 @@ import { storeFromUrl } from "../stores";
 import { buildDirectoryWhere, type DirectoryOrder } from "../directory";
 import type { SearchHit } from "../search";
 import { searchQueryVariants } from "../fuzzy-search";
+import { releaseState } from "../release-state";
 
 const API = "https://api.igdb.com/v4";
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
@@ -2191,14 +2192,24 @@ export const igdbProvider: GameProvider = {
       // Calendar days begin at UTC midnight. Comparing against the current
       // second hid every game releasing *today* after 00:00 UTC — and made the
       // query body, and therefore its cache key, change every second.
-      const where = `${base} & first_release_date >= ${todayStartSeconds()}`;
+      const tbaOnly = filters.releaseTiming === "tba";
+      const releaseFields = tbaOnly ? (await schema()).release : [];
+      const formatField = releaseFields.some((field) => field.endsWith(".date_format"))
+        ? "date_format"
+        : releaseFields.some((field) => field.endsWith(".category"))
+          ? "category"
+          : null;
+      if (tbaOnly && !formatField) return { results: [], count: 0, hasNext: false, page };
+      const where = tbaOnly
+        ? `${base} & first_release_date = null & release_dates.${formatField} = 7`
+        : `${base} & first_release_date >= ${todayStartSeconds()}`;
       // Independent queries — see `browse`.
-      const [results, count] = await Promise.all([
+      const [candidateResults, count] = await Promise.all([
         listGames(
           {
             where,
             // Soonest-first is the only sensible default for a calendar.
-            sort: sortClause(filters.ordering ?? "released"),
+            sort: sortClause(filters.ordering ?? (tbaOnly ? "-hypes" : "released")),
             limit: pageSize,
             offset: (page - 1) * pageSize,
           },
@@ -2206,10 +2217,15 @@ export const igdbProvider: GameProvider = {
         ),
         countGames(where, TTL.list),
       ]);
+      const validResults = candidateResults.filter((game) => {
+        if (tbaOnly) return game.tba && !game.released && !game.releaseWindow;
+        return releaseState(game) === "upcoming" && !game.tba;
+      });
+      const results = validResults;
       return {
         results,
         count,
-        hasNext: results.length >= pageSize,
+        hasNext: candidateResults.length >= pageSize,
         page,
       };
     } catch (err) {

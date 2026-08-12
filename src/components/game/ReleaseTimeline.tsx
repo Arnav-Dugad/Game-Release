@@ -20,6 +20,7 @@ import { Reveal } from "@/components/motion/Reveal";
 import { cn } from "@/lib/utils/cn";
 import { parseISO, releaseLabel } from "@/lib/utils/format";
 import type { GameSummary } from "@/lib/games/types";
+import { releaseState, releaseWindowInfo } from "@/lib/games/release-state";
 
 interface MonthGroup {
   key: string;
@@ -58,6 +59,10 @@ export function groupByMonth(games: GameSummary[]): MonthGroup[] {
   const undated: GameSummary[] = [];
 
   for (const game of games) {
+    // Defense in depth: this component is a future calendar, never a generic
+    // game list. A stale server cache or provider inconsistency must not turn
+    // it into a recent-releases feed.
+    if (releaseState(game) !== "upcoming") continue;
     const date = parseISO(game.released);
 
     if (date && game.released) {
@@ -82,7 +87,11 @@ export function groupByMonth(games: GameSummary[]): MonthGroup[] {
   }
 
   const ordered = [...months.values()].sort((a, b) => a.key.localeCompare(b.key));
-  ordered.push(...[...windows.values()].sort((a, b) => a.label.localeCompare(b.label)));
+  ordered.push(...[...windows.values()].sort((a, b) => {
+    const aStart = releaseWindowInfo(a.label)?.start ?? "9999";
+    const bStart = releaseWindowInfo(b.label)?.start ?? "9999";
+    return aStart.localeCompare(bStart) || a.label.localeCompare(b.label);
+  }));
   if (undated.length > 0) {
     ordered.push({ key: "tba", label: "Date to be announced", games: undated });
   }
@@ -168,7 +177,7 @@ function ReleaseRow({ game }: { game: GameSummary }) {
   const date = parseISO(game.released);
 
   return (
-    <div className="group relative flex items-stretch gap-3 overflow-hidden rounded-2xl border border-line bg-panel/60 p-2.5 transition-colors duration-400 fine:hover:border-line-strong fine:hover:bg-panel sm:gap-4 sm:p-3">
+    <div data-release-date={game.released ?? ""} data-release-window={game.releaseWindow ?? ""} data-release-tba={game.tba ? "true" : "false"} className="group relative flex items-stretch gap-3 overflow-hidden rounded-2xl border border-line bg-panel/60 p-2.5 transition-colors duration-400 fine:hover:border-line-strong fine:hover:bg-panel sm:gap-4 sm:p-3">
       {/* Date block — the timeline's anchor on desktop. */}
       <div className="flex w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-white/[0.04] py-2 sm:w-14">
         {date ? (

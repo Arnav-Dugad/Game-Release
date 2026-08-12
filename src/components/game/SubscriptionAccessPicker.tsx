@@ -12,14 +12,14 @@ import type { SubscriptionAccess } from "@/lib/firebase/db";
 import type { GameSummary } from "@/lib/games/types";
 import { cn } from "@/lib/utils/cn";
 
-interface Service {
+export interface Service {
   slug: string;
   name: string;
   icon: string;
   platforms: string[];
 }
 
-const SERVICES: Service[] = [
+export const SUBSCRIPTION_SERVICES: Service[] = [
   { slug: "game-pass", name: "Game Pass", icon: "xbox", platforms: ["xbox", "pc", "cloud"] },
   { slug: "playstation-plus", name: "PlayStation Plus", icon: "playstation", platforms: ["playstation", "cloud"] },
   { slug: "ea-play", name: "EA Play", icon: "ea", platforms: ["pc", "xbox", "playstation"] },
@@ -42,12 +42,12 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 export function subscriptionServiceName(slug: string): string {
-  return SERVICES.find((service) => service.slug === slug)?.name
+  return SUBSCRIPTION_SERVICES.find((service) => service.slug === slug)?.name
     ?? slug.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function subscriptionServiceIcon(slug: string): string | null {
-  return SERVICES.find((service) => service.slug === slug)?.icon ?? null;
+  return SUBSCRIPTION_SERVICES.find((service) => service.slug === slug)?.icon ?? null;
 }
 
 export function SubscriptionAccessPicker({
@@ -161,7 +161,7 @@ export function SubscriptionAccessPicker({
         <div className="max-h-[min(55vh,22rem)] overflow-y-auto p-2">
           {!service ? (
             <ul className="space-y-1">
-              {SERVICES.map((item) => (
+              {SUBSCRIPTION_SERVICES.map((item) => (
                 <li key={item.slug}>
                   <button type="button" onClick={() => setService(item)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-muted transition-colors hover:bg-white/6 hover:text-text">
                     <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/8 bg-black/25"><BrandIcon name={item.icon} size={16} title={null} tinted /></span>

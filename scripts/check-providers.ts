@@ -21,7 +21,7 @@ import { buildDashboardSnapshot, daysUntilRelease } from "../src/lib/games/dashb
 import { buildLibraryStats } from "../src/lib/games/stats";
 import { releaseState } from "../src/lib/games/release-state";
 import { fuzzyMatches, normaliseSearch, searchQueryVariants } from "../src/lib/games/fuzzy-search";
-import type { WatchlistEntry } from "../src/lib/firebase/db";
+import { batchPatchForEntry, type WatchlistEntry } from "../src/lib/firebase/db";
 
 let failures = 0;
 
@@ -153,8 +153,13 @@ check(
   false,
 );
 check(
-  "missing provider dates stay unknown, not upcoming",
+  "explicit TBA counts as upcoming",
   releaseState({ released: null, releaseWindow: null, tba: true }, new Date("2026-08-12T12:00:00Z")),
+  "upcoming",
+);
+check(
+  "truly absent date data stays unknown",
+  releaseState({ released: null, releaseWindow: null, tba: false }, new Date("2026-08-12T12:00:00Z")),
   "unknown",
 );
 check(
@@ -166,6 +171,16 @@ check(
   "a confirmed future quarter is upcoming",
   releaseState({ released: null, releaseWindow: "Q4 2026", tba: false }, new Date("2026-08-12T12:00:00Z")),
   "upcoming",
+);
+check(
+  "month-year is released from the first of that month",
+  releaseState({ released: null, releaseWindow: "Aug 2026", tba: false }, new Date("2026-08-12T12:00:00Z")),
+  "released",
+);
+check(
+  "full month-year is released from the first of that month",
+  releaseState({ released: null, releaseWindow: "August 2026", tba: false }, new Date("2026-08-01T00:00:00Z")),
+  "released",
 );
 
 console.log("\nStore/link classification");
@@ -328,12 +343,14 @@ const dashboardSnapshot = buildDashboardSnapshot([
   notificationEntry({ gameId: 1, status: "want", released: "2026-08-25", addedAt: 10 }),
   notificationEntry({ gameId: 2, status: "playing", released: "2025-01-01", startedAt: 30, addedAt: 20, ownedOn: ["steam"] }),
   notificationEntry({ gameId: 3, status: "played", released: "2024-01-01", finishedAt: 40, addedAt: 30, ownedOn: ["physical"] }),
+  notificationEntry({ gameId: 4, status: "none", released: null, releaseWindow: null, tba: true, addedAt: 40 }),
 ], dashboardNow);
 check("currently playing leads the focus card", dashboardSnapshot.focus?.gameId, 2);
 check("nearest future tracked release wins", dashboardSnapshot.nextRelease?.gameId, 1);
 check("dashboard status counts are honest", [dashboardSnapshot.playing, dashboardSnapshot.played, dashboardSnapshot.wanted], [1, 1, 1]);
 check("owned count ignores wishlist-only games", dashboardSnapshot.owned, 2);
 check("thirty-day release window", dashboardSnapshot.releasesSoon, 1);
+check("dashboard includes TBA in upcoming without using it as the next dated release", [dashboardSnapshot.upcoming.some((game) => game.gameId === 4), dashboardSnapshot.nextRelease?.gameId], [true, 1]);
 check("release countdown is day-stable", daysUntilRelease("2026-08-25", dashboardNow), 16);
 
 console.log("\nFirebase library statistics");
@@ -351,20 +368,30 @@ const statusStats = buildLibraryStats([
   notificationEntry({ gameId: 22, status: "want", released: "2030-01-01" }),
 ]);
 check("no-status games remain deliberately unclassified", statusStats.noStatus, 1);
-check("unreleased games stay outside the completion base", [statusStats.unreleasedGames, statusStats.completionBase], [1, 1]);
-check("released completion rate remains honest", statusStats.completionRate, 100);
+check("unreleased games stay outside the completion base", [statusStats.unreleasedGames, statusStats.completionBase], [1, 2]);
+check("completion denominator is every released game", statusStats.completionRate, 50);
 const repairedReleaseStats = buildLibraryStats([
-  notificationEntry({ gameId: 30, status: "none", released: null, releaseWindow: null, tba: true }),
-  notificationEntry({ gameId: 31, status: "played", released: null, releaseWindow: null, tba: true }),
+  notificationEntry({ gameId: 30, status: "none", released: null, releaseWindow: null, tba: false }),
+  notificationEntry({ gameId: 31, status: "played", released: null, releaseWindow: null, tba: false }),
 ]);
 check("unknown dates never inflate upcoming", repairedReleaseStats.unreleasedGames, 0);
 check("unknown dates are reported separately", repairedReleaseStats.unknownReleaseGames, 1);
 check("played history proves a stale undated record is released", repairedReleaseStats.releasedGames, 1);
+check("explicit TBA is included in upcoming", buildLibraryStats([
+  notificationEntry({ gameId: 32, released: null, releaseWindow: null, tba: true }),
+]).tbaGames, 1);
 check(
   "cleared personal records do not inflate statistics",
   buildLibraryStats([notificationEntry({ watchlisted: false, following: false, status: "none" })]).uniqueGames,
   0,
 );
+
+console.log("\nFirebase batch editing");
+const batchEntry = notificationEntry({ ownedOn: ["steam"], watchlisted: false, following: true, startedAt: null });
+check("adding ownership preserves existing copies", batchPatchForEntry(batchEntry, { kind: "ownership-add", value: "ps5" }).ownedOn, ["steam", "ps5"]);
+check("adding the same ownership never duplicates it", batchPatchForEntry(batchEntry, { kind: "ownership-add", value: "steam" }).ownedOn, ["steam"]);
+check("batch status stamps first playing transition", batchPatchForEntry(batchEntry, { kind: "status", value: "playing" }, 1234), { status: "playing", startedAt: 1234 });
+check("batch watchlist change touches one field only", batchPatchForEntry(batchEntry, { kind: "watchlisted", value: true }), { watchlisted: true });
 
 console.log("\nHuman-friendly game search");
 check("accents and Roman sequels normalise", normaliseSearch("Pokémon II"), "pokemon 2");

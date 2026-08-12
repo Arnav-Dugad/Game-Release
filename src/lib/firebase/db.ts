@@ -31,6 +31,7 @@ import {
 } from "firebase/firestore";
 import { getDb } from "./config";
 import type { GameDetail, GameSummary } from "@/lib/games/types";
+import { releaseState } from "@/lib/games/release-state";
 
 export type WatchStatus = "none" | "want" | "playing" | "played";
 export const LIBRARY_SCHEMA_VERSION = 3;
@@ -142,6 +143,14 @@ export interface UserProfile {
   photoURL: string | null;
   bio: string;
   favouriteGenre: string | null;
+  /** Exact systems and storefront ecosystems the player has access to. */
+  ownedPlatforms: string[];
+  /** Subscription services the player currently uses. */
+  activeSubscriptions: string[];
+  /** Optional public-facing gaming handle. */
+  gamerTag: string;
+  /** Broad play-style preference used only for profile presentation. */
+  playStyle: "casual" | "balanced" | "dedicated" | "competitive" | null;
   createdAt: number;
 }
 
@@ -205,6 +214,10 @@ export async function ensureUserProfile(input: {
     photoURL: input.photoURL,
     bio: "",
     favouriteGenre: null,
+    ownedPlatforms: [],
+    activeSubscriptions: [],
+    gamerTag: "",
+    playStyle: null,
     createdAt: Date.now(),
   };
   await setDoc(ref, { ...profile, createdAtServer: serverTimestamp() });
@@ -214,12 +227,20 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const db = getDb();
   if (!db) return null;
   const snap = await getDoc(doc(db, "users", uid));
-  return snap.exists() ? (snap.data() as UserProfile) : null;
+  if (!snap.exists()) return null;
+  const data = snap.data() as UserProfile;
+  return {
+    ...data,
+    ownedPlatforms: data.ownedPlatforms ?? [],
+    activeSubscriptions: data.activeSubscriptions ?? [],
+    gamerTag: data.gamerTag ?? "",
+    playStyle: data.playStyle ?? null,
+  };
 }
 
 export async function updateUserProfile(
   uid: string,
-  patch: Partial<Pick<UserProfile, "displayName" | "bio" | "favouriteGenre" | "photoURL">>,
+  patch: Partial<Pick<UserProfile, "displayName" | "bio" | "favouriteGenre" | "photoURL" | "ownedPlatforms" | "activeSubscriptions" | "gamerTag" | "playStyle">>,
 ): Promise<void> {
   const db = requireDb();
   await updateDoc(doc(db, "users", uid), { ...patch, updatedAt: serverTimestamp() });
@@ -483,6 +504,67 @@ export async function setWatchPlatform(
 ): Promise<void> {
   const db = requireDb();
   await updateDoc(doc(db, "users", uid, "watchlist", String(gameId)), { platform });
+}
+
+export type BatchLibraryChange =
+  | { kind: "status"; value: WatchStatus }
+  | { kind: "ownership-add"; value: string }
+  | { kind: "ownership-remove"; value: string }
+  | { kind: "watchlisted"; value: boolean }
+  | { kind: "following"; value: boolean }
+  | { kind: "platform"; value: string | null }
+  | { kind: "subscriptions-clear" };
+
+export function batchPatchForEntry(
+  entry: WatchlistEntry,
+  change: BatchLibraryChange,
+  now = Date.now(),
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (change.kind === "status") {
+    patch.status = change.value;
+    if (change.value === "want") patch.watchlisted = true;
+    if (change.value === "playing" && !entry.startedAt) patch.startedAt = now;
+    if (change.value === "played" && !entry.finishedAt) patch.finishedAt = now;
+  } else if (change.kind === "ownership-add") {
+    patch.ownedOn = [...new Set([...(entry.ownedOn ?? []), change.value])];
+  } else if (change.kind === "ownership-remove") {
+    patch.ownedOn = (entry.ownedOn ?? []).filter((slug) => slug !== change.value);
+  } else if (change.kind === "watchlisted") {
+    patch.watchlisted = change.value;
+  } else if (change.kind === "following") {
+    patch.following = change.value;
+  } else if (change.kind === "platform") {
+    patch.platform = change.value;
+  } else {
+    patch.subscriptionAccess = [];
+  }
+  return patch;
+}
+
+/** Applies one explicit personal-state change to many unique games atomically per chunk. */
+export async function batchUpdateLibraryEntries(
+  uid: string,
+  entries: WatchlistEntry[],
+  change: BatchLibraryChange,
+): Promise<void> {
+  const db = requireDb();
+  const unique = [...new Map(entries.map((entry) => [entry.gameId, entry])).values()];
+  if (
+    change.kind === "status"
+    && (change.value === "playing" || change.value === "played")
+    && unique.some((entry) => releaseState(entry) === "upcoming")
+  ) {
+    throw new Error("Playing or Played cannot be applied to unreleased or TBA games.");
+  }
+  for (let offset = 0; offset < unique.length; offset += 400) {
+    const batch = writeBatch(db);
+    for (const entry of unique.slice(offset, offset + 400)) {
+      const patch = batchPatchForEntry(entry, change);
+      batch.set(doc(db, "users", uid, "watchlist", String(entry.gameId)), patch, { merge: true });
+    }
+    await batch.commit();
+  }
 }
 
 /** Repairs stale catalogue snapshots while preserving every personal field. */

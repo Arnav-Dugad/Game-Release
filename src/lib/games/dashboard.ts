@@ -1,4 +1,5 @@
 import type { WatchlistEntry } from "@/lib/firebase/db";
+import { releaseState, releaseWindowInfo } from "./release-state";
 
 const DAY = 86_400_000;
 
@@ -22,10 +23,13 @@ export function buildDashboardSnapshot(
   entries: WatchlistEntry[],
   now = Date.now(),
 ): DashboardSnapshot {
-  const today = new Date(now).toISOString().slice(0, 10);
   const upcoming = entries
-    .filter((entry) => Boolean(entry.released && entry.released >= today))
-    .sort((a, b) => (a.released ?? "").localeCompare(b.released ?? ""));
+    .filter((entry) => releaseState(entry, new Date(now)) === "upcoming")
+    .sort((a, b) => {
+      const aSignal = a.released ?? releaseWindowInfo(a.releaseWindow)?.start ?? "9999";
+      const bSignal = b.released ?? releaseWindowInfo(b.releaseWindow)?.start ?? "9999";
+      return aSignal.localeCompare(bSignal) || a.name.localeCompare(b.name);
+    });
 
   const byRecency = (status: WatchlistEntry["status"]) => entries
     .filter((entry) => entry.status === status)
@@ -38,13 +42,16 @@ export function buildDashboardSnapshot(
     focus: playing[0] ?? wanted[0] ?? played[0]
       ?? [...entries].sort((a, b) => b.addedAt - a.addedAt)[0]
       ?? null,
-    nextRelease: upcoming[0] ?? null,
+    nextRelease: upcoming.find((entry) => Boolean(entry.released)) ?? null,
     upcoming,
     owned: entries.filter((entry) => (entry.ownedOn ?? []).length > 0).length,
     playing: playing.length,
     played: played.length,
     wanted: wanted.length,
-    releasesSoon: upcoming.filter((entry) => daysUntilRelease(entry.released, now) <= 30).length,
+    releasesSoon: upcoming.filter((entry) => {
+      const days = daysUntilRelease(entry.released, now);
+      return days >= 0 && days <= 30;
+    }).length,
   };
 }
 

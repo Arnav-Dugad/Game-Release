@@ -31,6 +31,7 @@ import type {
 import { REQUEST_TIMEOUT_MS, TTL, type GameProvider } from "./types";
 import { slugify, stripHtml } from "@/lib/utils/html";
 import { DETAIL_DEFAULTS } from "../detail";
+import { releaseState } from "../release-state";
 
 const STORE = "https://store.steampowered.com/api";
 const DEFAULT_STEAM_REGION = "us";
@@ -575,9 +576,9 @@ export const steamProvider: GameProvider = {
     const games = await summariesFor(appids, TTL.detail);
     // The storefront's "coming soon" shelf includes titles that shipped days
     // ago, so filter to genuinely future or undated entries.
-    const today = new Date().toISOString().slice(0, 10);
-    const upcoming = games.filter(
-      (game) => game.tba || Boolean(game.releaseWindow) || (game.released ?? "") >= today,
+    const tbaOnly = filters.releaseTiming === "tba";
+    const upcoming = games.filter((game) =>
+      releaseState(game) === "upcoming" && (tbaOnly ? game.tba : !game.tba),
     );
     if (upcoming.length === 0) return null;
 
@@ -591,7 +592,7 @@ export const steamProvider: GameProvider = {
       pool = pool.filter((game) => game.parentPlatforms.some((p) => wanted.has(p.slug)));
     }
 
-    const sorted = sortSummaries(pool, filters.ordering ?? "released");
+    const sorted = sortSummaries(pool, filters.ordering ?? (tbaOnly ? "-added" : "released"));
     const start = (page - 1) * pageSize;
     return {
       results: sorted.slice(start, start + pageSize),

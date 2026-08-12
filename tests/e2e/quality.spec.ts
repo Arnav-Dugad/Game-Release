@@ -6,6 +6,7 @@ const DETAIL_ROUTE = "/game/cyberpunk-2077-1091500";
 const PUBLIC_ROUTES = [
   "/",
   "/upcoming",
+  "/upcoming?window=tba",
   "/browse",
   "/stats",
   "/genres",
@@ -137,6 +138,40 @@ test("typo search returns the intended game before entity detours", async ({ req
   if (payload.source === "igdb") {
     expect(payload.hits?.some((hit) => hit.kind === "game" && /cyberpunk/i.test(hit.name))).toBe(true);
   }
+});
+
+test("upcoming calendar never renders an exact past release", async ({ page }) => {
+  await page.goto("/upcoming?window=all&all=1", { waitUntil: "domcontentloaded" });
+  const dates = await page.locator("[data-release-date]").evaluateAll((rows) => rows
+    .map((row) => row.getAttribute("data-release-date"))
+    .filter((date): date is string => Boolean(date)));
+  const today = new Date().toISOString().slice(0, 10);
+  expect(dates.filter((date) => date < today), `Past releases leaked into Upcoming: ${dates.filter((date) => date < today).join(", ")}`).toEqual([]);
+});
+
+test("very long search names stay inside a narrow result panel", async ({ page }) => {
+  await page.route("**/api/search?q=longname", async (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ hits: [{
+      kind: "game",
+      id: 999999,
+      slug: "long-name-test",
+      name: "AReallyLongUnbrokenGameTitleThatShouldNeverEverEscapeTheSearchResultContainerEvenOnTheSmallestSupportedPhone",
+      subtitle: "Responsive regression fixture",
+      image: null,
+      released: null,
+      releaseWindow: null,
+      tba: true,
+    }] }),
+  }));
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Search the complete database" }).first().click();
+  await page.locator("#global-search").fill("longname");
+  await expect(page.getByText("AReallyLongUnbrokenGameTitleThatShouldNeverEverEscapeTheSearchResultContainerEvenOnTheSmallestSupportedPhone")).toBeVisible();
+  const overflow = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, page: document.documentElement.scrollWidth }));
+  expect(overflow.page).toBeLessThanOrEqual(overflow.viewport + 1);
 });
 
 for (const route of ["/", "/stats", DETAIL_ROUTE, "/login"] as const) {

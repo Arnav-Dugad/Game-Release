@@ -5,21 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   BellRing,
+  Bookmark,
   BookOpenCheck,
   CalendarClock,
-  Cloud,
+  CircleHelp,
   Clock3,
-  Copy,
   Gamepad2,
   Layers3,
   LibraryBig,
-  Orbit,
   ShieldCheck,
   Sparkles,
   Star,
-  Target,
   Trophy,
-  Zap,
 } from "lucide-react";
 import { GameCover } from "@/components/game/GameCover";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
@@ -73,63 +70,54 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
   const followCoverage = stats.uniqueGames
     ? Math.round((stats.followedGames / stats.uniqueGames) * 100)
     : 0;
-  const nextCompletionMilestone = Math.max(5, Math.ceil((stats.played + 1) / 5) * 5);
-  const archetype = stats.completionRate >= 70 && stats.completionBase >= 5
-    ? { title: "The Finisher", detail: "You turn intent into completed journeys." }
-    : stats.platforms.length >= 4
-      ? { title: "The Multiverse Collector", detail: "Your library crosses ecosystems without inflating the game count." }
-      : stats.genres.length >= 8
-        ? { title: "The Genre Voyager", detail: "Range, curiosity, and discovery define this collection." }
-        : { title: "The Curated Explorer", detail: "A focused library with room for the next obsession." };
 
   return (
     <Container className="space-y-5 py-8 lg:space-y-7 lg:py-12">
       <Reveal className="noise relative isolate overflow-hidden rounded-[2rem] border border-brand/25 bg-[radial-gradient(circle_at_10%_0%,rgba(124,92,255,0.28),transparent_34%),radial-gradient(circle_at_95%_90%,rgba(34,211,238,0.14),transparent_38%),linear-gradient(145deg,#111126,#07070e)] p-6 shadow-[0_45px_130px_-65px_rgba(124,92,255,0.9)] sm:p-8 lg:p-10">
         <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_330px] lg:items-end">
           <div>
-            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-soft"><Sparkles size={13} /> Live Firebase intelligence</p>
-            <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-6xl">Your gaming life,<br /><span className="text-gradient">beautifully measured.</span></h2>
-            <p className="mt-5 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">Every headline counts unique games. Extra platform copies are preserved as their own insight—never allowed to inflate your library total.</p>
+            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-brand-soft"><Sparkles size={13} /> Private library analytics</p>
+            <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-6xl">Your library,<br /><span className="text-gradient">clearly counted.</span></h2>
+            <p className="mt-5 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">One game always counts once, even when you own several copies. Every percentage names its denominator, and TBA releases are included in Upcoming.</p>
           </div>
           <div className="flex min-w-0 flex-col items-start gap-5 rounded-3xl border border-white/10 bg-black/25 p-5 backdrop-blur-xl min-[420px]:flex-row min-[420px]:items-center">
             <ProgressRing value={stats.completionRate} />
-            <div className="min-w-0"><p className="font-display text-xl font-black">Completion arc</p><p className="mt-1 break-words text-xs leading-relaxed text-muted">{stats.completionBase ? `${stats.releasedCompleted} completed across ${stats.completionBase} classified released games` : "Classify a released game to begin the arc"}</p></div>
+            <div className="min-w-0"><p className="font-display text-xl font-black">Released games completed</p><p className="mt-1 break-words text-xs leading-relaxed text-muted">{stats.completionBase ? `${stats.releasedCompleted} completed ÷ ${stats.completionBase} released games` : "No released games are in your personal library yet"}</p></div>
           </div>
         </div>
       </Reveal>
 
       <Stagger className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4" onMount gap={0.04}>
-        <Metric icon={<LibraryBig size={18} />} label="Unique games" value={stats.uniqueGames} tone="brand" />
-        <Metric icon={<Layers3 size={18} />} label="Owned games" value={stats.ownedGames} note={stats.platformCopies > stats.ownedGames ? `${stats.platformCopies} platform copies` : undefined} tone="mint" />
+        <Metric icon={<LibraryBig size={18} />} label="Unique personal games" value={stats.uniqueGames} note="Saved, followed, owned, accessed, or statused" tone="brand" />
+        <Metric icon={<Layers3 size={18} />} label="Unique games owned" value={stats.ownedGames} note={`${stats.platformCopies} total owned ${stats.platformCopies === 1 ? "copy" : "copies"}`} tone="mint" />
         <Metric icon={<Trophy size={18} />} label="Completed" value={stats.played} tone="gold" />
         <Metric icon={<Gamepad2 size={18} />} label="Playing now" value={stats.playing} tone="neon" />
       </Stagger>
 
       <Stagger className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4" onMount gap={0.04}>
-        <Metric icon={<BellRing size={18} />} label="Games followed" value={stats.followedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} upcoming` : "Release + DLC alerts"} tone="brand" />
-        <Metric icon={<Cloud size={18} />} label="Via subscription" value={stats.subscriptionGames} note={stats.subscriptionAccesses > stats.subscriptionGames ? `${stats.subscriptionAccesses} service/platform records` : undefined} tone="neon" />
-        <Metric icon={<Copy size={18} />} label="Extra copies" value={stats.extraCopies} note="Never inflate game count" tone="gold" />
-        <Metric icon={<CalendarClock size={18} />} label="Upcoming games" value={stats.unreleasedGames} note={stats.unknownReleaseGames ? `${stats.unknownReleaseGames} dates still unknown` : "Confirmed future releases"} tone="mint" />
+        <Metric icon={<Bookmark size={18} />} label="Saved to watchlist" value={stats.savedGames} tone="brand" />
+        <Metric icon={<BellRing size={18} />} label="Following for alerts" value={stats.followedGames} note={stats.upcomingFollowed ? `${stats.upcomingFollowed} upcoming` : "Release + DLC alerts"} tone="neon" />
+        <Metric icon={<CalendarClock size={18} />} label="Upcoming games" value={stats.unreleasedGames} note={`${stats.datedUpcomingGames} dated · ${stats.tbaGames} TBA`} tone="mint" />
+        <Metric icon={<CircleHelp size={18} />} label="Release data unknown" value={stats.unknownReleaseGames} note="Missing data, not marked TBA" tone="gold" />
       </Stagger>
 
       <Reveal className="grid gap-3 rounded-[1.75rem] border border-line bg-[linear-gradient(135deg,rgba(124,92,255,0.08),rgba(34,211,238,0.035))] p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
-        <Insight label="Playable access" value={`${stats.accessibleGames}/${stats.uniqueGames}`} detail="Owned or reached through a subscription" />
-        <Insight label="Owned backlog" value={stats.unplayedOwned} detail="Owned games not marked completed" />
-        <Insight label="85+ critic picks" value={stats.highScorers} detail="Highly scored games in your orbit" />
-        <Insight label="Known backlog" value={stats.backlogHours ? `${stats.backlogHours}h` : "—"} detail="Estimated time across unfinished records" />
+        <Insight label="Playable access" value={`${stats.accessibleGames}/${stats.uniqueGames}`} detail="Unique games owned or accessed by subscription" />
+        <Insight label="Released owned backlog" value={stats.unplayedOwned} detail="Released owned games not marked Played" />
+        <Insight label="Subscription games" value={stats.subscriptionGames} detail={`${stats.subscriptionAccesses} service and platform records`} />
+        <Insight label="Known backlog time" value={stats.backlogHours ? `${stats.backlogHours}h` : "—"} detail="Provider estimates for Want to play and Playing" />
       </Reveal>
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
         <Reveal className="noise relative isolate min-w-0 overflow-hidden rounded-[1.75rem] border border-brand/25 bg-[radial-gradient(circle_at_20%_0%,rgba(124,92,255,.24),transparent_48%),linear-gradient(145deg,rgba(16,16,32,.96),rgba(6,6,14,.98))] p-5 sm:p-7">
           <div className="relative z-10">
-            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-soft"><Orbit size={16} /> Collection identity</p>
-            <p className="mt-5 font-display text-3xl font-black leading-none tracking-[-0.04em] sm:text-4xl">{archetype.title}</p>
-            <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">{archetype.detail}</p>
-            <div className="mt-7 grid grid-cols-2 gap-3">
-              <MiniFact icon={<Target size={14} />} value={`${stats.played}/${nextCompletionMilestone}`} label="Next completion milestone" />
-              <MiniFact icon={<Zap size={14} />} value={stats.completionStreakMonths ? `${stats.completionStreakMonths} mo` : "—"} label="Completion streak" />
-              <MiniFact icon={<Clock3 size={14} />} value={stats.averageDaysToFinish !== null ? `${stats.averageDaysToFinish}d` : "—"} label="Average finish journey" />
-              <MiniFact icon={<Layers3 size={14} />} value={stats.genres.length} label="Genre signals detected" />
+            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-soft"><ShieldCheck size={16} /> Counting rules</p>
+            <p className="mt-4 font-display text-2xl font-black tracking-[-0.03em] sm:text-3xl">How every headline is calculated</p>
+            <div className="mt-6 space-y-3">
+              <CountingRule number="01" title="Games are deduplicated by IGDB id" detail="Steam + PlayStation + Xbox copies still equal one unique game." />
+              <CountingRule number="02" title="TBA means Upcoming" detail="Explicit TBA belongs in Upcoming; truly missing data stays Unknown." />
+              <CountingRule number="03" title="Month-level releases become Released" detail="August 2026 counts as released from August 1, 2026." />
+              <CountingRule number="04" title="Completion uses every released game" detail={`${stats.releasedCompleted} Played divided by ${stats.releasedGames} Released.`} />
             </div>
           </div>
         </Reveal>
@@ -166,7 +154,7 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
         </Reveal>
 
         <Reveal delay={0.05} className="glass rounded-[1.75rem] p-5 sm:p-7">
-          <PanelHeading icon={<BookOpenCheck size={17} />} eyebrow="Status mix" title="Your current orbit" />
+          <PanelHeading icon={<BookOpenCheck size={17} />} eyebrow="Status mix" title="Play status breakdown" />
           <div className="mt-7 space-y-5">
             <StatusBar label="Want to play" value={stats.wanted} total={stats.uniqueGames} tone="bg-brand" />
             <StatusBar label="Playing" value={stats.playing} total={stats.uniqueGames} tone="bg-neon" />
@@ -181,15 +169,15 @@ export function StatsView({ genreDirectory }: { genreDirectory: Ref[] }) {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <RankPanel title="Where your collection lives" eyebrow="Ownership platforms" items={stats.platforms} empty="Mark where you own games to unlock this view." />
-        <RankPanel title="The shape of your taste" eyebrow="Top genres" items={stats.genres} empty="Genre intelligence will appear as you track IGDB games." />
+        <RankPanel title="Owned copies by platform" eyebrow="Ownership platforms" items={stats.platforms} empty="Mark where you own games to unlock this view." />
+        <RankPanel title="Games by genre" eyebrow="Top genres" items={stats.genres} empty="Genre data will appear as your IGDB records refresh." />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <RankPanel title="Services that carried your play" eyebrow="Subscription history" items={stats.subscriptions} empty="Record Game Pass, PlayStation Plus, or another service on a game page." />
-        <RankPanel title="Where you actually played" eyebrow="Play platforms" items={stats.playedPlatforms} empty="Set a play platform or add a subscription access record." />
-        <RankPanel title="Your release-era fingerprint" eyebrow="Games by decade" items={stats.decades} empty="Release dates will build your era profile." />
-        <RankPanel title="Quality distribution" eyebrow="Critic score bands" items={stats.scoreBands} empty="Scored games will build your quality curve." />
+        <RankPanel title="Games accessed by service" eyebrow="Subscription history" items={stats.subscriptions} empty="Record Game Pass, PlayStation Plus, or another service on a game page." />
+        <RankPanel title="Games by actual play platform" eyebrow="Play platforms" items={stats.playedPlatforms} empty="Set a play platform or add a subscription access record." />
+        <RankPanel title="Games by release decade" eyebrow="Release history" items={stats.decades} empty="Release dates will build this breakdown." />
+        <RankPanel title="Games by critic score" eyebrow="Critic score bands" items={stats.scoreBands} empty="Scored games will build this breakdown." />
       </div>
 
       <Reveal className="glass overflow-hidden rounded-[1.75rem]">
@@ -239,6 +227,18 @@ function MiniFact({ icon, value, label }: { icon: React.ReactNode; value: string
 
 function Insight({ label, value, detail }: { label: string; value: string | number; detail: string }) {
   return <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/20 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-faint">{label}</p><p className="mt-2 font-display text-2xl font-black tabular-nums">{value}</p><p className="mt-1 break-words text-[11px] leading-relaxed text-muted">{detail}</p></div>;
+}
+
+function CountingRule({ number, title, detail }: { number: string; title: string; detail: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-3 rounded-2xl border border-white/[0.07] bg-black/20 p-3.5">
+      <span className="font-mono text-[10px] font-bold text-brand-soft">{number}</span>
+      <div className="min-w-0">
+        <p className="text-xs font-bold leading-snug">{title}</p>
+        <p className="mt-1 break-words text-[10px] leading-relaxed text-muted">{detail}</p>
+      </div>
+    </div>
+  );
 }
 
 function CoverageRow({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {

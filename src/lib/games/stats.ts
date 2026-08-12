@@ -19,6 +19,7 @@ export interface LibraryStats {
   games: WatchlistEntry[];
   uniqueGames: number;
   ownedGames: number;
+  savedGames: number;
   platformCopies: number;
   extraCopies: number;
   followedGames: number;
@@ -34,6 +35,8 @@ export interface LibraryStats {
   noStatus: number;
   releasedGames: number;
   unreleasedGames: number;
+  datedUpcomingGames: number;
+  tbaGames: number;
   unknownReleaseGames: number;
   statusCoverage: number;
   accessCoverage: number;
@@ -120,8 +123,15 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
   let subscriptionAccesses = 0;
   let finishDurationDays = 0;
   let finishDurationCount = 0;
-  const stateOf = (game: WatchlistEntry): ReleaseState =>
-    game.status === "playing" || game.status === "played" ? "released" : releaseState(game);
+  const stateOf = (game: WatchlistEntry): ReleaseState => {
+    const catalogState = releaseState(game);
+    // Explicit TBA remains Upcoming as promised. Only a genuinely missing
+    // provider date can be repaired by the user's stronger evidence that they
+    // have already played the game.
+    return catalogState === "unknown" && (game.status === "playing" || game.status === "played")
+      ? "released"
+      : catalogState;
+  };
 
   for (const game of games) {
     status[game.status]++;
@@ -184,9 +194,6 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
   const releasedCompleted = games.filter((game) =>
     game.status === "played" && stateOf(game) === "released",
   ).length;
-  const statusTrackedReleased = games.filter((game) =>
-    game.status !== "none" && stateOf(game) === "released",
-  ).length;
   let completionStreakMonths = 0;
   for (let index = timeline.length - 1; index >= 0; index--) {
     if (timeline[index].completed === 0) break;
@@ -197,6 +204,7 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     games,
     uniqueGames: games.length,
     ownedGames: games.filter((game) => (game.ownedOn ?? []).length > 0).length,
+    savedGames: games.filter((game) => game.watchlisted).length,
     platformCopies,
     extraCopies: Math.max(0, platformCopies - games.filter((game) => (game.ownedOn ?? []).length > 0).length),
     followedGames: games.filter((game) => game.following).length,
@@ -205,7 +213,7 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     accessibleGames: games.filter((game) => (game.ownedOn ?? []).length > 0 || (game.subscriptionAccess ?? []).length > 0).length,
     unplayedOwned: games.filter((game) =>
       (game.ownedOn ?? []).length > 0
-      && (game.status === "want" || game.status === "playing")
+      && game.status !== "played"
       && stateOf(game) === "released",
     ).length,
     upcomingFollowed: games.filter((game) =>
@@ -218,14 +226,16 @@ export function buildLibraryStats(entries: WatchlistEntry[], genreDirectory: Ref
     noStatus: status.none,
     releasedGames,
     unreleasedGames,
+    datedUpcomingGames: games.filter((game) => stateOf(game) === "upcoming" && !game.tba).length,
+    tbaGames: games.filter((game) => stateOf(game) === "upcoming" && game.tba).length,
     unknownReleaseGames,
     statusCoverage: games.length ? Math.round(((games.length - status.none) / games.length) * 100) : 0,
     accessCoverage: games.length ? Math.round((games.filter((game) =>
       (game.ownedOn ?? []).length > 0 || (game.subscriptionAccess ?? []).length > 0,
     ).length / games.length) * 100) : 0,
     criticCoverage: games.length ? Math.round((criticCount / games.length) * 100) : 0,
-    completionRate: statusTrackedReleased ? Math.round((releasedCompleted / statusTrackedReleased) * 100) : 0,
-    completionBase: statusTrackedReleased,
+    completionRate: releasedGames ? Math.round((releasedCompleted / releasedGames) * 100) : 0,
+    completionBase: releasedGames,
     completedHours,
     backlogHours,
     averageCritic: criticCount ? Math.round(criticTotal / criticCount) : null,

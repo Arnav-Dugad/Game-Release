@@ -9,9 +9,9 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, LogOut, MessageSquare, Pencil, Star, Bookmark } from "lucide-react";
+import { Check, Gamepad2, LogOut, MessageSquare, Pencil, Sparkles, Star, Bookmark } from "lucide-react";
 import { OwnedLibrary } from "./OwnedLibrary";
 import { PlayHistory } from "./PlayHistory";
 import { useAuth } from "@/lib/firebase/AuthProvider";
@@ -25,6 +25,18 @@ import { Reveal, Stagger, StaggerItem } from "@/components/motion/Reveal";
 import { CountUp } from "@/components/motion/text";
 import { Spotlight } from "@/components/motion/effects";
 import { cn } from "@/lib/utils/cn";
+import { OWNERSHIP_PLATFORMS } from "@/lib/games/stores-catalog";
+import { SUBSCRIPTION_SERVICES } from "@/components/game/SubscriptionAccessPicker";
+import { BrandIcon } from "@/components/brand/BrandIcon";
+
+type ProfileDraft = {
+  name: string;
+  bio: string;
+  gamerTag: string;
+  ownedPlatforms: string[];
+  activeSubscriptions: string[];
+  playStyle: "casual" | "balanced" | "dedicated" | "competitive" | null;
+};
 
 export function ProfileView() {
   const { user, signOut, setDisplayName } = useAuth();
@@ -35,8 +47,20 @@ export function ProfileView() {
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [bio, setBio] = useState("");
   const [name, setName] = useState(user?.displayName ?? "");
+  const [gamerTag, setGamerTag] = useState("");
+  const [ownedPlatforms, setOwnedPlatforms] = useState<string[]>([]);
+  const [activeSubscriptions, setActiveSubscriptions] = useState<string[]>([]);
+  const [playStyle, setPlayStyle] = useState<"casual" | "balanced" | "dedicated" | "competitive" | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savedDraft = useRef<ProfileDraft>({
+    name: user?.displayName ?? "",
+    bio: "",
+    gamerTag: "",
+    ownedPlatforms: [],
+    activeSubscriptions: [],
+    playStyle: null,
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -52,7 +76,23 @@ export function ProfileView() {
 
     getUserProfile(user.uid)
       .then((profile) => {
-        if (!cancelled && profile) setBio(profile.bio ?? "");
+        if (!cancelled && profile) {
+          const next: ProfileDraft = {
+            name: profile.displayName || user.displayName || "",
+            bio: profile.bio ?? "",
+            gamerTag: profile.gamerTag ?? "",
+            ownedPlatforms: profile.ownedPlatforms ?? [],
+            activeSubscriptions: profile.activeSubscriptions ?? [],
+            playStyle: profile.playStyle ?? null,
+          };
+          savedDraft.current = next;
+          setName(next.name);
+          setBio(next.bio);
+          setGamerTag(next.gamerTag);
+          setOwnedPlatforms(next.ownedPlatforms);
+          setActiveSubscriptions(next.activeSubscriptions);
+          setPlayStyle(next.playStyle);
+        }
       })
       .catch(() => {
         /* profile doc is optional — the page works without it */
@@ -72,13 +112,43 @@ export function ProfileView() {
 
   const displayName = user.displayName || user.email?.split("@")[0] || "Player";
 
+  const restoreSavedProfile = () => {
+    const saved = savedDraft.current;
+    setName(saved.name);
+    setBio(saved.bio);
+    setGamerTag(saved.gamerTag);
+    setOwnedPlatforms(saved.ownedPlatforms);
+    setActiveSubscriptions(saved.activeSubscriptions);
+    setPlayStyle(saved.playStyle);
+    setEditing(false);
+  };
+
   const saveProfile = async () => {
     setSaving(true);
     try {
-      if (name.trim() && name.trim() !== user.displayName) {
-        await setDisplayName(name.trim());
+      const nextName = name.trim() || displayName;
+      const nextGamerTag = gamerTag.trim();
+      if (nextName !== user.displayName) {
+        await setDisplayName(nextName);
       }
-      await updateUserProfile(user.uid, { displayName: name.trim() || displayName, bio });
+      await updateUserProfile(user.uid, {
+        displayName: nextName,
+        bio,
+        gamerTag: nextGamerTag,
+        ownedPlatforms,
+        activeSubscriptions,
+        playStyle,
+      });
+      savedDraft.current = {
+        name: nextName,
+        bio,
+        gamerTag: nextGamerTag,
+        ownedPlatforms: [...ownedPlatforms],
+        activeSubscriptions: [...activeSubscriptions],
+        playStyle,
+      };
+      setName(nextName);
+      setGamerTag(nextGamerTag);
       toast("Profile updated", "success");
       setEditing(false);
     } catch (err) {
@@ -102,13 +172,26 @@ export function ProfileView() {
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-display text-2xl font-bold sm:text-3xl">{displayName}</h2>
           {user.email && <p className="mt-1 truncate text-sm text-muted">{user.email}</p>}
+          {gamerTag && <p className="mt-1 truncate text-xs font-semibold text-brand-soft">@{gamerTag}</p>}
           {bio && <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted">{bio}</p>}
+          {(ownedPlatforms.length > 0 || activeSubscriptions.length > 0) && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {ownedPlatforms.slice(0, 5).map((slug) => {
+                const platform = OWNERSHIP_PLATFORMS.find((item) => item.slug === slug);
+                return <ProfileChip key={slug} icon={platform?.icon ?? null} label={platform?.name ?? slug} />;
+              })}
+              {activeSubscriptions.slice(0, 3).map((slug) => {
+                const service = SUBSCRIPTION_SERVICES.find((item) => item.slug === slug);
+                return <ProfileChip key={slug} icon={service?.icon ?? null} label={service?.name ?? slug} />;
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => setEditing((e) => !e)}
+            onClick={() => editing ? restoreSavedProfile() : setEditing(true)}
             className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line px-4 text-sm font-medium text-muted transition-colors hover:border-line-strong hover:text-text"
           >
             <Pencil size={14} />
@@ -165,13 +248,49 @@ export function ProfileView() {
           />
           <p className="mt-1 text-right text-[11px] text-faint tabular-nums">{bio.length}/280</p>
 
+          <label htmlFor="profile-gamertag" className="mt-4 mb-1.5 block text-[13px] font-medium text-muted">
+            Gaming handle <span className="font-normal text-faint">(optional)</span>
+          </label>
+          <input
+            id="profile-gamertag"
+            value={gamerTag}
+            onChange={(event) => setGamerTag(event.target.value.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 32))}
+            placeholder="Your handle across games"
+            className="min-h-12 w-full rounded-xl border border-line bg-white/[0.03] px-4 text-base outline-none transition-colors focus:border-brand"
+          />
+
+          <ProfileChoiceGroup
+            title="Platforms and stores you own"
+            detail="Choose every ecosystem you can play on."
+            options={OWNERSHIP_PLATFORMS.filter((platform) => platform.group !== "Legacy choices").map((platform) => ({ slug: platform.slug, name: platform.name, icon: platform.icon }))}
+            selected={ownedPlatforms}
+            onToggle={(slug) => setOwnedPlatforms(toggleChoice(ownedPlatforms, slug))}
+          />
+
+          <ProfileChoiceGroup
+            title="Active subscriptions"
+            detail="Services you currently have access to."
+            options={SUBSCRIPTION_SERVICES.map((service) => ({ slug: service.slug, name: service.name, icon: service.icon }))}
+            selected={activeSubscriptions}
+            onToggle={(slug) => setActiveSubscriptions(toggleChoice(activeSubscriptions, slug))}
+          />
+
+          <fieldset className="mt-6">
+            <legend className="text-[13px] font-medium text-muted">Play style</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(["casual", "balanced", "dedicated", "competitive"] as const).map((style) => (
+                <button key={style} type="button" onClick={() => setPlayStyle(playStyle === style ? null : style)} aria-pressed={playStyle === style} className={cn("min-h-10 rounded-full border px-4 text-xs font-semibold capitalize transition-colors", playStyle === style ? "border-brand/45 bg-brand/15 text-white" : "border-line bg-white/[0.025] text-muted hover:text-text")}>{style}</button>
+              ))}
+            </div>
+          </fieldset>
+
           <div className="mt-4 flex items-center gap-3">
             <Button onClick={saveProfile} loading={saving} size="sm" icon={<Check size={15} />}>
               Save changes
             </Button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={restoreSavedProfile}
               className="text-sm text-muted transition-colors hover:text-text"
             >
               Cancel
@@ -242,6 +361,29 @@ export function ProfileView() {
       </section>
     </Container>
   );
+}
+
+function toggleChoice(values: string[], slug: string): string[] {
+  return values.includes(slug) ? values.filter((value) => value !== slug) : [...values, slug];
+}
+
+function ProfileChoiceGroup({ title, detail, options, selected, onToggle }: { title: string; detail: string; options: Array<{ slug: string; name: string; icon: string | null }>; selected: string[]; onToggle: (slug: string) => void }) {
+  return (
+    <fieldset className="mt-6">
+      <legend className="text-[13px] font-medium text-muted">{title}</legend>
+      <p className="mt-1 text-[11px] text-faint">{detail}</p>
+      <div className="mt-3 flex max-h-56 flex-wrap gap-2 overflow-y-auto rounded-2xl border border-line bg-black/15 p-3">
+        {options.map((option) => {
+          const active = selected.includes(option.slug);
+          return <button key={option.slug} type="button" onClick={() => onToggle(option.slug)} aria-pressed={active} className={cn("inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors", active ? "border-mint/40 bg-mint/12 text-white" : "border-line bg-white/[0.025] text-muted hover:text-text")}><span className="shrink-0">{option.icon ? <BrandIcon name={option.icon} size={13} title={null} tinted={active} /> : <Gamepad2 size={13} />}</span><span className="truncate">{option.name}</span>{active && <Check size={12} className="shrink-0 text-mint" />}</button>;
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function ProfileChip({ icon, label }: { icon: string | null; label: string }) {
+  return <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-white/[0.035] px-2.5 py-1 text-[10px] text-muted">{icon ? <BrandIcon name={icon} size={11} title={null} /> : <Sparkles size={11} />}<span className="truncate">{label}</span></span>;
 }
 
 function Stat({

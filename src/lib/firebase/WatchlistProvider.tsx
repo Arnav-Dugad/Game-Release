@@ -24,6 +24,7 @@ import {
 import { useAuth } from "./AuthProvider";
 import {
   ensureWatchlistEntry,
+  batchUpdateLibraryEntries,
   removeFromWatchlist,
   setGameFollowing,
   setGameWatchlisted,
@@ -35,6 +36,7 @@ import {
   syncWatchlistMetadata,
   LIBRARY_SCHEMA_VERSION,
   type SubscriptionAccess,
+  type BatchLibraryChange,
   type WatchStatus,
   type WatchlistEntry,
 } from "./db";
@@ -61,6 +63,7 @@ interface WatchlistContextValue {
   setAccess: (gameId: number, access: SubscriptionAccess[]) => Promise<void>;
   accessOf: (gameId: number) => SubscriptionAccess[];
   remove: (gameId: number) => Promise<void>;
+  batchUpdate: (gameIds: number[], change: BatchLibraryChange) => Promise<void>;
 }
 
 const WatchlistContext = createContext<WatchlistContextValue | null>(null);
@@ -281,6 +284,14 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const batchUpdate = useCallback(async (gameIds: number[], change: BatchLibraryChange) => {
+    if (!user) throw new Error("Sign in to edit your games.");
+    const wanted = new Set(gameIds);
+    const selected = activeEntries.filter((entry) => wanted.has(entry.gameId));
+    if (selected.length === 0) return;
+    await batchUpdateLibraryEntries(user.uid, selected, change);
+  }, [user, activeEntries]);
+
   const value = useMemo<WatchlistContextValue>(
     () => ({
       entries: activeEntries,
@@ -300,8 +311,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       setAccess,
       accessOf,
       remove,
+      batchUpdate,
     }),
-    [activeEntries, activeLoading, isWatched, isFollowed, isWatchlisted, statusOf, ensure, toggleFollow, toggleWatchlist, syncFollow, setStatus, setPlatform, setOwnership, ownershipOf, setAccess, accessOf, remove],
+    [activeEntries, activeLoading, isWatched, isFollowed, isWatchlisted, statusOf, ensure, toggleFollow, toggleWatchlist, syncFollow, setStatus, setPlatform, setOwnership, ownershipOf, setAccess, accessOf, remove, batchUpdate],
   );
 
   return <WatchlistContext.Provider value={value}>{children}</WatchlistContext.Provider>;

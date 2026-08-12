@@ -16,7 +16,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowUpDown, CalendarClock, Layers3, Library, PackageOpen, Search, Trophy, X } from "lucide-react";
+import { ArrowUpDown, CalendarClock, Check, Layers3, Library, PackageOpen, PencilLine, Search, Trophy, X } from "lucide-react";
 import { BrandIcon } from "@/components/brand/BrandIcon";
 import { GameCover } from "@/components/game/GameCover";
 import { ScorePill } from "@/components/ui/ScoreRing";
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/PosterSizeToggle";
 import { PosterTile } from "@/components/game/PosterTile";
 import { OwnershipPicker } from "@/components/game/OwnershipPicker";
+import { BatchEditPanel } from "./BatchEditPanel";
 import { useAuth } from "@/lib/firebase/AuthProvider";
 import { useWatchlist } from "@/lib/firebase/WatchlistProvider";
 import { OWNERSHIP_PLATFORMS, ownershipPlatform } from "@/lib/games/stores-catalog";
@@ -66,6 +67,8 @@ export function LibraryView() {
   const [release, setRelease] = useState<ReleaseFilter>("all");
   const [sort, setSort] = useState<SortKey>("added");
   const [query, setQuery] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const { size: posterSize, setSize: setPosterSize } = usePosterSize("ludex:library-size");
 
   /** Only games the reader has actually marked as owned somewhere. */
@@ -156,6 +159,19 @@ export function LibraryView() {
 
   return (
     <div className="mt-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs leading-relaxed text-muted">Manage unique games while preserving every owned copy.</p>
+        <button type="button" onClick={() => { setBatchMode((value) => !value); setSelected(new Set()); }} aria-pressed={batchMode} className={cn("inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors", batchMode ? "border-brand/45 bg-brand/15 text-white" : "border-line bg-white/[0.035] text-muted hover:text-text")}><PencilLine size={15} />{batchMode ? "Exit batch edit" : "Batch edit"}</button>
+      </div>
+
+      {batchMode && (
+        <BatchEditPanel
+          gameIds={[...selected]}
+          onDone={() => setSelected(new Set())}
+          onClose={() => { setBatchMode(false); setSelected(new Set()); }}
+        />
+      )}
+
       {/* One game stays one game even when several owned copies exist. */}
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <LibraryMetric icon={<Library size={16} />} label="Unique games" value={owned.length} tone="mint" />
@@ -281,6 +297,14 @@ export function LibraryView() {
             Showing <span className="font-semibold text-text tabular-nums">{visible.length}</span> of {owned.length} unique games
           </p>
         )}
+
+        {batchMode && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4 text-xs">
+            <button type="button" onClick={() => setSelected(new Set(visible.map((entry) => entry.gameId)))} className="font-semibold text-brand-soft hover:text-white">Select all {visible.length} visible</button>
+            <button type="button" onClick={() => setSelected(new Set())} className="font-semibold text-faint hover:text-text">Clear selection</button>
+            <span className="ml-auto tabular-nums text-muted">{selected.size} selected</span>
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -304,7 +328,8 @@ export function LibraryView() {
       ) : (
         <ul className={cn("grid gap-3", posterGridClass(posterSize))}>
           {visible.map((entry, index) => (
-            <li key={entry.gameId}>
+            <li key={entry.gameId} className="relative">
+              {batchMode && <SelectionToggle selected={selected.has(entry.gameId)} name={entry.name} onToggle={() => setSelected(toggleSelected(selected, entry.gameId))} />}
               {/* Mount-based: filtering re-mounts these while the reader is
                   already scrolled into the results. */}
               <Reveal delay={Math.min(index, 10) * 0.025} blur={false} onMount>
@@ -324,6 +349,17 @@ export function LibraryView() {
       )}
     </div>
   );
+}
+
+function toggleSelected(selected: Set<number>, gameId: number): Set<number> {
+  const next = new Set(selected);
+  if (next.has(gameId)) next.delete(gameId);
+  else next.add(gameId);
+  return next;
+}
+
+function SelectionToggle({ selected, name, onToggle }: { selected: boolean; name: string; onToggle: () => void }) {
+  return <button type="button" onClick={onToggle} aria-label={`${selected ? "Deselect" : "Select"} ${name}`} aria-pressed={selected} className={cn("absolute inset-0 z-30 rounded-2xl p-2 text-left transition-shadow", selected && "ring-2 ring-inset ring-brand")}><span className={cn("grid h-10 w-10 place-items-center rounded-full border shadow-xl backdrop-blur-xl transition-colors", selected ? "border-brand/60 bg-brand text-white" : "border-white/20 bg-black/75 text-white hover:bg-black")}><Check size={16} className={cn(!selected && "opacity-0")} /></span></button>;
 }
 
 /* -------------------------------------------------------------------------- */

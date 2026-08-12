@@ -163,11 +163,11 @@ function ResultSection({ kind, hits }: { kind: SearchKind; hits: SearchHit[] }) 
       <Stagger className={cn("grid gap-3", kind === "game" ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3")} gap={0.035} onMount>
         {hits.map((hit) => (
           <StaggerItem key={`${hit.kind}-${hit.id}`}>
-            <Link href={hrefForSearchHit(hit)} className="group flex h-full min-h-32 items-center gap-4 rounded-3xl border border-line bg-panel/30 p-4 transition-[transform,border-color,background-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-brand/35 hover:bg-panel/55 hover:shadow-[0_24px_60px_-38px_rgba(124,92,255,0.65)]">
+            <Link href={hrefForSearchHit(hit)} className="group flex h-full min-h-32 min-w-0 items-center gap-4 overflow-hidden rounded-3xl border border-line bg-panel/30 p-4 transition-[transform,border-color,background-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-brand/35 hover:bg-panel/55 hover:shadow-[0_24px_60px_-38px_rgba(124,92,255,0.65)]">
               <SearchHitVisual hit={hit} size="card" />
               <span className="min-w-0 flex-1">
                 <span className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.15em] text-faint"><SearchKindIcon kind={hit.kind} size={11} /> {SEARCH_KIND_LABELS[hit.kind]}</span>
-                <span className="mt-1.5 line-clamp-2 font-display text-base font-bold leading-snug transition-colors group-hover:text-brand-soft">{hit.name}</span>
+                <span className="mt-1.5 line-clamp-2 max-w-full break-words font-display text-base font-bold leading-snug transition-colors [overflow-wrap:anywhere] group-hover:text-brand-soft">{hit.name}</span>
                 {hit.subtitle && <span className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{hit.subtitle}</span>}
               </span>
               <ArrowRight size={15} className="shrink-0 text-faint transition-transform group-hover:translate-x-1 group-hover:text-brand-soft" />
